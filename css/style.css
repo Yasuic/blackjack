@@ -1238,3 +1238,33 @@ body.room3d .toast { pointer-events: none; }
   body.room3d.in-room .float-balance[hidden] { display: none; }
   body.room3d.in-room .float-balance small { display: none; }
 }
+
+/* ---------- Second play-test fixes ---------- */
+/* Desktop: "Deal me in" sits beside the status line, not under it, so the table lettering below stays clear. */
+@media (min-width: 701px) {
+  .felt > .mid-band { flex-direction: row; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px 12px; }
+  .felt.flip > .mid-band { flex-direction: row; flex-wrap: wrap-reverse; }
+  .felt > .mid-band .frozen-banner.wait { flex: 0 0 100%; max-width: 620px; margin: 0 calc(50% - 310px); box-sizing: border-box; }
+  .mid-band .deal-btn { font-size: 18px; padding: 8px 30px; }
+}
+/* The round result sits on the status line, so the line under it is hidden while it shows. */
+body:has(#result-pop) .mid-band .status, body:has(.table-banner) .mid-band .status { visibility: hidden; }
+/* What a seat won or lost is written beside its chips on the name plate, so no tag hangs over anything. */
+.who .chips .net-in { font-style: normal; font-weight: 800; margin-left: 3px; }
+.who .chips .net-in.up { color: #7ef0b6; } .who .chips .net-in.down { color: #ff9b9b; }
+.seat.turn .who .chips .net-in { color: inherit; }
+/* A seat with three or four hands is too small for cards: it shows the totals, and a tap shows the cards large. */
+.felt .seat.std.many { cursor: pointer; }
+.felt .seat.std .hands.totals-only { flex-direction: row; flex-wrap: wrap; justify-content: center; align-content: flex-end; align-items: center; gap: 5px 6px; padding-bottom: 6px; }
+.felt .seat.std .hands.totals-only .total { font-size: 17px; line-height: 24px; padding: 0 8px; }
+.felt .seat.std .hands.totals-only .hand.active .total { outline: 2px solid var(--gold); }
+.felt .seat.std .hands.totals-only small { font-size: 12px; }
+/* Your turn: the side bet results sit in the free corner to the right of Split, clear of every button. */
+@media (min-width: 701px) {
+  .tray:has(.decide) .side-results { left: auto; right: 10px; width: calc(50% - 248px); }
+  .seat.std .who .name, .seat.std .who .chips, .seat.std .hand .total, .seat.std .hand .result, .seat.std .hands.totals-only small, .seat.std .odds, .felt:not(.in3d) .dealer-name, .mid-band .status, .shoe-info { zoom: var(--up, 1); }
+}
+/* Short messages show at the top of the table, never over the chips, Rebet or the move buttons. */
+body.in-room .toast { bottom: auto; top: calc(var(--topbar-h, 56px) + 10px); pointer-events: none; }
+@media (max-width: 700px) { body.in-room .toast { top: calc(var(--topbar-h, 52px) + 50px); } }
+.felt .seat .who, .felt .seat.std .hands.totals-only { transform: rotate(var(--pr, 0deg)); }

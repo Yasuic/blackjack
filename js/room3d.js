@@ -580,6 +580,7 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
   let peopleRev = 0, flipped = false; // flipped: the felt is laid out for the dealer and turned to face them
   let peopleKey = '', figs = new Map(), stoolGroup = null, myFig = null, myStool = null, sidePts = [], seatEdge = new Map();
   let lastPeople = null, lastChips = null;
+  let beside = [];
   function setPeople(list = [], stools = null) {
     lastPeople = [list, stools];
     const n = list[0]?.seats || stools?.length || 0;
@@ -624,6 +625,9 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
         figs.set(p.id, f);
         if (p.isMe) myFig = f;
       }
+      // The people right beside you. From your chair they fill the bottom corners of the screen, so they
+      // are drawn only when you turn your head or stand up.
+      beside = myFig && mine && isFinite(gap) ? [...figs.values()].filter((f) => f !== myFig && Math.hypot(f.position.x - myFig.position.x, f.position.z - myFig.position.z) < gap * 1.45) : [];
       touch();
     }
     // A short reach towards the betting circle when someone's bet changes.
@@ -638,7 +642,7 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
   const chipGroup = new THREE.Group();
   scene.add(chipGroup);
   const chipGeo = new THREE.CylinderGeometry(1, 1, 1, 18);
-  let chipMat = {}, rackMat = {};
+  let chipMat = {}, rackMat = {}, myRack = null;
   const rackGeo = {};
   const matsFor = (v) => (chipMat[v] ||= (() => {
     const top = std({ map: canvasTexture(128, 128, chipTop(v)), roughness: 0.55 });
@@ -667,11 +671,33 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
   // list: one entry per taken seat: { seat, main (the bet), balance (chips not bet) }.
   function setChips(list = []) {
     lastChips = list;
-    const key = peopleRev + '|' + JSON.stringify(list.map((c) => [c.seat, c.main, c.balance])) + '|' + feltEl.clientWidth;
+    const key = peopleRev + '|' + JSON.stringify(list.map((c) => [c.seat, c.main, c.balance, c.sides, c.mine])) + '|' + feltEl.clientWidth;
     if (key === chipKey) return;
     chipKey = key;
     chipGroup.clear();
+    myRack = new THREE.Group();
+    chipGroup.add(myRack);
     const spots = feltPoints(list.map((c) => (c.main ? feltEl.querySelector('#spot-' + c.seat) : null)));
+    // Side bets and bets between players: a small pile on the outer edge of each one's place on the felt.
+    const sideList = list.flatMap((c, idx) => (c.main && c.sides ? c.sides.map(([sel, amt]) => ({ idx, sel, amt })) : []));
+    const sideAt = feltPoints(sideList.map((x) => feltEl.querySelector(x.sel)));
+    sideList.forEach((x, n) => {
+      const at = sideAt[n], main = spots[x.idx];
+      if (!at || !main || !x.amt) return;
+      const R = Math.max(3.5, Math.min(11, main.w * 0.125)), T = R * 0.19;
+      let dx = at.x - main.x, dz = at.z - main.z;
+      const d = Math.hypot(dx, dz) || 1;
+      const push = d < main.w * 1.2 ? main.w * 0.2 : 0; // a slice of the ring: out towards its rim, clear of the amount written on it
+      const px = at.x + (dx / d) * push, pz = at.z + (dz / d) * push;
+      chipsFor(x.amt, 5).forEach((v, i) => {
+        const m = new THREE.Mesh(chipGeo, matsFor(v));
+        m.scale.set(R, T, R);
+        m.position.set(px, 1.6 + T / 2 + i * T, pz);
+        m.rotation.y = i * 1.7;
+        m.castShadow = true;
+        chipGroup.add(m);
+      });
+    });
     list.forEach((c, idx) => {
       const at = spots[idx];
       if (at && c.main) {
@@ -705,7 +731,7 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
           m.position.set(e.x + e.nx * RAIL * 0.5 - e.nz * along, 20.5 + (t * cnt) / 2, e.z + e.nz * RAIL * 0.5 + e.nx * along);
           m.rotation.y = i * 1.3;
           m.castShadow = true;
-          chipGroup.add(m);
+          (c.mine ? myRack : chipGroup).add(m);
         });
       }
     });
@@ -917,8 +943,10 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
   // The buttons at the bottom of the screen: keep your own cards above them.
   if (hud) {
     new ResizeObserver(() => {
+      // The buttons are tallest while betting. The view is fitted to that once and then stays put,
+      // so the table is the same size in every phase of a round.
       const hh = hud.offsetHeight || 0;
-      if (Math.abs(hh - hudReserve) < 24) return;
+      if (hh < hudReserve + 24) return;
       hudReserve = hh;
       if (seated) { rate = 4.5; seatGoal(!!homeFit); } else homeFit = fitHome();
     }).observe(hud);
@@ -969,6 +997,10 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     camera.rotation.set(Math.max(-1.5, Math.min(0.6, pitch0 + cur.pitch)), yaw0 + cur.yaw, 0, 'YXZ');
     // In your own chair you see your body, arms and stool when you look down, but no head in front of your eyes.
     if (myFig) for (const part of myFig.userData.headParts) part.visible = !seated;
+    const ahead = seated && Math.abs(cur.yaw) < 0.1;
+    for (const f of beside) f.visible = !ahead;
+    // Your own rack of chips is under the buttons from your chair, and your balance is written there.
+    if (myRack) myRack.visible = !seated;
     gl.render(scene, camera);
     css.render(scene, camera);
   };
