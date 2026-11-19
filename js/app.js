@@ -1,11 +1,11 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261119n';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261119n';
-import { tickSound, winSound } from './fx.js?v=20261119n';
-import { webglOK, initRoom } from './room3d.js?v=20261119n';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261119n';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261119p';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261119p';
+import { tickSound, winSound } from './fx.js?v=20261119p';
+import { webglOK, initRoom } from './room3d.js?v=20261119p';
+import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261119p';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -544,7 +544,6 @@ function buildLayout() {
             <button class="menu-item" data-act="rules">💰 Side bet payouts</button>`)}
           ${fold('m-view', '🎛️ My view and sound', `
             <button class="menu-item" data-act="four">🎨 Four colour cards</button>
-            <button class="menu-item" data-act="train" id="train-btn">${trainingOn() ? '🧮 Count training: on' : '🧮 Count training: off'}</button>
             <button class="menu-item" data-act="chart">📊 Basic strategy chart</button>
             <button class="menu-item" data-act="hints" id="hints-btn">${hintsOn() ? '💡 Strategy hints: on' : '💡 Strategy hints: off'}</button>
             <button class="menu-item" data-act="room3d">${use3D() ? '🧊 3D room: on' : '🧊 3D room: off'}</button>
@@ -1230,7 +1229,8 @@ function pvpBtnHTML(st, seat) {
 
 // The tray in the middle under the table: chips while betting, play buttons on your turn.
 function hintsOn() { return safeGet('bj-hints') !== '0'; }
-function trainingOn() { return safeGet('bj-train') === '1'; }
+// Count training is off unless the host switches it on for the whole table in the settings.
+function trainingOn() { return !!S.state?.settings?.countTraining; }
 
 // Count training: running count, true count and how often your moves match basic strategy.
 function countBadgeHTML(st) {
@@ -1417,6 +1417,7 @@ function renderHostPanel(st) {
     </div>`, true)}
     ${fold('set-rules', '📏 Rules', `<div class="settings-grid">
       <label class="check full"><input id="set-h17" type="checkbox" ${s.dealerHitsSoft17 ? 'checked' : ''} ${dis} /> Dealer hits soft 17</label>
+      <label class="check full"><input id="set-count" type="checkbox" ${s.countTraining ? 'checked' : ''} ${dis} /> 🧮 Count training for everyone (shows the card count)</label>
       <label class="check full"><input id="set-sur" type="checkbox" ${s.allowSurrender ? 'checked' : ''} ${dis} /> Allow surrender (get half your bet back)</label>
       <button class="btn full" data-act="h-strip" ${dis}>Reset to Las Vegas Strip rules</button>
     </div>`, true)}
@@ -1448,6 +1449,7 @@ const SETTING_NAMES = {
   shuffleEvery: ['Reshuffle every', (v) => v + ' rounds'],
   startChips: ['Starting chips', money], minBet: ['Min bet', money], maxBet: ['Max bet', money], maxSideBet: ['Max side bet', money],
   dealerHitsSoft17: ['Dealer', (v) => (v ? 'hits soft 17' : 'stands on all 17s')],
+  countTraining: ['Count training', (v) => (v ? 'on for everyone' : 'off')],
   allowSurrender: ['Surrender', (v) => (v ? 'allowed' : 'not allowed')],
   autoDeal: ['Deal when all ready', (v) => (v ? 'on' : 'off')],
   betTimer: ['Betting time', (v) => (v ? v + 's' : 'off')], turnTimer: ['Time per move', (v) => (v ? v + 's' : 'off')],
@@ -1748,7 +1750,7 @@ app.addEventListener('click', (e) => {
       proposeSettings({
         seats, decks, shuffleMode: v('set-mode'), penetration: Number(v('set-pen')), shuffleEvery: Number(v('set-every')),
         startChips: Number(v('set-start')), minBet: Number(v('set-min')), maxBet: Number(v('set-max')), maxSideBet: Number(v('set-maxside')),
-        dealerHitsSoft17: $('#set-h17').checked, allowSurrender: $('#set-sur').checked, autoDeal: $('#set-auto').checked,
+        dealerHitsSoft17: $('#set-h17').checked, countTraining: $('#set-count').checked, allowSurrender: $('#set-sur').checked, autoDeal: $('#set-auto').checked,
         betTimer: Number(v('set-bettimer')), turnTimer: Number(v('set-turntimer')),
         sideBets: [...document.querySelectorAll('[data-sidebet]')].filter((x) => x.checked).map((x) => x.dataset.sidebet),
       });

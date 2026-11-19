@@ -15,6 +15,7 @@ export const DEFAULT_SETTINGS = {
   maxBet: 1000,
   maxSideBet: 100,
   dealerHitsSoft17: false,
+  countTraining: false,  // the host can switch the card count display on for the whole table
   blackjackPays: 1.5,    // 3:2
   allowSurrender: true,
   autoDeal: true,        // deal as soon as every seated player is ready
@@ -1099,7 +1100,7 @@ export class Table {
       }),
       players: Object.values(this.players).filter((p) => !p.kicked).map((p) => ({ id: p.id, name: p.name, look: p.look, chips: p.chips, seat: p.seat, connected: p.connected, boughtIn: p.boughtIn || 0, totalIn: p.totalIn ?? this.settings.startChips, left: !!p.kicked })),
       hostId: this.hostId || null,
-      count: {
+      count: !this.settings.countTraining ? null : {
         running: (this.runCount || 0) - (hide && hole ? hiLo(hole) : 0),
         decksLeft: (this.shoe.length + (hide && hole ? 1 : 0)) / 52,
       },
