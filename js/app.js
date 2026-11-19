@@ -1,11 +1,11 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, MAX_SEATS, handTotal } from './game.js?v=20261119e';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261119e';
-import { tickSound, winSound } from './fx.js?v=20261119e';
-import { webglOK, initRoom } from './room3d.js?v=20261119e';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261119e';
+import { Table, SIDE_BETS, SIDE_KEYS, MAX_SEATS, handTotal, sha256, fairShoe } from './game.js?v=20261119f';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261119f';
+import { tickSound, winSound } from './fx.js?v=20261119f';
+import { webglOK, initRoom } from './room3d.js?v=20261119f';
+import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261119f';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -230,10 +230,14 @@ function runAction(id, msg, onError) {
         break;
       }
       case 'leave-dealer': t.leaveDealer(id); break;
+      case 'seed': t.setClientSeed(id, msg.seed); return; // nothing on the table changes, so no update is sent
       case 'peek': {
         const card = t.peek(id);
-        if (id === S.myId) showPeek(card);
-        else S.conns[id]?.open && S.conns[id].send({ t: 'peek', card });
+        // Everyone at the table sees the card, so nobody plays with knowledge the others lack.
+        const by = t.players[id]?.name || 'Someone';
+        showPeek(card, by);
+        Object.values(S.conns).forEach((c) => c?.open && c.send({ t: 'peek', card, by }));
+        t.addLog(`${by} paid to show the next card: ${card.r}${card.s}.`);
         break;
       }
       default: return;
@@ -384,7 +388,7 @@ function connectToHost() {
     if (msg.t === 'state') { S.state = msg.state; render(); setTimerFromState(msg.state); }
     else if (msg.t === 'error') toast(msg.msg);
     else if (msg.t === 'fx') showThrow(msg);
-    else if (msg.t === 'peek') showPeek(msg.card);
+    else if (msg.t === 'peek') showPeek(msg.card, msg.by);
     else if (msg.t === 'kicked') { S.kicked = true; S.peer.destroy(); app.innerHTML = '<div class="center-msg"><h2>You were removed from the table.</h2></div>'; }
   });
   conn.on('close', () => {
@@ -422,7 +426,8 @@ function buildLayout() {
             <div class="share"><input id="share" readonly /><button class="btn small" data-act="copy">Copy</button></div>
           </div>
           ${fold('m-table', '📜 Table rules and payouts', `
-            <button class="menu-item" data-act="rules">💰 Side bet payouts</button>`)}
+            <button class="menu-item" data-act="rules">💰 Side bet payouts</button>
+            <button class="menu-item" data-act="fair">🔐 Check the shuffle</button>`)}
           ${fold('m-view', '🎛️ My view and sound', `
             <button class="menu-item" data-act="four">🎨 Four colour cards</button>
             <button class="menu-item" data-act="train" id="train-btn">${trainingOn() ? '🧮 Count training: on' : '🧮 Count training: off'}</button>
@@ -584,6 +589,7 @@ function render(note) {
     $('#controls').innerHTML = '';
     return;
   }
+  fairWatch(st);
   const prev = S.prevView;
   if (prev && st.round !== prev.round) { S.undo = []; S.mainChips = []; S.sideChips = {}; }
   // Once the cards are dealt, the picked chip is put down, so the next round starts with none picked.
@@ -1231,6 +1237,65 @@ function timerOpts(v) {
     .map(([x, l]) => `<option value="${x}" ${Number(v) === x ? 'selected' : ''}>${l}</option>`).join('');
 }
 
+// ---------- Fair shuffle checks ----------
+// Every browser keeps its own notes, so a player does not have to believe the host.
+// S.fair.mine: the seed I sent for each promised hash. S.fair.checks: the result for each finished shoe.
+function fairWatch(st) {
+  const f = st.fair;
+  if (!f) return;
+  const F = (S.fair ||= { mine: {}, cur: {}, checks: {}, shoes: {} });
+  // The host promised a new hash: answer with a fresh seed of my own, made only after seeing that hash.
+  if (f.nextCommit && !F.mine[f.nextCommit]) {
+    const buf = new Uint8Array(16); crypto.getRandomValues(buf);
+    const seed = Array.from(buf, (x) => x.toString(16).padStart(2, '0')).join('');
+    F.mine[f.nextCommit] = seed;
+    setTimeout(() => { if (S.role === 'host') S.table?.setClientSeed(S.myId, seed); else if (S.conn?.open) S.conn.send({ t: 'seed', seed }); }, 0);
+  }
+  // The shoe now in play: note which player seeds the host says went into it, before any card is known.
+  if (f.current && !F.cur[f.current.commit]) F.cur[f.current.commit] = JSON.stringify(f.current.clientSeeds);
+  // A finished shoe: its seed is now shown, so redo the checks.
+  const L = f.last;
+  if (L && !F.checks[L.n]) {
+    const hashOk = sha256(L.serverSeed) === L.commit;
+    const sawPromise = !!F.mine[L.commit];
+    const mineIn = sawPromise && L.clientSeeds[S.myId] === F.mine[L.commit];
+    const sameSeeds = !F.cur[L.commit] || F.cur[L.commit] === JSON.stringify(L.clientSeeds);
+    const ok = hashOk && sameSeeds && (!sawPromise || mineIn);
+    F.checks[L.n] = { ok, hashOk, sawPromise, mineIn, sameSeeds };
+    F.shoes[L.n] = L;
+    if (!ok) toast(`Shuffle check failed for shoe ${L.n}. Open "Check the shuffle" in the menu.`);
+  }
+}
+function fairHTML() {
+  const f = S.state?.fair, F = S.fair;
+  if (!f || !F) return '<h3>Check the shuffle</h3><p>No shoe yet.</p>';
+  const short = (x) => `<code class="fair-code">${esc(x)}</code>`;
+  const tick = (b) => (b ? '✅' : '❌');
+  let h = `<h3>🔐 Check the shuffle</h3>
+    <p class="fair-p">The host's browser promises a secret seed (a long random code) by showing its fingerprint before the shuffle. Then every player's browser adds a random code of its own. The card order comes only from those codes together, so the host cannot arrange the cards. When a shoe is finished, the secret seed is shown and your browser redoes the shuffle to check it.</p>`;
+  if (f.current) {
+    const c = f.current, mine = F.mine[c.commit];
+    h += `<div class="fair-box"><b>Shoe ${c.n} (in play now)</b>
+      <div>Fingerprint promised before the shuffle: ${short(c.commit)}</div>
+      <div>Player codes mixed in: ${Object.keys(c.clientSeeds).length}</div>
+      <div>${mine ? `${tick(c.clientSeeds[S.myId] === mine)} Your code ${short(mine)} ${c.clientSeeds[S.myId] === mine ? 'is in this shuffle.' : 'is missing from this shuffle.'}` : 'You joined after this shoe was shuffled, so your code is not in it. It will be in the next one.'}</div>
+      <div class="fair-dim">The secret seed stays hidden until this shoe is finished.</div></div>`;
+  }
+  const done = Object.keys(F.shoes).map(Number).sort((a, b) => b - a);
+  for (const n of done) {
+    const L = F.shoes[n], k = F.checks[n];
+    const order = fairShoe(L.decks, L.serverSeed, L.clientSeeds).reverse().map((c) => c.r + c.s).join(' ');
+    h += `<div class="fair-box"><b>${tick(k.ok)} Shoe ${n} (finished)</b>
+      <div>${tick(k.hashOk)} The secret seed matches the fingerprint promised before the shuffle.</div>
+      <div>${k.sawPromise ? `${tick(k.mineIn)} Your code was mixed in.` : 'You were not at the table when this shoe was shuffled.'}</div>
+      <div>${tick(k.sameSeeds)} The player codes are the same ones shown while the shoe was in play.</div>
+      <div>Secret seed: ${short(L.serverSeed)}</div>
+      <details><summary>Card order of this shoe, first card dealt on the left</summary><div class="fair-order">${esc(order)}</div></details></div>`;
+  }
+  if (!done.length) h += '<p class="fair-dim">No shoe has finished yet. Checks appear here after the next shuffle.</p>';
+  return h;
+}
+
 function rulesHTML() {
   return `<h2 style="margin-top:0">Side bets</h2><div class="paytable">
     <div class="hint">Payouts are "to 1": a 10 chip bet that pays 25 to 1 wins 250 and you get your 10 back. There is no rake or fee.</div>
@@ -1271,6 +1336,7 @@ app.addEventListener('click', (e) => {
       break;
     }
     case 'rules': $('#modal-body').innerHTML = rulesHTML(); $('#modal').showModal(); break;
+    case 'fair': $('#modal-body').innerHTML = fairHTML(); $('#modal').showModal(); break;
     case 'four': document.body.classList.toggle('four-colour'); safeSet('bj-four', document.body.classList.contains('four-colour') ? '1' : '0'); break;
     case 'sit': send({ t: 'sit', seat: Number(el.dataset.seat) }); break;
     case 'stand-up': send({ t: 'stand-up' }); break;
@@ -1701,15 +1767,15 @@ function renderGuide(st) {
 function peekBtnHTML(st) {
   const cost = st.settings.peekCost ?? 10;
   const free = !st.banker || st.banker.id === S.myId;
-  return `<button class="btn peek-btn" data-act="peek" title="Only you see it">👁 See next card${free ? '' : ` · ${money(cost)}`}</button>`;
+  return `<button class="btn peek-btn" data-act="peek" title="Everyone at the table sees the card">👁 Show next card to all${free ? '' : ` · ${money(cost)}`}</button>`;
 }
-function showPeek(card) {
+function showPeek(card, by) {
   if (!card) return;
   $('#peek-pop')?.remove();
   const box = document.createElement('div');
   box.id = 'peek-pop';
   box.className = 'peek-pop';
-  box.innerHTML = `<div class="peek-title">👁 Next card in the shoe</div>${cardHTML(card, true)}<div class="hint">Only you can see this.</div>`;
+  box.innerHTML = `<div class="peek-title">👁 Next card in the shoe</div>${cardHTML(card, true)}<div class="hint">${esc(by || 'Someone')} asked to see it. Everyone at the table sees this card.</div>`;
   document.body.appendChild(box);
   cardSound();
   setTimeout(() => box.classList.add('out'), 3200);

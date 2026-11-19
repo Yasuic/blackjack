@@ -160,3 +160,23 @@ import { bestMove } from '../js/strategy.js';
   assert.equal(t.players.a.chips, da - 10); assert.equal(t.players.d.chips, dd + 10);
   console.log('hot 3, friend bust and peek tests passed');
 }
+{
+  // Fair shuffle: known hash, same seeds give the same shoe, and a finished shoe can be redone from its seeds.
+  assert.equal(G.sha256('abc'), 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
+  assert.equal(G.sha256(''), 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855');
+  assert.equal(G.sha256('a'.repeat(200)).length, 64);
+  const a = G.fairShoe(6, 'seed', { x: '1' }), b = G.fairShoe(6, 'seed', { x: '1' }), c2 = G.fairShoe(6, 'seed', { x: '2' });
+  assert.deepEqual(a, b); assert.notDeepEqual(a, c2); assert.equal(a.length, 312);
+  const t = new G.Table({ decks: 1 }); t.join('a', 'A');
+  const promised = t.publicState('a').fair.nextCommit;
+  t.setClientSeed('a', 'myseed');
+  t.newShoe();
+  const cur = t.publicState('a').fair.current;
+  assert.equal(cur.commit, promised); assert.equal(cur.clientSeeds.a, 'myseed'); assert.equal(cur.serverSeed, undefined);
+  const order = t.shoe.slice();
+  t.newShoe();
+  const last = t.publicState('a').fair.last;
+  assert.equal(G.sha256(last.serverSeed), promised);
+  assert.deepEqual(G.fairShoe(last.decks, last.serverSeed, last.clientSeeds), order);
+  console.log('fair shuffle tests passed');
+}

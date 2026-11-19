@@ -828,3 +828,10 @@ body.aiming .seat[id^="seat-"]:not(.empty), body.aiming #dealer-zone { cursor: c
 .spot .stack { pointer-events: none; }
 .move-btn.tile::after { content: attr(data-key); position: absolute; top: 3px; right: 6px; font-size: 10px; opacity: .6; font-weight: 700; }
 .move-btn.tile { position: relative; }
+
+/* Fair shuffle panel */
+.fair-p { font-size: 14px; line-height: 1.45; opacity: .9; }
+.fair-box { margin: 10px 0; padding: 10px 12px; border-radius: 10px; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.12); font-size: 13.5px; line-height: 1.6; text-align: left; }
+.fair-code { font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; word-break: break-all; background: rgba(0,0,0,.35); padding: 1px 5px; border-radius: 4px; }
+.fair-dim { opacity: .65; font-size: 13px; }
+.fair-order { max-height: 160px; overflow: auto; font-family: ui-monospace, Menlo, monospace; font-size: 12px; word-break: break-word; margin-top: 6px; }

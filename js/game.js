@@ -136,14 +136,78 @@ function randomInt(n) {
 }
 
 export function buildShoe(decks) {
-  const shoe = [];
-  for (let d = 0; d < decks; d++) for (const s of SUITS) for (const r of RANKS) shoe.push({ r, s });
+  const shoe = orderedShoe(decks);
   for (let i = shoe.length - 1; i > 0; i--) {
     const j = randomInt(i + 1);
     [shoe[i], shoe[j]] = [shoe[j], shoe[i]];
   }
   return shoe;
 }
+function orderedShoe(decks) {
+  const shoe = [];
+  for (let d = 0; d < decks; d++) for (const s of SUITS) for (const r of RANKS) shoe.push({ r, s });
+  return shoe;
+}
+
+// ---------- Fair shuffle that every player can check ----------
+// Before a shoe is shuffled the host publishes sha256(server seed). Each player then sends a seed of
+// their own. The card order comes only from the server seed plus those player seeds, so the host
+// cannot pick the order. When the shoe is finished the server seed is shown and anyone can redo the shuffle.
+const K256 = new Uint32Array([0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2]);
+export function sha256(str) {
+  const msg = new TextEncoder().encode(String(str));
+  const len = msg.length, total = ((len + 9 + 63) >> 6) << 6;
+  const b = new Uint8Array(total); b.set(msg); b[len] = 0x80;
+  const dv = new DataView(b.buffer);
+  dv.setUint32(total - 8, Math.floor((len * 8) / 0x100000000)); dv.setUint32(total - 4, (len * 8) >>> 0);
+  const h = new Uint32Array([0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19]);
+  const w = new Uint32Array(64);
+  const rr = (x, n) => (x >>> n) | (x << (32 - n));
+  for (let o = 0; o < total; o += 64) {
+    for (let i = 0; i < 16; i++) w[i] = dv.getUint32(o + i * 4);
+    for (let i = 16; i < 64; i++) {
+      const s0 = rr(w[i - 15], 7) ^ rr(w[i - 15], 18) ^ (w[i - 15] >>> 3);
+      const s1 = rr(w[i - 2], 17) ^ rr(w[i - 2], 19) ^ (w[i - 2] >>> 10);
+      w[i] = (w[i - 16] + s0 + w[i - 7] + s1) >>> 0;
+    }
+    let [a, bb, c, d, e, f, g, hh] = h;
+    for (let i = 0; i < 64; i++) {
+      const t1 = (hh + (rr(e, 6) ^ rr(e, 11) ^ rr(e, 25)) + ((e & f) ^ (~e & g)) + K256[i] + w[i]) >>> 0;
+      const t2 = ((rr(a, 2) ^ rr(a, 13) ^ rr(a, 22)) + ((a & bb) ^ (a & c) ^ (bb & c))) >>> 0;
+      hh = g; g = f; f = e; e = (d + t1) >>> 0; d = c; c = bb; bb = a; a = (t1 + t2) >>> 0;
+    }
+    h[0] += a; h[1] += bb; h[2] += c; h[3] += d; h[4] += e; h[5] += f; h[6] += g; h[7] += hh;
+  }
+  return Array.from(h, (x) => x.toString(16).padStart(8, '0')).join('');
+}
+function randomSeed() {
+  const buf = new Uint8Array(32);
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) crypto.getRandomValues(buf);
+  else for (let i = 0; i < 32; i++) buf[i] = Math.floor(Math.random() * 256);
+  return Array.from(buf, (x) => x.toString(16).padStart(2, '0')).join('');
+}
+// The one seed a shuffle uses: the server seed, then every player seed in order of player id.
+export function fairSeed(serverSeed, clientSeeds = {}) {
+  return sha256(serverSeed + '|' + Object.keys(clientSeeds).sort().map((k) => k + '=' + clientSeeds[k]).join('|'));
+}
+// Same seed in, same card order out. The last card of the list is dealt first.
+export function fairShoe(decks, serverSeed, clientSeeds = {}) {
+  const seed = fairSeed(serverSeed, clientSeeds);
+  const shoe = orderedShoe(decks);
+  let block = [], n = 0;
+  const next32 = () => {
+    if (!block.length) { const hex = sha256(seed + ':' + n++); for (let i = 0; i < 64; i += 8) block.push(parseInt(hex.slice(i, i + 8), 16)); }
+    return block.shift();
+  };
+  for (let i = shoe.length - 1; i > 0; i--) {
+    const limit = Math.floor(0x100000000 / (i + 1)) * (i + 1);
+    let x; do { x = next32(); } while (x >= limit);
+    const j = x % (i + 1);
+    [shoe[i], shoe[j]] = [shoe[j], shoe[i]];
+  }
+  return shoe;
+}
+function newFairNext() { const seed = randomSeed(); return { seed, commit: sha256(seed), seeds: {} }; }
 
 // ---------- Side bet evaluation ----------
 // Each returns { win: bool, label, mult } where mult is the "to one" payout.
@@ -257,11 +321,26 @@ export class Table {
   shoeDecks() {
     return this.settings.decks === 'csm' ? 6 : Number(this.settings.decks);
   }
-  newShoe() {
-    this.shoe = buildShoe(this.shoeDecks());
+  // Shuffle with the seed promised earlier plus the players' seeds, show the seed of the shoe
+  // that just ended, and promise a new seed for the shoe after this one.
+  fairShuffle() {
+    if (!this.fair) this.fair = { n: 0, next: newFairNext(), current: null, last: null };
+    const f = this.fair, nx = f.next, decks = this.shoeDecks();
+    if (f.current) f.last = { ...f.current };
+    f.n += 1;
+    f.current = { n: f.n, serverSeed: nx.seed, commit: nx.commit, clientSeeds: { ...nx.seeds }, decks };
+    f.next = newFairNext();
+    this.shoe = fairShoe(decks, nx.seed, nx.seeds);
     this.shoeSize = this.shoe.length;
-    this.roundsSinceShuffle = 0;
     this.runCount = 0;
+  }
+  setClientSeed(clientId, seed) {
+    if (!this.players[clientId] || !this.fair) return;
+    this.fair.next.seeds[clientId] = String(seed).replace(/[^0-9a-zA-Z]/g, '').slice(0, 64);
+  }
+  newShoe() {
+    this.fairShuffle();
+    this.roundsSinceShuffle = 0;
     this.addLog('The shoe was shuffled.');
   }
   needsShuffle(players = MAX_SEATS) {
@@ -275,9 +354,7 @@ export class Table {
   }
   draw() {
     if (this.shoe.length === 0) {
-      this.shoe = buildShoe(this.shoeDecks());
-      this.shoeSize = this.shoe.length;
-      this.runCount = 0;
+      this.fairShuffle();
       this.addLog('Shoe ran out mid round and was reshuffled.');
     }
     const c = this.shoe.pop();
@@ -590,7 +667,11 @@ export class Table {
     if (!this.banker && !this.frozen) throw new Error('Nobody is the dealer. Someone has to sit as the dealer, or the host can deal with frozen balances.');
     if (!this.canDeal()) throw new Error('Nobody has placed a bet.');
     const playing = this.seats.filter((x) => x && x.bet.main >= this.settings.minBet).length;
-    if (this.needsShuffle(playing)) this.newShoe();
+    // An untouched shoe is shuffled again when a player's code is not in it yet, so the first shoe
+    // of a table also mixes in the codes of the people who are playing it.
+    const f = this.fair;
+    const fresh = f?.current && this.shoe.length === this.shoeSize && Object.keys(f.next.seeds).some((k) => f.current.clientSeeds[k] === undefined);
+    if (this.needsShuffle(playing) || fresh) this.newShoe();
     this.round++;
     this.roundsSinceShuffle++;
     const active = [];
@@ -938,6 +1019,11 @@ export class Table {
       },
       ledger: Object.values(this.players).map((p) => ({ id: p.id, name: p.name, totalIn: p.totalIn ?? this.settings.startChips, chips: p.chips, houseNet: p.houseNet || 0, connected: p.connected, kicked: !!p.kicked })),
       buyIns: (this.buyIns || []).filter((b) => b.playerId === forClientId).map((b) => ({ id: b.id, amount: b.amount })),
+      fair: this.fair && {
+        nextCommit: this.fair.next.commit,
+        current: this.fair.current && { n: this.fair.current.n, commit: this.fair.current.commit, clientSeeds: this.fair.current.clientSeeds, decks: this.fair.current.decks },
+        last: this.fair.last,
+      },
       shoe: { left: this.shoe.length, size: this.shoeSize, roundsSinceShuffle: this.roundsSinceShuffle },
       log: this.log.slice(-12),
       you: forClientId,
@@ -947,12 +1033,13 @@ export class Table {
 
   // Save and restore so the host can refresh the page without losing the table.
   toJSON() {
-    const { settings, seats, players, phase, dealer, turn, round, roundsSinceShuffle, log, shoe, shoeSize, banker, bankerNet, pendingBanker, buyIns, runCount, hostId, pendingSettings, frozen } = this;
-    return { settings, seats, players, phase, dealer, turn, round, roundsSinceShuffle, log, shoe, shoeSize, banker, bankerNet, pendingBanker, buyIns, runCount, hostId, pendingSettings, frozen };
+    const { settings, seats, players, phase, dealer, turn, round, roundsSinceShuffle, log, shoe, shoeSize, banker, bankerNet, pendingBanker, buyIns, runCount, hostId, pendingSettings, frozen, fair } = this;
+    return { settings, seats, players, phase, dealer, turn, round, roundsSinceShuffle, log, shoe, shoeSize, banker, bankerNet, pendingBanker, buyIns, runCount, hostId, pendingSettings, frozen, fair };
   }
   static fromJSON(obj) {
     const t = new Table(obj.settings);
     Object.assign(t, obj);
+    if (!obj.fair) t.fair.current = null; // a table saved before fair shuffles: its shoe has no seed to show
     t.settings = { ...DEFAULT_SETTINGS, ...obj.settings };
     Object.values(t.players).forEach((p) => (p.connected = false));
     return t;
