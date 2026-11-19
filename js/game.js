@@ -35,11 +35,12 @@ export const SIDE_BETS = {
     table: [['Suited 7-7-7', 100], ['Suited 21', 20], ['Any other 21', 4], ['20', 2], ['19', 1]],
   },
   friendBust: {
-    name: 'Friend Bust',
-    short: 'Friend',
-    icon: '🎯',
-    about: 'Pick a friend at the table. Pays 2 to 1 if their first hand busts. If they are not dealt in, you get your bet back.',
-    table: [["Your friend's first hand busts", 2]],
+    name: 'PvP: friend busts',
+    short: 'PvP',
+    icon: '⚔️',
+    pvp: true, // a bet about another player, not about your own cards
+    about: 'A bet on a friend, not on your own cards. Pick someone at the table. It pays 5 to 1 if their first hand busts. You cannot pick yourself. The most that counts is one fifth of what your friend bet on their own hand, and anything over that comes back to you. If they are not dealt in, you get your bet back.',
+    table: [["Your friend's first hand busts", 5]],
   },
   perfectPairs: {
     name: 'Perfect Pairs',
@@ -118,6 +119,8 @@ export function handTotal(cards) {
   const soft = aces > 0 && total + 10 <= 21;
   return { total: soft ? total + 10 : total, soft };
 }
+
+export const PVP_BUST_PAYS = 5;
 
 export function isBlackjack(hand) {
   return hand.cards.length === 2 && !hand.fromSplit && handTotal(hand.cards).total === 21;
@@ -426,17 +429,20 @@ export class Table {
   }
 
   // ---- Players ----
-  join(clientId, name, buyIn) {
+  join(clientId, name, buyIn, look) {
     name = String(name || 'Player').trim().slice(0, 16) || 'Player';
+    // How the player's character looks in the 3D room: a skin tone and a hair colour.
+    const lk = { skin: clamp(Math.round(Number(look?.skin ?? 2)) || 0, 0, 5), hair: clamp(Math.round(Number(look?.hair ?? 0)) || 0, 0, 4), flag: /^[\u{1F1E6}-\u{1F1FF}]{2}$/u.test(String(look?.flag || '')) ? String(look.flag) : '' };
     let p = this.players[clientId];
     if (p) {
       p.connected = true;
       p.name = name;
+      if (look) p.look = lk;
       return p;
     }
     // Each player says how much they buy in for when they arrive. Any positive amount is fine.
     const start = Math.round(Number(buyIn)) > 0 ? Math.min(Number.MAX_SAFE_INTEGER, Math.round(Number(buyIn))) : this.settings.startChips;
-    p = { id: clientId, name, chips: start, seat: null, connected: true, lastBet: null, totalIn: start };
+    p = { id: clientId, name, chips: start, seat: null, connected: true, lastBet: null, totalIn: start, look: lk };
     this.players[clientId] = p;
     this.addLog(`${name} joined.`);
     return p;
@@ -543,6 +549,7 @@ export class Table {
   leaveDealer(clientId) {
     if (this.banker !== clientId) return;
     if (this.inRound()) throw new Error('Wait for the round to end.');
+    if (this.players[clientId].chips < 0) throw new Error('The dealer owes chips. Buy in to cover them before leaving the dealer seat.');
     this.banker = null;
     this.addLog(`${this.players[clientId].name} left the dealer seat.`);
   }
@@ -639,6 +646,7 @@ export class Table {
   // with frozen balances nobody's chips move, so it is free.
   peek(clientId) {
     const p = this.mustPlayer(clientId);
+    if (this.inRound()) throw new Error('The next card can be shown between rounds, not while a hand is being played.');
     if (!this.shoe.length) throw new Error('The shoe is empty. It is reshuffled before the next card.');
     const cost = this.settings.peekCost ?? 10;
     if (this.banker && this.banker !== clientId) {
@@ -700,9 +708,16 @@ export class Table {
     }
   }
 
+  // A player who is the dealer must hold at least as many chips as the bets on the table.
+  bankShort() {
+    if (!this.banker || !this.players[this.banker]) return false;
+    const onTable = this.seats.reduce((a, s) => a + (s && s.bet.main >= this.settings.minBet ? s.bet.main + sumValues(s.bet.sides) : 0), 0);
+    return onTable > 0 && this.players[this.banker].chips < onTable;
+  }
   canDeal() {
     // With no player as the dealer, the table only deals when the host has chosen frozen balances.
     if (!this.banker && !this.frozen) return false;
+    if (this.bankShort()) return false;
     return this.phase === 'betting' && this.seats.some((s) => s && s.bet.main >= this.settings.minBet && this.players[s.playerId].connected !== false);
   }
 
@@ -973,8 +988,15 @@ export class Table {
           p.chips += stake; seat.returned += stake;
           seat.sideResults.push({ key: 'friendBust', name: SIDE_BETS.friendBust.name, label: `${name} was not dealt in`, win: false, push: true, stake, pay: stake });
         } else {
+          // Only one fifth of the friend's own bet counts, so two players cannot make chips by one of
+          // them busting on purpose. The rest of the stake goes back.
+          const stake = seat.bet.sides.friendBust;
+          const counts = Math.min(stake, Math.floor(ts.bet.main / PVP_BUST_PAYS));
+          const back = stake - counts;
+          if (back > 0) { p.chips += back; seat.returned += back; }
           const bust = handTotal(fh.cards).total > 21;
-          this.settleSide(seat, 'friendBust', bust ? { win: true, label: `${name} busted`, mult: 2 } : { win: false, label: `${name} did not bust` });
+          if (counts > 0) this.settleSide(seat, 'friendBust', bust ? { win: true, label: `${name} busted`, mult: PVP_BUST_PAYS } : { win: false, label: `${name} did not bust` }, counts);
+          else seat.sideResults.push({ key: 'friendBust', name: SIDE_BETS.friendBust.name, label: `${name} bet too little for this to count`, win: false, push: true, stake, pay: back });
         }
       }
       for (const h of seat.hands) {
@@ -1055,6 +1077,7 @@ export class Table {
       } : null,
       frozen: !this.banker && !!this.frozen,
       noDealer: !this.banker && !this.frozen,
+      bankShort: this.bankShort(),
       banker: this.banker && this.players[this.banker] ? { id: this.banker, name: this.players[this.banker].name, chips: this.players[this.banker].chips, connected: this.players[this.banker].connected, net: this.phase === 'settled' ? this.bankerNet : null } : null,
       seats: this.seats.map((s) => {
         if (!s) return null;
@@ -1074,7 +1097,7 @@ export class Table {
           hands: s.hands.map((h) => ({ ...h, ...handTotal(h.cards), blackjack: isBlackjack(h) })),
         };
       }),
-      players: Object.values(this.players).filter((p) => !p.kicked).map((p) => ({ id: p.id, name: p.name, chips: p.chips, seat: p.seat, connected: p.connected, boughtIn: p.boughtIn || 0, totalIn: p.totalIn ?? this.settings.startChips, left: !!p.kicked })),
+      players: Object.values(this.players).filter((p) => !p.kicked).map((p) => ({ id: p.id, name: p.name, look: p.look, chips: p.chips, seat: p.seat, connected: p.connected, boughtIn: p.boughtIn || 0, totalIn: p.totalIn ?? this.settings.startChips, left: !!p.kicked })),
       hostId: this.hostId || null,
       count: {
         running: (this.runCount || 0) - (hide && hole ? hiLo(hole) : 0),

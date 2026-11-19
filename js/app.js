@@ -1,11 +1,11 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261119j';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261119j';
-import { tickSound, winSound } from './fx.js?v=20261119j';
-import { webglOK, initRoom } from './room3d.js?v=20261119j';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261119j';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261119m';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261119m';
+import { tickSound, winSound } from './fx.js?v=20261119m';
+import { webglOK, initRoom } from './room3d.js?v=20261119m';
+import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261119m';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -98,12 +98,14 @@ function showLanding() {
     <div class="landing">
       <div class="hero-cards">${cardHTML({ r: 'A', s: '♠' }, true)}${cardHTML({ r: 'K', s: '♥' }, true)}</div>
       <h1>Blackjack Table</h1>
-      <p>${room ? `You were invited to table <b>${esc(room)}</b>. Pick a name and join.` : 'Host a table, send the link to up to 4 friends, and play live. Play money only.'}</p>
+      <p>${room ? `You were invited to table <b>${esc(room)}</b>. Pick a name and join.` : 'Host a table, send the link to your friends, and play live. Play money only.'}</p>
       <div class="box">
         <label for="name">Your name</label>
         <input id="name" maxlength="16" placeholder="e.g. Sam" value="${esc(S.name)}" autocomplete="nickname" />
         <label for="buyin">💵 How much do you want to buy in for?</label>
         <input id="buyin" type="number" min="1" step="1" inputmode="numeric" placeholder="Any amount, e.g. 1000" value="${esc(safeGet('bj-buyin') || '')}" />
+        <label>🧑 Your character (seen in the 3D room)</label>
+        ${lookPickerHTML()}
         ${room ? `<button class="btn primary big" data-act="join">Join table</button>` : `
           <button class="btn primary big" data-act="host">Host a new table</button>
           ${savedCode ? `<button class="btn" data-act="resume">Resume my table (${esc(savedCode)})</button>` : ''}
@@ -116,6 +118,21 @@ function showLanding() {
   name.addEventListener('keydown', (e) => { if (e.key === 'Enter') $('[data-act=join], [data-act=host]').click(); });
 }
 
+// The look of your character in the 3D room.
+const SKINS = ['#f6d7b8', '#eac39a', '#d6a373', '#b97f4f', '#8a5a36', '#5a3a24'];
+const FLAGS = ['', '🇨🇳', '🇮🇳', '🇳🇬', '🇬🇭', '🇰🇪', '🇿🇦', '🇪🇹', '🇯🇲', '🇭🇰', '🇹🇼', '🇸🇬', '🇲🇾', '🇯🇵', '🇰🇷', '🇻🇳', '🇹🇭', '🇵🇭', '🇮🇩', '🇵🇰', '🇧🇩', '🇱🇰', '🇳🇵', '🇺🇸', '🇨🇦', '🇬🇧', '🇦🇺', '🇫🇷', '🇩🇪', '🇮🇹', '🇪🇸', '🇧🇷', '🇲🇽', '🇦🇪', '🇸🇦', '🇹🇷', '🇪🇬'];
+const HAIRS = ['#17120f', '#3b2416', '#7a4a22', '#c9a15a', '#9aa0a6'];
+function readLook() {
+  let l = {};
+  try { l = JSON.parse(safeGet('bj-look') || '{}') || {}; } catch {}
+  return { skin: Number.isInteger(l.skin) ? l.skin : 2, hair: Number.isInteger(l.hair) ? l.hair : 0, flag: typeof l.flag === 'string' ? l.flag : '' };
+}
+function lookPickerHTML() {
+  const l = readLook();
+  const face = `<svg class="look-face" viewBox="0 0 64 64" aria-hidden="true"><path d="M10 64c0-14 10-20 22-20s22 6 22 20z" fill="#2c3e57"/><rect x="27" y="36" width="10" height="10" rx="3" fill="${SKINS[l.skin]}"/><circle cx="32" cy="26" r="14" fill="${SKINS[l.skin]}"/><path d="M18 25c0-10 6-15 14-15s14 5 14 15c-3-6-8-8-14-8s-11 2-14 8z" fill="${HAIRS[l.hair]}"/></svg>`;
+  const row = (kind, list, cur) => list.map((c, i) => `<button type="button" class="look-dot ${i === cur ? 'on' : ''}" data-act="look" data-kind="${kind}" data-i="${i}" style="background:${c}" aria-label="${kind} ${i + 1}"></button>`).join('');
+  return `<div class="look-pick" id="look-pick">${face}<div class="look-rows"><div class="look-row"><span>Skin</span>${row('skin', SKINS, l.skin)}</div><div class="look-row"><span>Hair</span>${row('hair', HAIRS, l.hair)}</div><div class="look-row"><span>Flag</span><select id="look-flag" data-act-change="look-flag">${FLAGS.map((f) => `<option value="${f}" ${f === l.flag ? 'selected' : ''}>${f || 'None'}</option>`).join('')}</select></div></div></div>`;
+}
 function readName() {
   const n = ($('#name')?.value || '').trim();
   if (!n) { toast('Type your name first.'); return null; }
@@ -125,6 +142,7 @@ function readName() {
   if (!(b >= 1)) { toast('Type how many chips you want to buy in for.'); $('#buyin')?.focus(); return null; }
   S.buyIn = b;
   safeSet('bj-buyin', String(b));
+  S.look = readLook();
   return S.name;
 }
 
@@ -145,7 +163,7 @@ function startHost(resume) {
     S.code = newCode();
     S.table = new Table();
   }
-  S.table.join(S.myId, S.name, S.buyIn);
+  S.table.join(S.myId, S.name, S.buyIn, S.look);
   S.table.hostId = S.myId;
   history.replaceState(null, '', location.pathname + '?' + new URLSearchParams({ ...Object.fromEntries(params), host: S.code }).toString());
   buildLayout();
@@ -200,7 +218,7 @@ function onHostMessage(conn, msg) {
     if (old && old !== old.closed) { old.clientId = null; try { old.close(); } catch {} }
     conn.clientId = id;
     S.conns[id] = conn;
-    S.table.join(id, msg.name, msg.buyIn);
+    S.table.join(id, msg.name, msg.buyIn, msg.look);
     hostChanged();
     return;
   }
@@ -465,7 +483,7 @@ function connectToHost() {
   conn.on('open', () => {
     S.online = true;
     S.retry = 0;
-    conn.send({ t: 'join', clientId: S.myId, name: S.name, buyIn: S.buyIn });
+    conn.send({ t: 'join', clientId: S.myId, name: S.name, buyIn: S.buyIn, look: S.look });
   });
   conn.on('data', (msg) => {
     S.lastSeen = Date.now();
@@ -661,17 +679,18 @@ function renderGuestPlayers(st) {
 function renderLedger(st) {
   const box = $('#ledger');
   if (!box || !st.ledger) return;
-  const rows = st.ledger.slice().sort((a, b) => b.chips - b.totalIn - (a.chips - a.totalIn));
+  const net = (r) => r.chips - r.totalIn - (r.houseNet || 0); // hands against the house are left out
+  const rows = st.ledger.slice().sort((a, b) => net(b) - net(a));
   const sumIn = rows.reduce((a, r) => a + r.totalIn, 0);
   const sumChips = rows.reduce((a, r) => a + r.chips, 0);
   const pl = (n) => `<span class="${n > 0 ? 'up' : n < 0 ? 'down' : ''}">${n > 0 ? '+' : ''}${money(n)}</span>`;
   box.innerHTML = `<button class="ledger-head" data-act="ledger-toggle">Who is up and down <span>${box.classList.contains('closed') ? '▴' : '▾'}</span></button>
     <div class="ledger-body"><table>
       <tr><th>Player</th><th>Bought in</th><th>Chips</th><th>+/-</th></tr>
-      ${rows.map((r) => `<tr class="${r.id === S.myId ? 'me' : ''}"><td>${r.id === st.hostId ? '♛ ' : ''}${esc(r.name)}${r.kicked ? ' (left)' : r.connected ? '' : ' (away)'}${st.banker?.id === r.id ? ' (dealer)' : ''}</td><td>${money(r.totalIn)}</td><td>${money(r.chips)}</td><td>${pl(r.chips - r.totalIn)}</td></tr>`).join('')}
-      <tr class="tot"><td>Table</td><td>${money(sumIn)}</td><td>${money(sumChips)}</td><td>${pl(sumChips - sumIn)}</td></tr>
+      ${rows.map((r) => `<tr class="${r.id === S.myId ? 'me' : ''}"><td>${r.id === st.hostId ? '♛ ' : ''}${esc(r.name)}${r.kicked ? ' (left)' : r.connected ? '' : ' (away)'}${st.banker?.id === r.id ? ' (dealer)' : ''}</td><td>${money(r.totalIn)}</td><td>${money(r.chips)}</td><td>${pl(net(r))}</td></tr>`).join('')}
+      <tr class="tot"><td>Table</td><td>${money(sumIn)}</td><td>${money(sumChips)}</td><td>${pl(rows.reduce((a, r) => a + net(r), 0))}</td></tr>
     </table>
-    <div class="hint">Bought in counts starting chips, buy-ins and chips the host gives or takes. Chips only move when a player is the dealer, so the table total always stays even.</div></div>`;
+    <div class="hint">Bought in counts starting chips, buy-ins and chips the host gives or takes. The +/- column counts only hands played with a player as the dealer, so it always adds up to zero. Hands against the house are practice and are left out.</div></div>`;
 }
 
 // The host sees a pop-up for each buy-in request.
@@ -914,7 +933,7 @@ function runDealQueue() {
 function statusText(st) {
   const turnSeat = st.turn && st.seats[st.turn.seat];
   switch (st.phase) {
-    case 'betting': return st.noDealer ? 'Bets can go down. The cards wait for a dealer' : 'Place your bets';
+    case 'betting': return st.noDealer ? 'Bets can go down. The cards wait for a dealer' : st.bankShort ? `The dealer has ${money(st.banker?.chips || 0)} chips, fewer than the bets on the table. Lower the bets or the dealer buys in` : 'Place your bets';
     case 'insurance': return 'Dealer shows an ace. Insurance?';
     case 'playing': return turnSeat ? (turnSeat.playerId === S.myId ? 'Your turn' : `${turnSeat.name} is playing`) : '';
     case 'dealer': return 'Dealer is playing';
@@ -1176,7 +1195,7 @@ function sideKeys(st) { return (st?.settings?.sideBets || SIDE_KEYS).filter((k) 
 // The main betting circle with the side bets in a ring around it.
 function spotAreaHTML(st, s, i, isMe, mainAmt) {
   const canBet = isMe && (st.phase === 'betting' || st.phase === 'settled');
-  const keys = sideKeys(st);
+  const keys = sideKeys(st).filter((k) => !SIDE_BETS[k].pvp); // bets on your own cards only; the PvP bet has its own button
   const n = Math.max(1, keys.length);
   // Side bets are slices of one ring around the main bet.
   const R1 = 47, R2 = 79, GAP = 1.6;
@@ -1201,7 +1220,31 @@ function spotAreaHTML(st, s, i, isMe, mainAmt) {
     ${sides}
     <div class="spot" id="spot-${i}" ${canBet ? `data-act="main-spot" title="${S.chip ? `Tap to add a ${money(S.chip)} chip` : 'Tap to take your last chip off. Pick a chip below to add instead.'}"` : ''}>${stackHTML(mainAmt)}<span class="spot-amt">${mainAmt ? money(mainAmt) : ''}</span></div>
     ${ins}
+    ${pvpTagsHTML(st, i)}
   </div>`;
+}
+// How much of a chip can still be bet: never more than the chips left, the table maximum for the main
+// bet, or the side bet maximum. Returns 0 (with a short message) when nothing more fits.
+function fitBet(v, where) {
+  const st = S.state, me = st.players.find((p) => p.id === S.myId), seat = st.seats[me.seat];
+  const left = me.chips - betTotal(seat.bet);
+  const cap = where === 'main' ? (st.settings.maxBet ?? Infinity) - seat.bet.main : (st.settings.maxSideBet ?? Infinity) - (seat.bet.sides[where] || 0);
+  const put = Math.max(0, Math.min(v, left, cap));
+  if (!put) toast(left <= 0 ? 'All your chips are already bet.' : 'That bet is at the table maximum.');
+  else if (put < v) toast(`Bet ${money(put)}: that is all that fits.`);
+  return put;
+}
+// PvP bets shown on the seat they are about, so everyone sees who bet on whom.
+function pvpTagsHTML(st, i) {
+  const tags = st.seats.map((o, j) => (o && j !== i && o.bet?.sides?.friendBust && o.bet.target === i ? `<span class="pvp-tag" title="A bet between players. It pays ${5} to 1 if this hand busts.">⚔️ ${esc(o.name)}: ${money(o.bet.sides.friendBust)} on a bust</span>` : '')).join('');
+  const res = st.seats[i]?.sideResults?.find((r) => r.key === 'friendBust');
+  const own = st.seats[i]?.bet?.sides?.friendBust && !res ? `<span class="pvp-tag mine">⚔️ ${money(st.seats[i].bet.sides.friendBust)} on ${esc(st.seats[st.seats[i].bet.target]?.name || 'a friend')} busting</span>` : '';
+  return tags || own ? `<div class="pvp-tags">${own}${tags}</div>` : '';
+}
+function pvpBtnHTML(st, seat) {
+  if (!sideKeys(st).includes('friendBust')) return '';
+  const amt = seat.bet.sides.friendBust || 0, who = amt ? st.seats[seat.bet.target]?.name : null;
+  return `<span class="pvp-ctl"><button class="btn pvp-btn" data-act="pvp" title="A bet between players, not on your cards. Pays 5 to 1 if the friend you pick busts.">⚔️ ${amt ? `PvP: ${money(amt)} on ${esc(who || 'a friend')} busting (tap to add)` : 'PvP bet: a friend busts'}</button>${amt ? '<button class="btn pvp-x" data-act="pvp-clear" title="Take the PvP bet off">✕</button>' : ''}</span>`;
 }
 
 // The tray in the middle under the table: chips while betting, play buttons on your turn.
@@ -1272,7 +1315,7 @@ function trayHTML(st) {
     const b = seat.bet;
     return `
       <div class="tray-row">
-        <div class="balance"><small>Balance</small><b>${money(me.chips - betTotal(b))}</b></div>
+        <div class="balance"></div>
         <div class="chip-rack">
           <button class="icon-btn" data-act="undo" ${S.undo.length ? '' : 'disabled'} title="Undo your last chip"><span class="ico">↶</span>Undo</button>
           ${CHIPS.map((v) => `<button class="chipv ${chipClass(v)} ${S.chip === v ? 'sel' : ''}" data-act="chip" data-v="${v}" title="Bet ${v}"><span>${v}</span></button>`).join('')}
@@ -1281,6 +1324,7 @@ function trayHTML(st) {
         <div class="balance"><small>Total bet</small><b>${money(betTotal(b))}</b></div>
       </div>
       <div class="actions">
+        ${pvpBtnHTML(st, seat)}
         ${peekBtnHTML(st)}
         <button class="btn" data-act="clear" ${betTotal(b) ? '' : 'disabled'}>Clear all</button>
         <button class="btn danger" data-act="stand-up">Leave seat</button>
@@ -1530,6 +1574,12 @@ app.addEventListener('click', (e) => {
   const bet = seat ? structuredClone(seat.bet) : { main: 0, sides: {} };
   const sendBet = (ready = false) => send({ t: 'bet', main: bet.main, sides: bet.sides, target: bet.sides.friendBust ? bet.target : undefined, ready });
   switch (act) {
+    case 'look': {
+      const l = readLook(); l[el.dataset.kind] = Number(el.dataset.i);
+      safeSet('bj-look', JSON.stringify(l));
+      $('#look-pick').outerHTML = lookPickerHTML();
+      break;
+    }
     case 'host': startHost(false); break;
     case 'resume': startHost(true); break;
     case 'join': startPlayer(params.get('room')); break;
@@ -1556,9 +1606,11 @@ app.addEventListener('click', (e) => {
       const v = Number(el.dataset.v);
       S.chip = v;
       if (!seat) { render(); break; }
+      const put = fitBet(v, 'main'); // with fewer chips left than the chip is worth, bet what is left
+      if (!put) { render(); break; }
       S.undo.push(structuredClone(seat.bet));
-      bet.main += v;
-      S.mainChips.push(v);
+      bet.main += put;
+      S.mainChips.push(put);
       flyChip(el, $(`#spot-${me.seat}`), v);
       sendBet();
       break;
@@ -1590,9 +1642,11 @@ app.addEventListener('click', (e) => {
         });
         break;
       }
+      const put = fitBet(S.chip, k);
+      if (!put) break;
       S.undo.push(structuredClone(seat.bet));
-      bet.sides[k] = (bet.sides[k] || 0) + S.chip;
-      S.sideChips[k].push(S.chip);
+      bet.sides[k] = (bet.sides[k] || 0) + put;
+      S.sideChips[k].push(put);
       flyChip($(`.chip-rack [data-v="${S.chip}"]`) || el, el, S.chip);
       sendBet();
       break;
@@ -1612,9 +1666,11 @@ app.addEventListener('click', (e) => {
         sendBet();
         break;
       }
+      const put = fitBet(S.chip, 'main');
+      if (!put) break;
       S.undo.push(structuredClone(seat.bet));
-      bet.main += S.chip;
-      S.mainChips.push(S.chip);
+      bet.main += put;
+      S.mainChips.push(put);
       flyChip($(`.chip-rack [data-v="${S.chip}"]`) || el, el, S.chip);
       sendBet();
       break;
@@ -1660,6 +1716,23 @@ app.addEventListener('click', (e) => {
     case 'leave-dealer': send({ t: 'leave-dealer' }); break;
     case 'side-clear': delete bet.sides[el.dataset.k]; sendBet(); break;
     case 'clear': S.mainChips = []; S.undo.push(structuredClone(seat.bet)); bet.main = 0; bet.sides = {}; sendBet(); chipSound(2); break;
+    case 'pvp': {
+      if (!bet.main) { toast('Place your own bet first.'); break; }
+      const amount = fitBet(S.chip || CHIPS[1], 'friendBust');
+      if (!amount) break;
+      const add = (target) => {
+        const b2 = structuredClone(S.state.seats[me.seat].bet);
+        S.undo.push(structuredClone(b2));
+        b2.sides.friendBust = (b2.sides.friendBust || 0) + amount;
+        b2.target = target;
+        chipSound(1);
+        send({ t: 'bet', main: b2.main, sides: b2.sides, target, ready: false });
+      };
+      if (bet.sides.friendBust && bet.target != null && st.seats[bet.target] && bet.target !== me.seat) add(bet.target);
+      else pickFriend(st, me.seat, add);
+      break;
+    }
+    case 'pvp-clear': S.undo.push(structuredClone(seat.bet)); delete bet.sides.friendBust; sendBet(); chipSound(1); break;
     case 'ready': sendBet(!seat.ready); break;
     case 'ins': send({ t: 'insurance', take: el.dataset.take === '1' }); break;
     case 'play': playMove(el.dataset.a); break;
@@ -1799,6 +1872,7 @@ if (params.get('host') && safeGet('bj-host')) {
 
 // ---------- Throwing things at other players ----------
 const THROWS = {
+  punch: { e: '👊', hit: '💥', name: 'Punch' },
   egg: { e: '🥚', hit: '🍳', name: 'Egg' },
   poop: { e: '💩', hit: '💩', name: 'Poop' },
   fart: { e: '💨', hit: '💨', name: 'Fart' },
@@ -1949,7 +2023,7 @@ function pickFriend(st, mySeat, done) {
   if (!others.length) { toast('Nobody else is sitting at the table yet.'); return; }
   const box = document.createElement('div');
   box.className = 'throw-pop friend-pop';
-  box.innerHTML = `<div class="throw-title">🎯 Who will bust?</div><div class="friend-list">${others.map((o) => `<button class="btn" data-friend="${o.i}">${esc(o.name)}</button>`).join('')}</div>`;
+  box.innerHTML = `<div class="throw-title">⚔️ PvP bet: who will bust?</div><div class="friend-list">${others.map((o) => `<button class="btn" data-friend="${o.i}">${esc(o.name)}</button>`).join('')}</div>`;
   document.body.appendChild(box);
   box.style.left = Math.max(8, innerWidth / 2 - 110) + 'px';
   box.style.top = Math.max(70, innerHeight * 0.35) + 'px';
@@ -1972,7 +2046,7 @@ function renderGuide(st) {
   body.dataset.key = key;
   body.innerHTML = sideKeys(st).map((k) => {
     const sb = SIDE_BETS[k];
-    return `<div class="g-item"><div class="g-head">${sb.icon || ''} <b>${sb.name}</b></div><p>${esc(sb.about)}</p>
+    return `<div class="g-item ${sb.pvp ? 'pvp' : ''}"><div class="g-head">${sb.icon || ''} <b>${sb.name}</b>${sb.pvp ? ' <span class="pvp-chip">Player against player</span>' : ''}</div><p>${esc(sb.about)}</p>
       <table>${sb.table.map(([l, m]) => `<tr><td>${esc(l)}</td><td>${m} to 1</td></tr>`).join('')}</table></div>`;
   }).join('') || '<p>No side bets at this table.</p>';
 }
@@ -2063,3 +2137,8 @@ function banner(title, sub, kind) {
   setTimeout(() => el.classList.add('out'), 2200);
   setTimeout(() => el.remove(), 2700);
 }
+
+document.addEventListener('change', (e) => {
+  if (e.target.id !== 'look-flag') return;
+  const l = readLook(); l.flag = e.target.value; safeSet('bj-look', JSON.stringify(l));
+});
