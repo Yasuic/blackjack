@@ -616,8 +616,8 @@ html, body, button, input, select { font-family: Lato, system-ui, sans-serif; }
 .decide-timer .num { position: relative; width: 40px; height: 40px; border-radius: 50%; background: #0c1410; border: 3px solid #3ee06e; color: #fff; font-weight: 900; font-size: 17px; display: grid; place-items: center; }
 .decide-timer .num:empty { display: none; }
 .decide-timer.urgent .bar i { background: #ff4d4d; box-shadow: 0 0 10px #ff4d4d; }
-.decide-timer.urgent .num { border-color: #ff4d4d; animation: pulse .5s ease-in-out infinite alternate; }
-@keyframes pulse { to { transform: scale(1.12); } }
+.decide-timer.urgent .num { border-color: #ff4d4d; animation: timer-pulse .5s ease-in-out infinite alternate; }
+@keyframes timer-pulse { to { transform: scale(1.12); } }
 @media (max-width: 560px) { .decide-title { font-size: 17px; } .decide-row { gap: 6px; } .move-btn.tile { width: 56px; height: 60px; } .move-btn.tile.big { width: 86px; height: 78px; } .move-btn.tile .sym { font-size: 22px; } .move-btn.tile.big .sym { font-size: 30px; } .move-btn.tile .lbl { font-size: 10px; letter-spacing: .5px; } .move-btn.tile.big .lbl { font-size: 14px; } }
 
 /* Menu: invite link always on top. */
