@@ -1,11 +1,11 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, MAX_SEATS, handTotal, sha256, fairShoe } from './game.js?v=20261119f';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261119f';
-import { tickSound, winSound } from './fx.js?v=20261119f';
-import { webglOK, initRoom } from './room3d.js?v=20261119f';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261119f';
+import { Table, SIDE_BETS, SIDE_KEYS, MAX_SEATS, handTotal, sha256 } from './game.js?v=20261119g';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261119g';
+import { tickSound, winSound } from './fx.js?v=20261119g';
+import { webglOK, initRoom } from './room3d.js?v=20261119g';
+import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261119g';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -204,7 +204,8 @@ function onHostMessage(conn, msg) {
   }
   if (!conn.clientId) return;
   if (msg.t === 'throw') { relayThrow(conn.clientId, msg); return; }
-  runAction(conn.clientId, msg, (err) => conn.open && conn.send({ t: 'error', msg: err }));
+  if (msg.t === 'keys') { gotNonce(msg); return; }
+  fresh(moveCount(msg), () => runAction(conn.clientId, msg, (err) => conn.open && conn.send({ t: 'error', msg: err })));
 }
 
 // Moves any player (including the host as a player) can make.
@@ -248,6 +249,53 @@ function runAction(id, msg, onError) {
   hostChanged();
 }
 
+// ---------- Keys for the cards ----------
+// The shoe order is set at the shuffle by the host's hidden seed together with a secret that never
+// leaves one guest's browser. To deal card number k the host's browser asks that guest for key k.
+// The host cannot read a card before its key arrives; the guest cannot read it without the seed.
+const newNonce = () => { const b = new Uint8Array(8); crypto.getRandomValues(b); return Array.from(b, (x) => x.toString(16).padStart(2, '0')).join(''); };
+const cleanNonce = (n) => String(n).replace(/[^0-9a-zA-Z]/g, '').slice(0, 32);
+function keyHolder() {
+  const open = Object.values(S.conns).filter((c) => c?.open && c.clientId);
+  let h = open.find((c) => c.clientId === S.keyHolderId);
+  if (!h && open.length) { h = open[0]; S.keyHolderId = h.clientId; }
+  return h || null;
+}
+let freshChain = Promise.resolve();
+// countFn says how many cards the step takes. fn runs once the keys are here. Steps run one at a time, in order.
+function fresh(countFn, fn) {
+  freshChain = freshChain.then(() => new Promise((res) => {
+    const t = S.table;
+    let count = 0;
+    try { count = countFn(t) || 0; } catch { count = 0; }
+    const run = (keys) => { t.keys = keys; try { fn(); } finally { t.keys = null; res(); } };
+    const local = () => Array.from({ length: count }, newNonce);
+    if (!count) return run(null);
+    const holder = keyHolder();
+    if (!holder) return run(local()); // nobody else is at the table
+    const rid = newNonce();
+    S.nonceWait ||= {};
+    const timer = setTimeout(() => { delete S.nonceWait[rid]; S.keyHolderId = null; run(local()); }, 1500);
+    S.nonceWait[rid] = (keys) => {
+      clearTimeout(timer); delete S.nonceWait[rid];
+      const got = (Array.isArray(keys) ? keys : []).slice(0, count).map(cleanNonce);
+      while (got.length < count) got.push(newNonce());
+      run(got);
+    };
+    holder.send({ t: 'key-req', rid, from: (t.fair?.cards || 0) + 1, count });
+  })).catch(() => {});
+}
+function gotNonce(msg) { S.nonceWait?.[msg.rid]?.(msg.keys); }
+const moveCount = (msg) => (t) => (msg.t === 'action' ? { hit: 1, double: 1, split: 2 }[msg.a] || 0 : msg.t === 'peek' ? (t.pendingCard ? 0 : 1) : 0);
+// The guest's side: a secret kept in this browser tab, and the key for card number k made from it.
+function myKey(k) {
+  let sec = null;
+  try { sec = sessionStorage.getItem('bj-key-' + S.code); } catch {}
+  if (!sec) { sec = newNonce() + newNonce(); try { sessionStorage.setItem('bj-key-' + S.code, sec); } catch {} }
+  S.keySecret ||= sec;
+  return sha256(S.keySecret + '|' + k).slice(0, 32);
+}
+
 // Moves only the host can make. These never come from the network.
 function hostDo(fn) {
   try { fn(S.table); } catch (e) { toast(e.message); }
@@ -258,12 +306,12 @@ function hostChanged() {
   const t = S.table;
   // The dealer draws one card at a time so everyone can watch.
   if (t.phase === 'dealer' && !S.dealerTimer) {
-    const step = () => {
+    const step = () => fresh((tb) => (tb.dealerNeedsCard() ? 1 : 0), () => {
       t.dealerStep();
       if (t.phase === 'dealer') S.dealerTimer = setTimeout(step, 950);
       else S.dealerTimer = null;
       hostChanged();
-    };
+    });
     S.dealerTimer = setTimeout(step, 1000);
   }
   // A few seconds after a round ends, the dealer clears the cards and the betting spots.
@@ -280,7 +328,7 @@ function hostChanged() {
       S.autoDealTimer = setTimeout(() => {
         S.autoDealTimer = null;
         const still = t.seats.filter((s) => s && t.players[s.playerId].connected);
-        if (t.phase === 'betting' && still.length && still.every((s) => s.ready) && t.canDeal()) hostDo((tb) => tb.deal());
+        if (t.phase === 'betting' && still.length && still.every((s) => s.ready) && t.canDeal()) fresh((tb) => tb.dealCount(), () => hostDo((tb) => { if (tb.phase === 'betting' && tb.canDeal()) tb.deal(); }));
       }, 900);
     }
   }
@@ -316,7 +364,7 @@ function scheduleTimer() {
   if (!want) return;
   const fire = () => {
     S.timer = null;
-    if (want.kind === 'deal') hostDo((tb) => { if (tb.phase === 'settled') tb.startBetting(); if (tb.canDeal()) tb.deal(); });
+    if (want.kind === 'deal') fresh((tb) => tb.dealCount(), () => hostDo((tb) => { if (tb.phase === 'settled') tb.startBetting(); if (tb.phase === 'betting' && tb.canDeal()) tb.deal(); }));
     else if (want.kind === 'insurance') hostDo((tb) => tb.forceInsurance());
     else hostDo((tb) => { tb.addLog(`Time ran out for ${tb.seats[tb.turn.seat].playerId === S.myId ? 'you' : tb.players[tb.seats[tb.turn.seat].playerId].name}, dealer stands.`); tb.skipTurn(); });
   };
@@ -389,6 +437,7 @@ function connectToHost() {
     else if (msg.t === 'error') toast(msg.msg);
     else if (msg.t === 'fx') showThrow(msg);
     else if (msg.t === 'peek') showPeek(msg.card, msg.by);
+    else if (msg.t === 'key-req') conn.send({ t: 'keys', rid: msg.rid, keys: Array.from({ length: Math.min(40, Number(msg.count) || 0) }, (_, i) => myKey(Number(msg.from) + i)) });
     else if (msg.t === 'kicked') { S.kicked = true; S.peer.destroy(); app.innerHTML = '<div class="center-msg"><h2>You were removed from the table.</h2></div>'; }
   });
   conn.on('close', () => {
@@ -403,7 +452,7 @@ function connectToHost() {
 // Send a move: players send it to the host, the host runs it directly.
 function send(msg) {
   if (S.role === 'host' && msg.t === 'throw') relayThrow(S.myId, msg);
-  else if (S.role === 'host') runAction(S.myId, msg, toast);
+  else if (S.role === 'host') fresh(moveCount(msg), () => runAction(S.myId, msg, toast));
   else if (S.conn?.open) S.conn.send(msg);
   else toast('Not connected to the table.');
 }
@@ -417,6 +466,7 @@ function buildLayout() {
       <span class="title">Blackjack</span>
       <span id="conn-pill" class="pill">Connecting</span>
       <span class="spacer"></span>
+      <button id="fair-pill" class="pill fair-pill" data-act="fair" title="How the shuffle is kept fair">🔐<span class="fp-t"> Provably fair</span></button>
       <button class="btn small gold" data-act="copy">🔗 Invite</button>
       <div class="menu-wrap" id="menu-wrap">
         <button class="hamburger" data-act="menu" aria-label="Menu" aria-haspopup="true"><span></span><span></span><span></span></button>
@@ -426,8 +476,7 @@ function buildLayout() {
             <div class="share"><input id="share" readonly /><button class="btn small" data-act="copy">Copy</button></div>
           </div>
           ${fold('m-table', '📜 Table rules and payouts', `
-            <button class="menu-item" data-act="rules">💰 Side bet payouts</button>
-            <button class="menu-item" data-act="fair">🔐 Check the shuffle</button>`)}
+            <button class="menu-item" data-act="rules">💰 Side bet payouts</button>`)}
           ${fold('m-view', '🎛️ My view and sound', `
             <button class="menu-item" data-act="four">🎨 Four colour cards</button>
             <button class="menu-item" data-act="train" id="train-btn">${trainingOn() ? '🧮 Count training: on' : '🧮 Count training: off'}</button>
@@ -590,6 +639,7 @@ function render(note) {
     return;
   }
   fairWatch(st);
+  { const fp = $('#fair-pill'), bad = Object.values(S.fair?.checks || {}).some((k) => !k.ok); if (fp) { fp.classList.toggle('bad', bad); fp.innerHTML = bad ? '⚠️<span class="fp-t"> Shuffle check failed</span>' : '🔐<span class="fp-t"> Provably fair</span>'; } }
   const prev = S.prevView;
   if (prev && st.round !== prev.round) { S.undo = []; S.mainChips = []; S.sideChips = {}; }
   // Once the cards are dealt, the picked chip is put down, so the next round starts with none picked.
@@ -1262,35 +1312,28 @@ function fairWatch(st) {
     const sameSeeds = !F.cur[L.commit] || F.cur[L.commit] === JSON.stringify(L.clientSeeds);
     const ok = hashOk && sameSeeds && (!sawPromise || mineIn);
     F.checks[L.n] = { ok, hashOk, sawPromise, mineIn, sameSeeds };
-    F.shoes[L.n] = L;
-    if (!ok) toast(`Shuffle check failed for shoe ${L.n}. Open "Check the shuffle" in the menu.`);
+    if (!ok) toast(`Shuffle check failed for shoe ${L.n}. Tap "Provably fair" at the top right.`);
   }
 }
 function fairHTML() {
   const f = S.state?.fair, F = S.fair;
-  if (!f || !F) return '<h3>Check the shuffle</h3><p>No shoe yet.</p>';
-  const short = (x) => `<code class="fair-code">${esc(x)}</code>`;
+  if (!f || !F) return '<h3>🔐 Provably fair</h3><p>No shoe yet.</p>';
   const tick = (b) => (b ? '✅' : '❌');
-  let h = `<h3>🔐 Check the shuffle</h3>
-    <p class="fair-p">The host's browser promises a secret seed (a long random code) by showing its fingerprint before the shuffle. Then every player's browser adds a random code of its own. The card order comes only from those codes together, so the host cannot arrange the cards. When a shoe is finished, the secret seed is shown and your browser redoes the shuffle to check it.</p>`;
+  let h = `<h3>🔐 Provably fair</h3>
+    <p class="fair-p">One shuffle sets the whole shoe. The order comes from a hidden code in the host's browser mixed with hidden codes from the players' browsers, so no single person picked it and nobody can read it early. Each card can only be opened at the moment it is dealt. When a shoe is finished, your browser checks that the shuffle was the one promised at the start.</p>`;
   if (f.current) {
     const c = f.current, mine = F.mine[c.commit];
     h += `<div class="fair-box"><b>Shoe ${c.n} (in play now)</b>
-      <div>Fingerprint promised before the shuffle: ${short(c.commit)}</div>
-      <div>Player codes mixed in: ${Object.keys(c.clientSeeds).length}</div>
-      <div>${mine ? `${tick(c.clientSeeds[S.myId] === mine)} Your code ${short(mine)} ${c.clientSeeds[S.myId] === mine ? 'is in this shuffle.' : 'is missing from this shuffle.'}` : 'You joined after this shoe was shuffled, so your code is not in it. It will be in the next one.'}</div>
-      <div class="fair-dim">The secret seed stays hidden until this shoe is finished.</div></div>`;
+      <div>Players mixed into this shuffle: ${Object.keys(c.clientSeeds).length}. Cards dealt so far: ${c.dealt || 0}.</div>
+      <div>${mine ? `${tick(c.clientSeeds[S.myId] === mine)} Your browser's code ${c.clientSeeds[S.myId] === mine ? 'is in this shuffle.' : 'is missing from this shuffle.'}` : 'You joined after this shoe was shuffled. Your code goes into the next one.'}</div></div>`;
   }
-  const done = Object.keys(F.shoes).map(Number).sort((a, b) => b - a);
+  const done = Object.keys(F.checks).map(Number).sort((a, b) => b - a).slice(0, 8);
   for (const n of done) {
-    const L = F.shoes[n], k = F.checks[n];
-    const order = fairShoe(L.decks, L.serverSeed, L.clientSeeds).reverse().map((c) => c.r + c.s).join(' ');
+    const k = F.checks[n];
     h += `<div class="fair-box"><b>${tick(k.ok)} Shoe ${n} (finished)</b>
-      <div>${tick(k.hashOk)} The secret seed matches the fingerprint promised before the shuffle.</div>
-      <div>${k.sawPromise ? `${tick(k.mineIn)} Your code was mixed in.` : 'You were not at the table when this shoe was shuffled.'}</div>
-      <div>${tick(k.sameSeeds)} The player codes are the same ones shown while the shoe was in play.</div>
-      <div>Secret seed: ${short(L.serverSeed)}</div>
-      <details><summary>Card order of this shoe, first card dealt on the left</summary><div class="fair-order">${esc(order)}</div></details></div>`;
+      <div>${tick(k.hashOk)} The shuffle matches the one promised before the shoe started.</div>
+      <div>${k.sawPromise ? `${tick(k.mineIn)} Your browser's code was mixed in.` : 'You were not at the table when this shoe was shuffled.'}</div>
+      <div>${tick(k.sameSeeds)} Nothing was swapped while the shoe was in play.</div></div>`;
   }
   if (!done.length) h += '<p class="fair-dim">No shoe has finished yet. Checks appear here after the next shuffle.</p>';
   return h;
@@ -1451,7 +1494,7 @@ app.addEventListener('click', (e) => {
     case 'ins': send({ t: 'insurance', take: el.dataset.take === '1' }); break;
     case 'play': playMove(el.dataset.a); break;
     // Host only
-    case 'h-deal': hostDo((t) => t.deal()); break;
+    case 'h-deal': fresh((t) => t.dealCount(), () => hostDo((t) => t.deal())); break;
     case 'h-frozen': hostDo((t) => {
       if (!(t.phase === 'betting' || t.phase === 'settled')) throw new Error('Change this between rounds.');
       t.frozen = el.dataset.on === '1';

@@ -207,6 +207,14 @@ export function fairShoe(decks, serverSeed, clientSeeds = {}) {
   }
   return shoe;
 }
+function pickIndex(serverSeed, nonce, k, left) {
+  return parseInt(sha256(serverSeed + '|' + nonce + '|' + k).slice(0, 12), 16) % left;
+}
+// Deal a finished shoe again from its seeds and the numbers the players sent. Returns the cards in the order they were dealt.
+export function replayShoe(rec) {
+  const shoe = fairShoe(rec.decks, rec.serverSeed, rec.clientSeeds);
+  return (rec.draws || []).map((nonce, i) => shoe.splice(pickIndex(rec.serverSeed, nonce, i + 1, shoe.length), 1)[0]);
+}
 function newFairNext() { const seed = randomSeed(); return { seed, commit: sha256(seed), seeds: {} }; }
 
 // ---------- Side bet evaluation ----------
@@ -328,7 +336,8 @@ export class Table {
     const f = this.fair, nx = f.next, decks = this.shoeDecks();
     if (f.current) f.last = { ...f.current };
     f.n += 1;
-    f.current = { n: f.n, serverSeed: nx.seed, commit: nx.commit, clientSeeds: { ...nx.seeds }, decks };
+    f.current = { n: f.n, serverSeed: nx.seed, commit: nx.commit, clientSeeds: { ...nx.seeds }, decks, draws: [] };
+    this.pendingCard = null;
     f.next = newFairNext();
     this.shoe = fairShoe(decks, nx.seed, nx.seeds);
     this.shoeSize = this.shoe.length;
@@ -357,9 +366,24 @@ export class Table {
       this.fairShuffle();
       this.addLog('Shoe ran out mid round and was reshuffled.');
     }
-    const c = this.shoe.pop();
+    const c = this.pendingCard || this.pick();
+    this.pendingCard = null;
     this.runCount = (this.runCount || 0) + hiLo(c);
     return c;
+  }
+  // Take one card out of the shoe. The shoe order is set once, at the shuffle, by two things: the
+  // host's hidden seed and a secret that stays in one guest's browser. Card number k needs key
+  // number k from that guest (this.keys), and the keys are fixed by the guest's secret, so the
+  // order never changes after the shuffle. The host cannot read a card before its key arrives,
+  // and the guest cannot read it without the host's seed.
+  pick() {
+    const cur = this.fair?.current;
+    if (!cur) return this.shoe.pop();
+    let nonce = '';
+    if (this.keys?.length) { nonce = this.keys.shift(); this.fair.cards = (this.fair.cards || 0) + 1; }
+    cur.draws = cur.draws || [];
+    cur.draws.push(nonce);
+    return this.shoe.splice(pickIndex(cur.serverSeed, nonce, cur.draws.length, this.shoe.length), 1)[0];
   }
 
   updateSettings(patch) {
@@ -604,7 +628,9 @@ export class Table {
       this.players[this.banker].chips += cost;
       this.addLog(`${p.name} paid ${cost} to see the next card.`);
     } else this.addLog(`${p.name} looked at the next card.`);
-    return this.shoe[this.shoe.length - 1];
+    // The card is picked now and set aside face up. It is the next card dealt.
+    this.pendingCard = this.pendingCard || this.pick();
+    return this.pendingCard;
   }
 
   // ---- Betting ----
@@ -662,6 +688,16 @@ export class Table {
   }
 
   // ---- Dealing ----
+  // How many cards the next step takes from the shoe. The host asks for exactly that many keys.
+  dealCount() {
+    if (this.phase !== 'betting' || !this.canDeal()) return 0;
+    const n = this.seats.filter((seat) => {
+      if (!seat) return false;
+      const p = this.players[seat.playerId];
+      return seat.bet.main >= this.settings.minBet && seat.bet.main + sumValues(seat.bet.sides) <= p.chips && p.connected !== false;
+    }).length;
+    return n ? 2 * n + 2 : 0;
+  }
   deal() {
     if (this.phase === 'settled') this.startBetting();
     if (!this.banker && !this.frozen) throw new Error('Nobody is the dealer. Someone has to sit as the dealer, or the host can deal with frozen balances.');
@@ -759,8 +795,13 @@ export class Table {
     return this.dealer.cards.length === 2 && handTotal(this.dealer.cards).total === 21;
   }
 
+  drawHole() {
+    if (this.dealer.cards.length === 1) this.dealer.cards.push(this.draw());
+  }
   afterInsurance() {
     const up = this.dealer.cards[0];
+    // With an ace or a ten showing the dealer checks for blackjack, so the face down card is drawn now.
+    if (up.r === 'A' || cardValue(up) === 10) this.drawHole();
     const dealerBJ = this.dealerHasBlackjack();
     // Insurance and Lucky Ladies depend on the hole card, so settle them now.
     for (const seat of this.seats) {
@@ -868,6 +909,7 @@ export class Table {
     }
     this.turn = null;
     this.phase = 'dealer';
+    this.drawHole();
     this.dealer.revealed = true;
   }
 
@@ -893,6 +935,7 @@ export class Table {
   }
 
   finishRound() {
+    this.drawHole();
     this.dealer.revealed = true;
     const d = handTotal(this.dealer.cards).total;
     const dealerBJ = this.dealerHasBlackjack();
@@ -969,14 +1012,15 @@ export class Table {
 
   // ---- What each player is allowed to see ----
   publicState(forClientId) {
-    const hide = !this.dealer.revealed && this.dealer.cards.length === 2;
+    const hide = !this.dealer.revealed && this.dealer.cards.length >= 1 && this.dealer.cards.length <= 2;
+    const hole = this.dealer.cards[1];
     return {
       settings: this.settings,
       phase: this.phase,
       round: this.round,
       turn: this.turn,
       dealer: {
-        cards: this.dealer.cards.map((c, i) => (hide && i === 1 ? { hidden: true } : c)),
+        cards: hide ? [this.dealer.cards[0], { hidden: true }] : this.dealer.cards,
         total: hide ? handTotal([this.dealer.cards[0]]).total : handTotal(this.dealer.cards).total,
         soft: hide ? false : handTotal(this.dealer.cards).soft,
       },
@@ -1014,14 +1058,14 @@ export class Table {
       players: Object.values(this.players).filter((p) => !p.kicked).map((p) => ({ id: p.id, name: p.name, chips: p.chips, seat: p.seat, connected: p.connected, boughtIn: p.boughtIn || 0, totalIn: p.totalIn ?? this.settings.startChips, left: !!p.kicked })),
       hostId: this.hostId || null,
       count: {
-        running: (this.runCount || 0) - (hide ? hiLo(this.dealer.cards[1]) : 0),
-        decksLeft: (this.shoe.length + (hide ? 1 : 0)) / 52,
+        running: (this.runCount || 0) - (hide && hole ? hiLo(hole) : 0),
+        decksLeft: (this.shoe.length + (hide && hole ? 1 : 0)) / 52,
       },
       ledger: Object.values(this.players).map((p) => ({ id: p.id, name: p.name, totalIn: p.totalIn ?? this.settings.startChips, chips: p.chips, houseNet: p.houseNet || 0, connected: p.connected, kicked: !!p.kicked })),
       buyIns: (this.buyIns || []).filter((b) => b.playerId === forClientId).map((b) => ({ id: b.id, amount: b.amount })),
       fair: this.fair && {
         nextCommit: this.fair.next.commit,
-        current: this.fair.current && { n: this.fair.current.n, commit: this.fair.current.commit, clientSeeds: this.fair.current.clientSeeds, decks: this.fair.current.decks },
+        current: this.fair.current && { n: this.fair.current.n, commit: this.fair.current.commit, clientSeeds: this.fair.current.clientSeeds, decks: this.fair.current.decks, dealt: (this.fair.current.draws || []).length },
         last: this.fair.last,
       },
       shoe: { left: this.shoe.length, size: this.shoeSize, roundsSinceShuffle: this.roundsSinceShuffle },

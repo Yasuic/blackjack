@@ -154,10 +154,11 @@ import { bestMove } from '../js/strategy.js';
   assert.ok(fb);
   assert.equal(fb.win, G.handTotal(t.seats[1].hands[0].cards).total > 21);
   // Peek costs 10 and goes to the dealer.
-  const top = t.shoe[t.shoe.length - 1];
-  const da = t.players.a.chips, dd = t.players.d.chips;
+const da = t.players.a.chips, dd = t.players.d.chips;
+  const top = t.peek('a');
   assert.deepEqual(t.peek('a'), top);
-  assert.equal(t.players.a.chips, da - 10); assert.equal(t.players.d.chips, dd + 10);
+  assert.equal(t.players.a.chips, da - 20); assert.equal(t.players.d.chips, dd + 20);
+  assert.deepEqual(t.draw(), top);
   console.log('hot 3, friend bust and peek tests passed');
 }
 {
@@ -178,5 +179,20 @@ import { bestMove } from '../js/strategy.js';
   const last = t.publicState('a').fair.last;
   assert.equal(G.sha256(last.serverSeed), promised);
   assert.deepEqual(G.fairShoe(last.decks, last.serverSeed, last.clientSeeds), order);
+  // Card k is picked with key k, and the whole shoe can be dealt again afterward from the seed and the keys.
+  const t3 = Object.assign(new G.Table({ decks: 1 }), { frozen: true }); t3.join('a', 'A'); t3.sit('a', 0);
+  const seen = [];
+  let kc = 0; const give = (n) => { t3.keys = Array.from({ length: n }, () => 'key' + ++kc); };
+  for (let r = 0; r < 3; r++) {
+    t3.setBet('a', { main: 10, sides: {} }); assert.equal(t3.dealCount(), 4); give(4); t3.deal();
+    let g = 0; while (t3.phase !== 'settled' && g++ < 50) { if (t3.phase === 'insurance') t3.insurance('a', false); else if (t3.phase === 'playing') t3.action('a', 'stand'); else if (t3.phase === 'dealer') { give(1); t3.dealerStep(); } }
+    seen.push(...t3.seats[0].hands[0].cards, ...t3.dealer.cards);
+    t3.startBetting();
+  }
+  const rec = t3.fair.current;
+  const again = G.replayShoe(rec);
+  assert.equal(again.length, seen.length);
+  const keyOf = (x) => x.map((c) => c.r + c.s).sort().join(' ');
+  assert.equal(keyOf(again), keyOf(seen));
   console.log('fair shuffle tests passed');
 }
