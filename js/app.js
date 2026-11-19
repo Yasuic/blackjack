@@ -25,6 +25,9 @@ const S = {
   dealerTimer: null,
   autoDealTimer: null,
   settingsKey: '',
+  timer: null,      // { key, kind, ends, handle }
+  timerEnds: 0,
+  timerKind: null,
   // player only
   conn: null,
   retry: 0,
@@ -228,13 +231,60 @@ function hostChanged() {
       }, 900);
     }
   }
+  scheduleTimer();
+  const timer = S.timer ? { kind: S.timer.kind, endsIn: S.timer.ends - Date.now() } : null;
   for (const [id, conn] of Object.entries(S.conns)) {
-    if (conn.open) conn.send({ t: 'state', state: t.publicState(id) });
+    if (conn.open) conn.send({ t: 'state', state: { ...t.publicState(id), timer } });
   }
-  S.state = t.publicState(S.myId);
+  S.state = { ...t.publicState(S.myId), timer };
+  setTimerFromState(S.state);
   safeSet('bj-host', JSON.stringify({ code: S.code, table: t }));
   render();
 }
+
+// The automatic dealer: deals when the betting time is up, and stands for a
+// player who has not acted in time.
+function scheduleTimer() {
+  const t = S.table;
+  const s = t.settings;
+  let want = null;
+  if ((t.phase === 'betting' || t.phase === 'settled') && s.betTimer > 0 &&
+      t.seats.some((x) => x && x.bet.main > 0 && t.players[x.playerId].connected)) {
+    want = { key: `deal-${t.round}-${t.phase}`, kind: 'deal', secs: t.phase === 'settled' ? s.betTimer + 4 : s.betTimer };
+  } else if (t.phase === 'insurance' && s.turnTimer > 0) {
+    want = { key: `ins-${t.round}`, kind: 'insurance', secs: Math.min(s.turnTimer, 15) };
+  } else if (t.phase === 'playing' && t.turn && s.turnTimer > 0) {
+    const h = t.seats[t.turn.seat].hands[t.turn.hand];
+    want = { key: `turn-${t.round}-${t.turn.seat}-${t.turn.hand}-${h.cards.length}`, kind: 'turn', secs: s.turnTimer };
+  }
+  if (S.timer && want && S.timer.key === want.key) return;
+  if (S.timer) { clearTimeout(S.timer.handle); S.timer = null; }
+  if (!want) return;
+  const fire = () => {
+    S.timer = null;
+    if (want.kind === 'deal') hostDo((tb) => { if (tb.phase === 'settled') tb.startBetting(); if (tb.canDeal()) tb.deal(); });
+    else if (want.kind === 'insurance') hostDo((tb) => tb.forceInsurance());
+    else hostDo((tb) => { tb.addLog(`Time ran out for ${tb.seats[tb.turn.seat].playerId === S.myId ? 'you' : tb.players[tb.seats[tb.turn.seat].playerId].name}, dealer stands.`); tb.skipTurn(); });
+  };
+  S.timer = { key: want.key, kind: want.kind, ends: Date.now() + want.secs * 1000, handle: setTimeout(fire, want.secs * 1000) };
+}
+
+function setTimerFromState(st) {
+  S.timerKind = st.timer?.kind || null;
+  S.timerEnds = st.timer ? Date.now() + st.timer.endsIn : 0;
+  updateTimer();
+}
+
+function updateTimer() {
+  const el = $('#timer');
+  if (!el) return;
+  const left = Math.max(0, Math.ceil((S.timerEnds - Date.now()) / 1000));
+  if (!S.timerKind || !S.timerEnds) { el.hidden = true; return; }
+  el.hidden = false;
+  el.classList.toggle('urgent', left <= 5);
+  el.textContent = S.timerKind === 'deal' ? `Dealing in ${left}s` : S.timerKind === 'insurance' ? `Insurance closes in ${left}s` : `${left}s to act`;
+}
+setInterval(updateTimer, 250);
 
 // ---------- Player ----------
 function startPlayer(code) {
@@ -268,7 +318,7 @@ function connectToHost() {
     conn.send({ t: 'join', clientId: S.myId, name: S.name });
   });
   conn.on('data', (msg) => {
-    if (msg.t === 'state') { S.state = msg.state; render(); }
+    if (msg.t === 'state') { S.state = msg.state; render(); setTimerFromState(msg.state); }
     else if (msg.t === 'error') toast(msg.msg);
     else if (msg.t === 'kicked') { S.kicked = true; S.peer.destroy(); app.innerHTML = '<div class="center-msg"><h2>You were removed from the table.</h2></div>'; }
   });
@@ -369,8 +419,8 @@ function feltHTML(st) {
       <div class="label">Dealer ${dealerTotal}</div>
       <div class="cards">${d.cards.map((c, i) => cardHTML(c, true, `${r}-d-${i}-${c.hidden ? 'x' : c.r + c.s}`)).join('')}</div>
     </div>
-    <div class="felt-text">Blackjack pays ${st.settings.blackjackPays === 1.5 ? '3 to 2' : st.settings.blackjackPays + ' to 1'} · Dealer ${st.settings.dealerHitsSoft17 ? 'hits' : 'stands on'} soft 17 · Insurance pays 2 to 1</div>
-    <div class="status">${esc(statusText(st))}</div>
+    <div class="felt-text">${isStrip(st.settings) ? 'Las Vegas Strip rules · ' : 'House rules · '}Blackjack pays ${st.settings.blackjackPays === 1.5 ? '3 to 2' : st.settings.blackjackPays + ' to 1'} · Dealer ${st.settings.dealerHitsSoft17 ? 'hits' : 'stands on'} soft 17 · Insurance pays 2 to 1</div>
+    <div class="status">${esc(statusText(st))} <span id="timer" class="timer" hidden></span></div>
     <div class="seats">${st.seats.map((s, i) => seatHTML(st, s, i)).join('')}</div>`;
 }
 
@@ -469,7 +519,7 @@ function renderHostPanel(st) {
       <button class="btn" data-act="h-skip" ${ph === 'playing' ? '' : 'disabled'}>Stand for slow player</button>
       <button class="btn" data-act="h-shuffle" ${ph === 'betting' || ph === 'settled' ? '' : 'disabled'}>Shuffle now</button>
     </div>
-    <div class="hint" style="margin-top:8px">${bettors} player${bettors === 1 ? '' : 's'} betting, ${ready} ready. ${t.settings.autoDeal !== false ? 'Cards are dealt on their own once every seated player is ready.' : 'Press Deal to start the round.'}</div>`;
+    <div class="hint" style="margin-top:8px">${bettors} player${bettors === 1 ? '' : 's'} betting, ${ready} ready. ${t.settings.betTimer ? `The dealer deals on its own ${t.settings.betTimer} seconds after bets go down` : 'Press Deal to start the round'}${t.settings.autoDeal !== false ? ', or as soon as everyone is ready' : ''}.${t.settings.turnTimer ? ` Players get ${t.settings.turnTimer} seconds per move.` : ''}</div>`;
   $('#host-players').innerHTML = st.players.map((p) => `
     <div class="player-row">
       <div><b>${esc(p.name)}</b>${p.id === S.myId ? ' (you)' : ''}<br><span class="hint">${money(p.chips)} chips · ${p.seat === null ? 'not seated' : 'seat ' + (p.seat + 1)} · ${p.connected ? 'online' : 'away'}</span></div>
@@ -509,11 +559,26 @@ function renderHostPanel(st) {
       <label>Max bet<input id="set-max" type="number" min="1" value="${s.maxBet}" ${dis} /></label>
       <label class="check full"><input id="set-h17" type="checkbox" ${s.dealerHitsSoft17 ? 'checked' : ''} ${dis} /> Dealer hits soft 17</label>
       <label class="check full"><input id="set-sur" type="checkbox" ${s.allowSurrender ? 'checked' : ''} ${dis} /> Allow surrender (get half your bet back)</label>
-      <label class="check full"><input id="set-auto" type="checkbox" ${s.autoDeal !== false ? 'checked' : ''} ${dis} /> Deal on its own when everyone is ready</label>
+      <div class="full" style="font-weight:700;color:var(--text);margin-top:4px">Automatic dealer</div>
+      <label class="check full"><input id="set-auto" type="checkbox" ${s.autoDeal !== false ? 'checked' : ''} ${dis} /> Deal as soon as everyone is ready</label>
+      <label>Betting time<select id="set-bettimer" ${dis}>${timerOpts(s.betTimer)}</select></label>
+      <label>Time per move<select id="set-turntimer" ${dis}>${timerOpts(s.turnTimer)}</select></label>
+      <div class="hint full">When betting time runs out, the dealer deals to everyone with a bet (last round's bet stays on unless changed). When time per move runs out, the dealer stands for that player.</div>
+      <button class="btn full" data-act="h-strip" ${dis}>Reset to Las Vegas Strip rules</button>
       <button class="btn primary full" data-act="h-settings" ${dis}>Save settings</button>
       <div class="hint full">${locked ? 'Settings unlock when the round ends.' : 'Starting chips apply to new players. Changing the number of decks reshuffles.'}</div>
     </div>`;
   $('#set-pen').addEventListener('input', (e) => ($('#pen-val').textContent = e.target.value + '%'));
+}
+
+// Classic Las Vegas Strip rules: 4+ decks, dealer stands on all 17s, 3 to 2 blackjack,
+// double any two cards and after splits, split to 4 hands, aces split once, late surrender.
+function isStrip(s) {
+  return (s.decks === 'csm' || Number(s.decks) >= 4) && !s.dealerHitsSoft17 && s.blackjackPays === 1.5 && s.allowSurrender;
+}
+function timerOpts(v) {
+  return [[0, 'Off'], [10, '10 seconds'], [15, '15 seconds'], [20, '20 seconds'], [30, '30 seconds'], [45, '45 seconds'], [60, '60 seconds']]
+    .map(([x, l]) => `<option value="${x}" ${Number(v) === x ? 'selected' : ''}>${l}</option>`).join('');
 }
 
 function rulesHTML() {
@@ -584,6 +649,11 @@ app.addEventListener('click', (e) => {
       if (c) { c.send({ t: 'kicked' }); setTimeout(() => c.close(), 300); delete S.conns[id]; }
       break;
     }
+    case 'h-strip':
+      hostDo((t) => t.updateSettings({ decks: 6, dealerHitsSoft17: false, allowSurrender: true, blackjackPays: 1.5, shuffleMode: 'penetration', penetration: 75 }));
+      S.settingsKey = '';
+      toast('Las Vegas Strip rules set.');
+      break;
     case 'h-settings': {
       const v = (id) => $('#' + id).value;
       const decks = v('set-decks') === 'csm' ? 'csm' : Number(v('set-decks'));
@@ -591,6 +661,7 @@ app.addEventListener('click', (e) => {
         decks, shuffleMode: v('set-mode'), penetration: Number(v('set-pen')), shuffleEvery: Number(v('set-every')),
         startChips: Number(v('set-start')), minBet: Number(v('set-min')), maxBet: Number(v('set-max')), maxSideBet: Number(v('set-maxside')),
         dealerHitsSoft17: $('#set-h17').checked, allowSurrender: $('#set-sur').checked, autoDeal: $('#set-auto').checked,
+        betTimer: Number(v('set-bettimer')), turnTimer: Number(v('set-turntimer')),
       }));
       S.settingsKey = '';
       toast('Settings saved.');

@@ -40,15 +40,21 @@ The "Dealer controls" panel is on the right of the host's screen.
 - Dealer hits or stands on soft 17, surrender on or off, auto deal on or off.
 - Give or take chips from any player, kick a player, close insurance for slow players, stand for a player who is away, shuffle now.
 
+- Automatic dealer: betting time (the dealer deals on its own when it runs out, keeping last round's bet for anyone who does not change it) and time per move (the dealer stands for a player who runs out of time). Each can be 10 to 60 seconds or off. With both on, the table runs by itself and you can just play.
+
 Settings can be changed between rounds.
 
 ## Rules
 
+The table uses classic Las Vegas Strip rules by default (the host can press "Reset to Las Vegas Strip rules" at any time):
+
+- 6 decks, reshuffled when 75% of the shoe is used.
+- The dealer hits 16 or less and stands on all 17s, including soft 17 (for example A-6).
 - Blackjack pays 3 to 2. Insurance pays 2 to 1.
 - The dealer checks for blackjack when showing an ace or a 10.
 - Double on any first two cards, including after a split.
 - Split up to 4 hands. Split aces get one card each.
-- Surrender gives back half the bet (host can turn it off).
+- Late surrender: after the dealer checks for blackjack, you can give up your first two cards and get half the bet back (host can turn it off).
 
 ## Side bets
 

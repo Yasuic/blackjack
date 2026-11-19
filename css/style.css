@@ -171,3 +171,5 @@ dialog::backdrop { background: rgba(0,0,0,.6); }
 .settings-grid input:not([type=checkbox]), .settings-grid select { width: 100%; min-width: 0; }
 .side { min-width: 0; }
 body { overflow-x: hidden; }
+.timer { margin-left: 8px; padding: 1px 8px; border-radius: 999px; background: rgba(255,255,255,.15); font-variant-numeric: tabular-nums; }
+.timer.urgent { background: var(--danger); }

@@ -17,6 +17,9 @@ export const DEFAULT_SETTINGS = {
   dealerHitsSoft17: false,
   blackjackPays: 1.5,    // 3:2
   allowSurrender: true,
+  autoDeal: true,        // deal as soon as every seated player is ready
+  betTimer: 20,          // seconds for betting before the dealer deals on its own (0 = off)
+  turnTimer: 30,         // seconds per decision before the dealer stands for you (0 = off)
 };
 
 // ---------- Side bets ----------
@@ -248,6 +251,8 @@ export class Table {
     s.maxBet = Math.max(s.minBet, Math.round(Number(s.maxBet)));
     s.maxSideBet = Math.max(0, Math.round(Number(s.maxSideBet)));
     s.startChips = Math.max(1, Math.round(Number(s.startChips)));
+    s.betTimer = Number(s.betTimer) > 0 ? clamp(Math.round(Number(s.betTimer)), 5, 300) : 0;
+    s.turnTimer = Number(s.turnTimer) > 0 ? clamp(Math.round(Number(s.turnTimer)), 5, 300) : 0;
     if (![1, 2, 6, 8, 'csm'].includes(s.decks)) s.decks = Number(s.decks) || 'csm';
     this.settings = s;
     if (old.decks !== s.decks) this.newShoe();
