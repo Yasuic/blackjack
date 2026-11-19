@@ -352,13 +352,13 @@ function buildOffice(signText) {
   return group;
 }
 
-export function initRoom(container, feltEl, { phone, pixel = false, hud = null } = {}) {
+export function initRoom(container, feltEl, { phone, pixel = false, hud = null, size = null } = {}) {
   // The felt keeps the size and shape its own style sheet gives it, so the 3D table always matches the
   // flat one: the height and the rounded end are read from the page, not fixed here. On a phone the felt
   // is small, close to its size in the flat view, so cards and text stay readable.
   const cssH = parseFloat(getComputedStyle(feltEl).height);
-  const W = phone ? 400 : 1100;
-  const H = Math.round(Math.max(W * 0.5, Math.min(W * 1.6, cssH > 50 ? cssH : W * 0.75)));
+  const W = Math.round(size?.W || (phone ? 400 : 1240));
+  const H = Math.round(size?.H || Math.max(W * 0.5, Math.min(W * 1.6, cssH > 50 ? cssH : W * 0.6)));
   feltEl.classList.add('in3d');
   {
     const r = getComputedStyle(feltEl).borderBottomLeftRadius.trim().split(/\s+/), v = r[r.length - 1];
