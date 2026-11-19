@@ -839,3 +839,6 @@ body.aiming .seat[id^="seat-"]:not(.empty), body.aiming #dealer-zone { cursor: c
 .felt .seat.focus { width: 180px; z-index: 2; }
 .felt.flip .seat { transform: translate(-50%, 0) scale(var(--s, 1)) rotate(var(--r, 0deg)); transform-origin: 50% 0; }
 @media (max-width: 700px) { .felt .seat { width: 62px; } .felt .seat.focus { width: 140px; } .seat:not(.focus) .odds .fav-tag { display: none; } }
+
+.offline-note { position: fixed; left: 50%; top: 84px; transform: translateX(-50%); z-index: 80; width: min(460px, calc(100vw - 24px)); padding: 14px 16px; border-radius: 14px; background: rgba(20,14,14,.96); border: 1px solid rgba(255,120,120,.55); box-shadow: 0 12px 30px rgba(0,0,0,.6); font-size: 14px; line-height: 1.45; display: grid; gap: 10px; text-align: center; }
+.offline-note .btn { text-decoration: none; display: inline-block; }

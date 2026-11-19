@@ -1,11 +1,11 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261119i';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261119i';
-import { tickSound, winSound } from './fx.js?v=20261119i';
-import { webglOK, initRoom } from './room3d.js?v=20261119i';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261119i';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261119j';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261119j';
+import { tickSound, winSound } from './fx.js?v=20261119j';
+import { webglOK, initRoom } from './room3d.js?v=20261119j';
+import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261119j';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -132,6 +132,8 @@ function readName() {
 function startHost(resume) {
   if (!readName()) return;
   S.role = 'host';
+  clearInterval(S.pinger);
+  S.pinger = setInterval(() => Object.values(S.conns || {}).forEach((c) => { try { c?.open && c.send({ t: 'ping' }); } catch {} }), 4000);
   if (resume) {
     try {
       const saved = JSON.parse(safeGet('bj-host'));
@@ -466,6 +468,8 @@ function connectToHost() {
     conn.send({ t: 'join', clientId: S.myId, name: S.name, buyIn: S.buyIn });
   });
   conn.on('data', (msg) => {
+    S.lastSeen = Date.now();
+    if (msg.t === 'ping') return;
     if (msg.t === 'state') { S.state = msg.state; render(); setTimerFromState(msg.state); }
     else if (msg.t === 'error') toast(msg.msg);
     else if (msg.t === 'fx') showThrow(msg);
@@ -473,13 +477,23 @@ function connectToHost() {
     else if (msg.t === 'key-req') conn.send({ t: 'keys', rid: msg.rid, keys: serveKeys(msg) });
     else if (msg.t === 'kicked') { S.kicked = true; S.peer.destroy(); app.innerHTML = '<div class="center-msg"><h2>You were removed from the table.</h2></div>'; }
   });
-  conn.on('close', () => {
+  const lost = () => {
     if (S.kicked || S.conn !== conn) return;
+    S.conn = null;
     S.online = false;
     render();
     S.retry++;
     setTimeout(connectToHost, Math.min(10000, 1500 * S.retry));
-  });
+  };
+  conn.on('close', lost);
+  conn.on('error', lost);
+  // The host sends a short "still here" message every few seconds. If none arrives, the host's tab
+  // is closed or asleep, so drop this link and keep trying to reach the table again.
+  clearInterval(S.watchdog);
+  S.lastSeen = Date.now();
+  S.watchdog = setInterval(() => {
+    if (S.conn === conn && Date.now() - S.lastSeen > 12000) { try { conn.close(); } catch {} lost(); }
+  }, 3000);
 }
 
 // Send a move: players send it to the host, the host runs it directly.
@@ -665,6 +679,19 @@ function render(note) {
   }
   const share = $('#share');
   if (share && share.value !== shareLink()) share.value = shareLink();
+  // A guest whose host has gone away: say why, since the table lives in the host's browser tab.
+  if (S.role !== 'host') {
+    if (S.online) S.offSince = 0; else S.offSince ||= Date.now();
+    const stuck = !S.online && Date.now() - S.offSince > 6000;
+    let box = $('#offline-note');
+    if (stuck && !box) {
+      let mine = null; try { mine = JSON.parse(safeGet('bj-host') || 'null')?.code; } catch {}
+      box = document.createElement('div'); box.id = 'offline-note'; box.className = 'offline-note';
+      box.innerHTML = `<b>Cannot reach the host.</b><div>This table runs inside the host's browser tab. It is reachable only while the host keeps that tab open. Ask the host to open the table again, then this page reconnects by itself.</div>${mine === S.code ? `<a class="btn gold" href="${location.pathname}?host=${encodeURIComponent(S.code)}">I am the host: reopen my table</a>` : ''}<a class="btn" href="${location.pathname}">Start a new table</a>`;
+      document.body.appendChild(box);
+    } else if (!stuck && box) box.remove();
+    if (!S.online && !S.offTick) S.offTick = setInterval(() => { if (S.online) { clearInterval(S.offTick); S.offTick = null; } render(); }, 2000);
+  }
   if (!st) {
     $('#felt').innerHTML = `<div class="center-msg">${esc(note || 'Connecting to the table...')}</div>`;
     $('#tray').innerHTML = '';
