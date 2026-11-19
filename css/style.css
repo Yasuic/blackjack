@@ -842,3 +842,13 @@ body.aiming .seat[id^="seat-"]:not(.empty), body.aiming #dealer-zone { cursor: c
 
 .offline-note { position: fixed; left: 50%; top: 84px; transform: translateX(-50%); z-index: 80; width: min(460px, calc(100vw - 24px)); padding: 14px 16px; border-radius: 14px; background: rgba(20,14,14,.96); border: 1px solid rgba(255,120,120,.55); box-shadow: 0 12px 30px rgba(0,0,0,.6); font-size: 14px; line-height: 1.45; display: grid; gap: 10px; text-align: center; }
 .offline-note .btn { text-decoration: none; display: inline-block; }
+
+/* Character picker on the first screen */
+.look-pick { display: flex; gap: 14px; align-items: center; padding: 10px 12px; border-radius: 12px; background: rgba(255,255,255,.05); border: 1px solid var(--line); }
+.look-face { width: 64px; height: 64px; flex: none; border-radius: 50%; background: rgba(0,0,0,.3); }
+.look-rows { display: grid; gap: 8px; flex: 1; }
+.look-row { display: flex; gap: 7px; align-items: center; flex-wrap: wrap; }
+.look-row > span { width: 38px; font-size: 12px; opacity: .75; text-align: left; }
+.look-dot { width: 26px; height: 26px; border-radius: 50%; border: 2px solid rgba(255,255,255,.25); cursor: pointer; padding: 0; }
+.look-dot.on { border-color: var(--gold); box-shadow: 0 0 0 2px rgba(240,200,90,.45); }
+.look-row select { font: inherit; font-size: 16px; padding: 3px 8px; border-radius: 8px; background: #151a22; color: inherit; border: 1px solid var(--line); }

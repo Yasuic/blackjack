@@ -426,17 +426,20 @@ export class Table {
   }
 
   // ---- Players ----
-  join(clientId, name, buyIn) {
+  join(clientId, name, buyIn, look) {
     name = String(name || 'Player').trim().slice(0, 16) || 'Player';
+    // How the player's character looks in the 3D room: a skin tone and a hair colour.
+    const lk = { skin: clamp(Math.round(Number(look?.skin ?? 2)) || 0, 0, 5), hair: clamp(Math.round(Number(look?.hair ?? 0)) || 0, 0, 4), flag: /^[\u{1F1E6}-\u{1F1FF}]{2}$/u.test(String(look?.flag || '')) ? String(look.flag) : '' };
     let p = this.players[clientId];
     if (p) {
       p.connected = true;
       p.name = name;
+      if (look) p.look = lk;
       return p;
     }
     // Each player says how much they buy in for when they arrive. Any positive amount is fine.
     const start = Math.round(Number(buyIn)) > 0 ? Math.min(Number.MAX_SAFE_INTEGER, Math.round(Number(buyIn))) : this.settings.startChips;
-    p = { id: clientId, name, chips: start, seat: null, connected: true, lastBet: null, totalIn: start };
+    p = { id: clientId, name, chips: start, seat: null, connected: true, lastBet: null, totalIn: start, look: lk };
     this.players[clientId] = p;
     this.addLog(`${name} joined.`);
     return p;
@@ -1074,7 +1077,7 @@ export class Table {
           hands: s.hands.map((h) => ({ ...h, ...handTotal(h.cards), blackjack: isBlackjack(h) })),
         };
       }),
-      players: Object.values(this.players).filter((p) => !p.kicked).map((p) => ({ id: p.id, name: p.name, chips: p.chips, seat: p.seat, connected: p.connected, boughtIn: p.boughtIn || 0, totalIn: p.totalIn ?? this.settings.startChips, left: !!p.kicked })),
+      players: Object.values(this.players).filter((p) => !p.kicked).map((p) => ({ id: p.id, name: p.name, look: p.look, chips: p.chips, seat: p.seat, connected: p.connected, boughtIn: p.boughtIn || 0, totalIn: p.totalIn ?? this.settings.startChips, left: !!p.kicked })),
       hostId: this.hostId || null,
       count: {
         running: (this.runCount || 0) - (hide && hole ? hiLo(hole) : 0),

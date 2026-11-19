@@ -1,11 +1,11 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261119j';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261119j';
-import { tickSound, winSound } from './fx.js?v=20261119j';
-import { webglOK, initRoom } from './room3d.js?v=20261119j';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261119j';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261119k';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261119k';
+import { tickSound, winSound } from './fx.js?v=20261119k';
+import { webglOK, initRoom } from './room3d.js?v=20261119k';
+import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261119k';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -98,12 +98,14 @@ function showLanding() {
     <div class="landing">
       <div class="hero-cards">${cardHTML({ r: 'A', s: '♠' }, true)}${cardHTML({ r: 'K', s: '♥' }, true)}</div>
       <h1>Blackjack Table</h1>
-      <p>${room ? `You were invited to table <b>${esc(room)}</b>. Pick a name and join.` : 'Host a table, send the link to up to 4 friends, and play live. Play money only.'}</p>
+      <p>${room ? `You were invited to table <b>${esc(room)}</b>. Pick a name and join.` : 'Host a table, send the link to your friends, and play live. Play money only.'}</p>
       <div class="box">
         <label for="name">Your name</label>
         <input id="name" maxlength="16" placeholder="e.g. Sam" value="${esc(S.name)}" autocomplete="nickname" />
         <label for="buyin">💵 How much do you want to buy in for?</label>
         <input id="buyin" type="number" min="1" step="1" inputmode="numeric" placeholder="Any amount, e.g. 1000" value="${esc(safeGet('bj-buyin') || '')}" />
+        <label>🧑 Your character (seen in the 3D room)</label>
+        ${lookPickerHTML()}
         ${room ? `<button class="btn primary big" data-act="join">Join table</button>` : `
           <button class="btn primary big" data-act="host">Host a new table</button>
           ${savedCode ? `<button class="btn" data-act="resume">Resume my table (${esc(savedCode)})</button>` : ''}
@@ -116,6 +118,21 @@ function showLanding() {
   name.addEventListener('keydown', (e) => { if (e.key === 'Enter') $('[data-act=join], [data-act=host]').click(); });
 }
 
+// The look of your character in the 3D room.
+const SKINS = ['#f6d7b8', '#eac39a', '#d6a373', '#b97f4f', '#8a5a36', '#5a3a24'];
+const FLAGS = ['', '🇨🇳', '🇮🇳', '🇳🇬', '🇬🇭', '🇰🇪', '🇿🇦', '🇪🇹', '🇯🇲', '🇭🇰', '🇹🇼', '🇸🇬', '🇲🇾', '🇯🇵', '🇰🇷', '🇻🇳', '🇹🇭', '🇵🇭', '🇮🇩', '🇵🇰', '🇧🇩', '🇱🇰', '🇳🇵', '🇺🇸', '🇨🇦', '🇬🇧', '🇦🇺', '🇫🇷', '🇩🇪', '🇮🇹', '🇪🇸', '🇧🇷', '🇲🇽', '🇦🇪', '🇸🇦', '🇹🇷', '🇪🇬'];
+const HAIRS = ['#17120f', '#3b2416', '#7a4a22', '#c9a15a', '#9aa0a6'];
+function readLook() {
+  let l = {};
+  try { l = JSON.parse(safeGet('bj-look') || '{}') || {}; } catch {}
+  return { skin: Number.isInteger(l.skin) ? l.skin : 2, hair: Number.isInteger(l.hair) ? l.hair : 0, flag: typeof l.flag === 'string' ? l.flag : '' };
+}
+function lookPickerHTML() {
+  const l = readLook();
+  const face = `<svg class="look-face" viewBox="0 0 64 64" aria-hidden="true"><path d="M10 64c0-14 10-20 22-20s22 6 22 20z" fill="#2c3e57"/><rect x="27" y="36" width="10" height="10" rx="3" fill="${SKINS[l.skin]}"/><circle cx="32" cy="26" r="14" fill="${SKINS[l.skin]}"/><path d="M18 25c0-10 6-15 14-15s14 5 14 15c-3-6-8-8-14-8s-11 2-14 8z" fill="${HAIRS[l.hair]}"/></svg>`;
+  const row = (kind, list, cur) => list.map((c, i) => `<button type="button" class="look-dot ${i === cur ? 'on' : ''}" data-act="look" data-kind="${kind}" data-i="${i}" style="background:${c}" aria-label="${kind} ${i + 1}"></button>`).join('');
+  return `<div class="look-pick" id="look-pick">${face}<div class="look-rows"><div class="look-row"><span>Skin</span>${row('skin', SKINS, l.skin)}</div><div class="look-row"><span>Hair</span>${row('hair', HAIRS, l.hair)}</div><div class="look-row"><span>Flag</span><select id="look-flag" data-act-change="look-flag">${FLAGS.map((f) => `<option value="${f}" ${f === l.flag ? 'selected' : ''}>${f || 'None'}</option>`).join('')}</select></div></div></div>`;
+}
 function readName() {
   const n = ($('#name')?.value || '').trim();
   if (!n) { toast('Type your name first.'); return null; }
@@ -125,6 +142,7 @@ function readName() {
   if (!(b >= 1)) { toast('Type how many chips you want to buy in for.'); $('#buyin')?.focus(); return null; }
   S.buyIn = b;
   safeSet('bj-buyin', String(b));
+  S.look = readLook();
   return S.name;
 }
 
@@ -145,7 +163,7 @@ function startHost(resume) {
     S.code = newCode();
     S.table = new Table();
   }
-  S.table.join(S.myId, S.name, S.buyIn);
+  S.table.join(S.myId, S.name, S.buyIn, S.look);
   S.table.hostId = S.myId;
   history.replaceState(null, '', location.pathname + '?' + new URLSearchParams({ ...Object.fromEntries(params), host: S.code }).toString());
   buildLayout();
@@ -200,7 +218,7 @@ function onHostMessage(conn, msg) {
     if (old && old !== old.closed) { old.clientId = null; try { old.close(); } catch {} }
     conn.clientId = id;
     S.conns[id] = conn;
-    S.table.join(id, msg.name, msg.buyIn);
+    S.table.join(id, msg.name, msg.buyIn, msg.look);
     hostChanged();
     return;
   }
@@ -465,7 +483,7 @@ function connectToHost() {
   conn.on('open', () => {
     S.online = true;
     S.retry = 0;
-    conn.send({ t: 'join', clientId: S.myId, name: S.name, buyIn: S.buyIn });
+    conn.send({ t: 'join', clientId: S.myId, name: S.name, buyIn: S.buyIn, look: S.look });
   });
   conn.on('data', (msg) => {
     S.lastSeen = Date.now();
@@ -1511,6 +1529,12 @@ app.addEventListener('click', (e) => {
   const bet = seat ? structuredClone(seat.bet) : { main: 0, sides: {} };
   const sendBet = (ready = false) => send({ t: 'bet', main: bet.main, sides: bet.sides, target: bet.sides.friendBust ? bet.target : undefined, ready });
   switch (act) {
+    case 'look': {
+      const l = readLook(); l[el.dataset.kind] = Number(el.dataset.i);
+      safeSet('bj-look', JSON.stringify(l));
+      $('#look-pick').outerHTML = lookPickerHTML();
+      break;
+    }
     case 'host': startHost(false); break;
     case 'resume': startHost(true); break;
     case 'join': startPlayer(params.get('room')); break;
@@ -2042,3 +2066,8 @@ function banner(title, sub, kind) {
   setTimeout(() => el.classList.add('out'), 2200);
   setTimeout(() => el.remove(), 2700);
 }
+
+document.addEventListener('change', (e) => {
+  if (e.target.id !== 'look-flag') return;
+  const l = readLook(); l.flag = e.target.value; safeSet('bj-look', JSON.stringify(l));
+});
