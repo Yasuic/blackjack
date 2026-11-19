@@ -1,11 +1,11 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261119q';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261119q';
-import { tickSound, winSound } from './fx.js?v=20261119q';
-import { webglOK, initRoom } from './room3d.js?v=20261119q';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261119q';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261119r';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261119r';
+import { tickSound, winSound } from './fx.js?v=20261119r';
+import { webglOK, initRoom } from './room3d.js?v=20261119r';
+import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261119r';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -846,7 +846,7 @@ function renderLedger(st) {
   const sumIn = rows.reduce((a, r) => a + r.totalIn, 0);
   const sumChips = rows.reduce((a, r) => a + r.chips, 0);
   const pl = (n) => `<span class="${n > 0 ? 'up' : n < 0 ? 'down' : ''}">${n > 0 ? '+' : ''}${money(n)}</span>`;
-  box.innerHTML = `<button class="ledger-head" data-act="ledger-toggle"><span class="lh-long">Who is up and down</span><span class="lh-short">Ledger</span> <span>${box.classList.contains('closed') ? '▴' : '▾'}</span></button>
+  box.innerHTML = `<button class="ledger-head" data-act="ledger-toggle"><span class="lh-long">Ledger</span><span class="lh-short">Ledger</span> <span>${box.classList.contains('closed') ? '▴' : '▾'}</span></button>
     <div class="ledger-body"><table>
       <tr><th>Player</th><th>Bought in</th><th>Chips</th><th>+/-</th></tr>
       ${rows.map((r) => `<tr class="${r.id === S.myId ? 'me' : ''}"><td>${r.id === st.hostId ? '♛ ' : ''}${esc(r.name)}${r.kicked ? ' (left)' : r.connected ? '' : ' (away)'}${st.banker?.id === r.id ? ' (dealer)' : ''}</td><td>${money(r.totalIn)}</td><td>${money(r.chips)}</td><td>${pl(net(r))}</td></tr>`).join('')}
@@ -2468,6 +2468,7 @@ function renderGuide(st) {
 
 // "See the next card" button and the private look at it.
 function peekBtnHTML(st) {
+  if (st.phase !== 'betting' && st.phase !== 'settled') return ''; // the next card can be shown between rounds only
   const cost = st.settings.peekCost ?? 10;
   const free = !st.banker || st.banker.id === S.myId;
   return `<button class="btn peek-btn" data-act="peek" title="Everyone at the table sees the card">👁 Show next card to all${free ? '' : ` · ${money(cost)}`}</button>`;
