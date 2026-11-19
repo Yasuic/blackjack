@@ -39,6 +39,7 @@ for (const decks of [1, 6, 'csm']) {
       for (const k of G.SIDE_KEYS) if (Math.random() < 0.3) sides[k] = 5;
       t.setBet(id, { main: 10, sides, target: (ids.indexOf(id) + 1) % ids.length, ready: true });
     }
+    if (t.players.bank.chips < 2000) t.giveChips('bank', 5000); // the dealer must be able to cover the table
     const before = ids.reduce((s, id) => s + t.players[id].chips, 0);
     const bankBefore = t.players.bank.chips;
     t.deal();
@@ -250,4 +251,14 @@ const da = t.players.a.chips, dd = t.players.d.chips;
   t5.join('z', 'Z'); t5.sit('z', 4); assert.throws(() => t5.sit('z', 5));
   t5.updateSettings({ seats: 7 }); assert.equal(t5.seats.length, 7);
   console.log('seat count tests passed');
+}
+{
+  // A player dealer with too few chips cannot deal, and cannot leave while owing chips.
+  const t = new G.Table(); t.join('a', 'A', 1000); t.join('d', 'D', 20); t.sit('a', 0); t.sitDealer('d');
+  t.setBet('a', { main: 500, sides: {} });
+  assert.equal(t.bankShort(), true); assert.equal(t.canDeal(), false);
+  t.setBet('a', { main: 20, sides: {} });
+  assert.equal(t.canDeal(), true);
+  t.deal(); assert.throws(() => t.peek('a'));
+  console.log('dealer bank limit tests passed');
 }

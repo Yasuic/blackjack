@@ -335,6 +335,12 @@ export function throwSound(item, stage) {
       burst(ac, t, 0.35, 0.5, 'lowpass', 700);
       tone(ac, 'sawtooth', 220, 60, t, 0.3, 0.08);
       break;
+    case 'punch': // a hard slap of noise, a low body thud, then a short cartoon "oof" drop
+      burst(ac, t, 0.05, 0.9, 'bandpass', 1800, 0.7);
+      burst(ac, t, 0.12, 0.8, 'lowpass', 320);
+      tone(ac, 'sine', 170, 45, t, 0.16, 0.5);
+      tone(ac, 'square', 420, 140, t + 0.09, 0.16, 0.07);
+      break;
     case 'poop': // wet plop and a low squish
       burst(ac, t, 0.3, 0.5, 'lowpass', 500);
       tone(ac, 'sine', 300, 70, t, 0.25, 0.2);

@@ -305,7 +305,7 @@ button.sb:hover { border-color: var(--gold); background: rgba(232,196,106,.25); 
 .hamburger { width: 40px; height: 36px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel-2); display: grid; place-content: center; gap: 4px; cursor: pointer; padding: 0; }
 .hamburger span { display: block; width: 18px; height: 2px; background: var(--text); border-radius: 2px; }
 .menu { display: none; position: absolute; right: 0; top: 100%; padding-top: 8px; width: 380px; max-width: calc(100vw - 24px); }
-.menu-wrap:hover .menu, .menu-wrap.open .menu, .menu-wrap:focus-within .menu { display: block; }
+.menu-wrap.open .menu { display: block; }
 .menu > .menu-sec:first-child { border-radius: 14px 14px 0 0; }
 .menu > .menu-sec:last-child { border-radius: 0 0 14px 14px; }
 .menu-sec { background: var(--panel); border: 1px solid var(--line); border-top: none; padding: 12px 14px; }
@@ -852,3 +852,15 @@ body.aiming .seat[id^="seat-"]:not(.empty), body.aiming #dealer-zone { cursor: c
 .look-dot { width: 26px; height: 26px; border-radius: 50%; border: 2px solid rgba(255,255,255,.25); cursor: pointer; padding: 0; }
 .look-dot.on { border-color: var(--gold); box-shadow: 0 0 0 2px rgba(240,200,90,.45); }
 .look-row select { font: inherit; font-size: 16px; padding: 3px 8px; border-radius: 8px; background: #151a22; color: inherit; border: 1px solid var(--line); }
+/* In the 3D room the chips and buttons stay at the bottom middle of the screen. */
+body.room3d.in-room .tray { position: fixed; left: 50%; right: auto; top: auto; bottom: 10px; transform: translateX(-50%); z-index: 30; margin: 0; }
+
+/* PvP bet: a bet about another player, kept apart from the ring of bets on your own cards. */
+.pvp-tags { position: absolute; left: 50%; top: 100%; transform: translateX(-50%); display: grid; gap: 2px; z-index: 3; pointer-events: none; width: max-content; max-width: 220px; }
+.pvp-tag { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 999px; background: rgba(120,30,40,.85); border: 1px solid rgba(255,140,150,.6); color: #ffd9dc; white-space: nowrap; }
+.pvp-tag.mine { background: rgba(60,40,120,.85); border-color: rgba(180,160,255,.6); color: #e6dcff; }
+.pvp-ctl { display: inline-flex; gap: 4px; }
+.pvp-btn { border-color: rgba(255,140,150,.6); color: #ffd9dc; background: rgba(120,30,40,.35); font-size: 13px; }
+.pvp-x { padding-left: 10px; padding-right: 10px; }
+.pvp-chip { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 999px; background: rgba(120,30,40,.85); color: #ffd9dc; vertical-align: middle; }
+.g-item.pvp { border-top: 1px dashed rgba(255,140,150,.5); margin-top: 8px; padding-top: 8px; }
