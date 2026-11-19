@@ -58,6 +58,7 @@ The table uses classic Las Vegas Strip rules by default (the host can press "Res
 - The dealer checks for blackjack when showing an ace or a 10.
 - Double on any first two cards, including after a split.
 - Split up to 4 hands. Split aces get one card each.
+- Chips are whole. With an odd bet, a win or a refund is rounded down and insurance is rounded up: a blackjack on 25 pays 37, insurance on 25 costs 13.
 - Late surrender: after the dealer checks for blackjack, you can give up your first two cards and get half the bet back (host can turn it off).
 
 ## Side bets
