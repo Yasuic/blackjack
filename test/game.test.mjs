@@ -259,7 +259,16 @@ const da = t.players.a.chips, dd = t.players.d.chips;
   assert.equal(t.bankShort(), true); assert.equal(t.canDeal(), false);
   t.setBet('a', { main: 20, sides: {} });
   assert.equal(t.canDeal(), true);
-  t.deal(); assert.throws(() => t.peek('a'));
+  // The next card can only be shown between rounds. (A hand that settles at once, on a blackjack,
+  // is already between rounds, so deal again until a hand is being played.)
+  for (let i = 0; i < 50 && (t.phase === 'betting' || t.phase === 'settled'); i++) {
+    if (t.phase === 'settled') t.startBetting();
+    t.players.d.chips = 1000; // keep the bank able to cover the bet
+    t.setBet('a', { main: 20, sides: {} });
+    t.deal();
+  }
+  assert.ok(!(t.phase === 'betting' || t.phase === 'settled'), 'a hand is being played');
+  assert.throws(() => t.peek('a'));
   console.log('dealer bank limit tests passed');
 }
 {
