@@ -1187,7 +1187,7 @@ function statusText(st) {
   switch (st.phase) {
     case 'betting': return st.noDealer ? 'Bets can go down. The cards wait for a dealer' : st.bankShort ? `The dealer has ${money(st.banker?.chips || 0)} chips, fewer than the bets on the table. Lower the bets or the dealer buys in` : 'Place your bets';
     case 'insurance': return 'Dealer shows an ace. Insurance?';
-    case 'playing': return turnSeat ? (turnSeat.playerId === S.myId ? 'Your turn' : `${turnSeat.name} is playing`) : '';
+    case 'playing': return turnSeat ? (turnSeat.playerId === S.myId ? 'Your turn' : turnSeat.connected === false ? `${turnSeat.name} is away. The dealer stands for them soon` : `${turnSeat.name} is playing`) : '';
     case 'dealer': return 'Dealer is playing';
     case 'settled': return S.dealing ? (S.dealMany ? 'Dealing the cards' : 'Dealer is playing') : 'Round over. The cards are cleared in a moment';
   }
@@ -1252,7 +1252,14 @@ function seatLayout(n, c, { W, H, phone, flip, round, noFocus }) {
   for (let i = 0; i < 4; i++) s = Math.min(1, (2 * (Rm - (B.who + B.ring / 2) * s) * half) / (B.ring + 10));
   const rIn = Rm - depth * s; // how close to the dealer the other seats' cards reach
   const hw = Math.max(60, Math.floor((2 * rIn * half) / s - 8));
-  const fs = noFocus ? s : Math.sqrt(s); // your own seat shrinks more slowly, so your cards stay easy to read
+  let fs = noFocus ? s : Math.sqrt(s); // your own seat shrinks more slowly, so your cards stay easy to read
+  // At a full table of nine or ten, your own ring of side bets must still clear the rings beside it.
+  if (!noFocus && n > 1) {
+    const sa = Math.sin(step * rad), ca = Math.cos(step * rad), inN = (B.who + B.ring / 2) * s;
+    const nx = Rx * sa - inN * sa, ny = Ry * ca - inN * ca;
+    const clear = (f) => Math.hypot(nx, ny - (Ry - (B.fwho + B.fring / 2) * f)) >= (B.fring / 2) * f + (B.ring / 2) * s + 4;
+    while (fs > s && !clear(fs)) fs -= 0.01;
+  }
   // Your own cards may be as wide as the gap the two seats beside you leave.
   const yb = Ry - (B.fwho + B.fring + 14) * fs;
   const fhw = n > 1 ? Math.max(120, Math.min(256, Math.floor((2 * ((yb - 60) * Math.sin(step * rad) - (hw * s) / 2 - 4)) / Math.cos(step * rad) / fs))) : 256;
@@ -1373,7 +1380,7 @@ function feltHTML(st) {
       ${dealMeInHTML(st)}`}
     </div>
     <div class="seats">${order.map((i, pos) => seatHTML(st, st.seats[i], i, spots[pos].mode === 'focus', spots[pos])).join('')}</div>
-    ${zoomSeat !== null ? `<div class="seat-zoom" data-seat-zoom>${seatHTML(st, st.seats[zoomSeat], zoomSeat, false, { mode: 'zoom', hw: SEAT_BOX.desk.fhw, hh: SEAT_BOX.desk.fhh }).replace(/ id="[^"]*"/g, '')}<button class="btn small" data-seat-zoom-close>Close</button></div>` : ''}`;
+    ${zoomSeat !== null ? `<div class="seat-zoom" data-seat-zoom style="--hw:${box.phone ? 256 : 420}px;--hh:${SEAT_BOX.desk.fhh}px">${seatHTML(st, st.seats[zoomSeat], zoomSeat, false, { mode: 'zoom', hw: box.phone ? 256 : 420, hh: SEAT_BOX.desk.fhh }).replace(/ id="[^"]*"/g, '')}<button class="btn small" data-seat-zoom-close>Close</button></div>` : ''}`;
 }
 
 // Live chances for every hand once the first two cards are out, and the favourite at the table.
@@ -1735,13 +1742,22 @@ function trayHTML(st) {
       </div>`;
   }
   if (ph === 'insurance') {
-    if (!seat.hands.length || seat.insuranceDecided) return '';
+    if (!seat.hands.length) return S.room ? '' : '<div class="tray-msg wait-msg">You are not in this round. You can bet when it ends.</div>';
+    if (seat.insuranceDecided) return S.room ? '' : '<div class="tray-msg wait-msg">Waiting for the others to choose on insurance</div>';
     const cost = Math.ceil(seat.bet.main / 2);
     return `<div class="tray-msg">The dealer shows an ace. Insurance costs <b>${money(cost)}</b> and pays 2 to 1 if the dealer has blackjack.</div>
       <div class="actions"><button class="btn primary big" data-act="ins" data-take="1">Take insurance</button><button class="btn big" data-act="ins" data-take="0">No thanks</button></div>`;
   }
-  if (ph === 'playing') {
-    if (!st.actions.length) return '';
+  if (ph === 'playing' || ph === 'dealer') {
+    // Not your move: one short line says what the table is waiting for.
+    if (ph === 'dealer' || !st.actions.length) {
+      if (S.room) return ''; // the 3D room says this on its status line
+      const who = st.turn && st.seats[st.turn.seat];
+      if (ph === 'dealer' || !who) return '<div class="tray-msg wait-msg">Dealer is playing</div>';
+      if (who.playerId === S.myId) return '';
+      const mine = !seat.hands.length ? 'You are not in this round. You can bet when it ends.' : seat.hands.every((h) => h.done) ? 'Your hand is done.' : 'Your turn is coming.';
+      return `<div class="tray-msg wait-msg">${esc(who.name)} is playing. ${mine}</div>`;
+    }
     const tiles = {
       surrender: ['⚑', 'Surrender', 'U'], double: ['2×', 'Double', 'D'], hit: ['+', 'Hit', 'H'],
       stand: ['−', 'Stand', 'S'], split: ['⇆', 'Split', 'P'],

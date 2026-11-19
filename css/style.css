@@ -1264,7 +1264,14 @@ body:has(#result-pop) .mid-band .status, body:has(.table-banner) .mid-band .stat
   .tray:has(.decide) .side-results { left: auto; right: 10px; width: calc(50% - 248px); }
   .seat.std .who .name, .seat.std .who .chips, .seat.std .hand .total, .seat.std .hand .result, .seat.std .hands.totals-only small, .seat.std .odds, .felt:not(.in3d) .dealer-name, .mid-band .status, .shoe-info { zoom: var(--up, 1); }
 }
-/* Short messages show at the top of the table, never over the chips, Rebet or the move buttons. */
-body.in-room .toast { bottom: auto; top: calc(var(--topbar-h, 56px) + 10px); pointer-events: none; }
-@media (max-width: 700px) { body.in-room .toast { top: calc(var(--topbar-h, 52px) + 50px); } }
+/* Short messages show in the top bar, never over the cards, the chips, Rebet or the move buttons. */
+body.in-room .toast { bottom: auto; top: 7px; z-index: 80; pointer-events: none; padding: 8px 14px; font-size: 14px; line-height: 1.25; max-width: min(92vw, 560px); text-align: center; box-shadow: 0 8px 24px rgba(0,0,0,.6); }
+@media (max-width: 700px) { body.in-room .toast { top: 4px; font-size: 13px; padding: 6px 12px; width: max-content; } }
+/* Small seats on a phone: chips and the round's result stay on one line under the name. */
+.seat.mini .who .chips:has(.net-in) { font-size: 11.5px; white-space: nowrap; letter-spacing: -.2px; }
+.seat.mini .who .chips .net-in { margin-left: 1px; }
 .felt .seat .who, .felt .seat.std .hands.totals-only { transform: rotate(var(--pr, 0deg)); }
+/* A seat shown large: wide enough for four hands side by side. */
+.felt .seat-zoom .seat { width: calc(var(--hw, 256px) + 8px); }
+.tray .wait-msg { font-size: 17px; font-weight: 600; align-self: center; margin: auto; }
+@media (max-width: 700px) { .tray .wait-msg { font-size: 14px; } }
