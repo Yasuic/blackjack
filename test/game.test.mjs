@@ -85,3 +85,36 @@ console.log('dealer seat tests passed');
   const v = t.requestDealer('c'); t.expireVote(v); assert.equal(t.vote, null); assert.equal(t.banker, 'a');
 }
 console.log('vote tests passed');
+import { bestMove } from '../js/strategy.js';
+{
+  const all = ['hit', 'stand', 'double', 'split', 'surrender'];
+  assert.equal(bestMove(cs('K♠ 9♦'), c('10♣'), all), 'stand');
+  assert.equal(bestMove(cs('6♠ 5♦'), c('6♣'), all), 'double');
+  assert.equal(bestMove(cs('8♠ 8♦'), c('10♣'), all), 'split');
+  assert.equal(bestMove(cs('10♠ 6♦'), c('10♣'), all), 'surrender');
+  assert.equal(bestMove(cs('10♠ 6♦'), c('10♣'), ['hit', 'stand']), 'hit');
+  assert.equal(bestMove(cs('A♠ 7♦'), c('9♣'), all), 'hit');
+  assert.equal(bestMove(cs('A♠ 7♦ 2♣ 3♠'.split(' ').slice(0,2).join(' ')), c('4♣'), ['hit', 'stand']), 'stand');
+  assert.equal(bestMove(cs('10♠ 2♦'), c('3♣'), all), 'hit');
+  assert.equal(bestMove(cs('10♠ 2♦'), c('4♣'), all), 'stand');
+  assert.equal(bestMove(cs('10♠ 10♦'), c('6♣'), all), 'stand');
+  console.log('strategy tests passed');
+}
+{
+  const t = new G.Table(); t.join('a', 'A'); t.join('h', 'H');
+  const r = t.requestBuyIn('a', 500); assert.throws(() => t.requestBuyIn('a', 100));
+  t.answerBuyIn(r.id, true); assert.equal(t.players.a.chips, 1500); assert.equal(t.players.a.totalIn, 1500);
+  const r2 = t.requestBuyIn('a', 300); t.answerBuyIn(r2.id, false); assert.equal(t.players.a.chips, 1500);
+  t.giveChips('a', -200); assert.equal(t.players.a.totalIn, 1300);
+  console.log('buy-in tests passed');
+}
+
+{
+  const t = new G.Table(); t.join('h', 'H'); t.join('a', 'A'); t.join('b', 'B');
+  t.proposeSettings('h', { decks: 1 }, 'x'); t.castVote('a', true); assert.equal(t.settings.decks, 6);
+  t.castVote('b', true); assert.equal(t.settings.decks, 1);
+  t.proposeSettings('h', { decks: 8 }, 'x'); t.castVote('a', false); assert.equal(t.settings.decks, 1);
+  // count matches cards drawn
+  const t2 = new G.Table({ decks: 1 }); let rc = 0; for (let i = 0; i < 20; i++) rc += G.hiLo(t2.draw()); assert.equal(t2.runCount, rc);
+  console.log('settings vote and count tests passed');
+}

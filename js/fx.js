@@ -142,3 +142,49 @@ export function flyChip(from, to, value, delay = 0, sound = true) {
     el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 120, fill: 'forwards' }).onfinish = () => el.remove();
   };
 }
+
+// Short tick for the last seconds before your time runs out.
+export function tickSound(last = false) {
+  if (muted) return;
+  const ac = audio();
+  if (!ac) return;
+  const t = ac.currentTime + 0.01;
+  const o = ac.createOscillator();
+  o.type = 'square';
+  o.frequency.value = last ? 1320 : 990;
+  const g = ac.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.12, t + 0.004);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.09);
+  const f = ac.createBiquadFilter();
+  f.type = 'lowpass';
+  f.frequency.value = 3000;
+  o.connect(f).connect(g).connect(ac.destination);
+  o.start(t);
+  o.stop(t + 0.1);
+}
+
+// Win: a bright rising chime (major arpeggio with a soft bell tone) and a shower of chips.
+export function winSound(big = false) {
+  if (muted) return;
+  const ac = audio();
+  if (!ac) return;
+  const t0 = ac.currentTime + 0.02;
+  const notes = big ? [523.25, 659.25, 783.99, 1046.5, 1318.5] : [659.25, 830.61, 987.77, 1318.5];
+  notes.forEach((f, i) => {
+    const t = t0 + i * 0.075;
+    for (const [mult, lvl] of [[1, 0.16], [2, 0.05], [3.01, 0.025]]) {
+      const o = ac.createOscillator();
+      o.type = 'sine';
+      o.frequency.value = f * mult;
+      const g = ac.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(lvl, t + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.9);
+      o.connect(g).connect(ac.destination);
+      o.start(t);
+      o.stop(t + 1);
+    }
+  });
+  setTimeout(() => chipSound(big ? 8 : 5), 260);
+}

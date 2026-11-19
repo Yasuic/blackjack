@@ -81,6 +81,9 @@ export const cardValue = (c) => (c.r === 'A' ? 1 : ['J', 'Q', 'K'].includes(c.r)
 export const rankIndex = (c) => RANKS.indexOf(c.r) + 1; // A=1 .. K=13
 export const isRed = (c) => c.s === '♥' || c.s === '♦';
 
+// Hi-Lo card counting value: 2-6 are +1, 7-9 are 0, tens and aces are -1.
+export const hiLo = (c) => { const v = cardValue(c); return c.r === 'A' || v === 10 ? -1 : v <= 6 ? 1 : 0; };
+
 export function handTotal(cards) {
   let total = 0;
   let aces = 0;
@@ -222,6 +225,7 @@ export class Table {
     this.shoe = buildShoe(this.shoeDecks());
     this.shoeSize = this.shoe.length;
     this.roundsSinceShuffle = 0;
+    this.runCount = 0;
     this.addLog('The shoe was shuffled.');
   }
   needsShuffle(players = MAX_SEATS) {
@@ -237,9 +241,12 @@ export class Table {
     if (this.shoe.length === 0) {
       this.shoe = buildShoe(this.shoeDecks());
       this.shoeSize = this.shoe.length;
+      this.runCount = 0;
       this.addLog('Shoe ran out mid round and was reshuffled.');
     }
-    return this.shoe.pop();
+    const c = this.shoe.pop();
+    this.runCount = (this.runCount || 0) + hiLo(c);
+    return c;
   }
 
   updateSettings(patch) {
@@ -273,7 +280,7 @@ export class Table {
       p.name = name;
       return p;
     }
-    p = { id: clientId, name, chips: this.settings.startChips, seat: null, connected: true, lastBet: null };
+    p = { id: clientId, name, chips: this.settings.startChips, seat: null, connected: true, lastBet: null, totalIn: this.settings.startChips };
     this.players[clientId] = p;
     this.addLog(`${name} joined.`);
     return p;
@@ -322,6 +329,24 @@ export class Table {
     return this.vote.id;
   }
 
+  // Settings changes from the host also need everyone's yes.
+  proposeSettings(hostId, patch, summary) {
+    if (this.vote) throw new Error('A vote is already running.');
+    const voters = Object.values(this.players).filter((x) => x.id !== hostId && x.connected && !x.kicked).map((x) => x.id);
+    this.voteSeq = (this.voteSeq || 0) + 1;
+    if (!voters.length) { this.applySettings(patch); return null; }
+    this.vote = { id: this.voteSeq, kind: 'settings', candidate: hostId, patch, summary, voters, votes: {} };
+    this.addLog('The host proposed new settings. Everyone votes.');
+    return this.vote.id;
+  }
+
+  applySettings(patch) {
+    if (this.inRound()) { this.pendingSettings = patch; return; }
+    this.updateSettings(patch);
+    this.pendingSettings = null;
+    this.addLog('New settings are in.');
+  }
+
   castVote(clientId, yes) {
     const v = this.vote;
     if (!v || !v.voters.includes(clientId) || clientId in v.votes) return;
@@ -329,11 +354,12 @@ export class Table {
     const name = this.players[v.candidate].name;
     if (!yes) {
       this.vote = null;
-      this.addLog(`${this.players[clientId].name} voted no. ${name} stays where they are.`);
+      this.addLog(v.kind === 'settings' ? `${this.players[clientId].name} voted no. The settings stay the same.` : `${this.players[clientId].name} voted no. ${name} stays where they are.`);
       return;
     }
     if (v.voters.every((id) => v.votes[id] === true)) {
       this.vote = null;
+      if (v.kind === 'settings') { this.addLog('Everyone said yes to the new settings.'); this.applySettings(v.patch); return; }
       this.addLog(`Everyone said yes. ${name} moves to the dealer seat.`);
       this.applyDealer(v.candidate);
     }
@@ -341,7 +367,7 @@ export class Table {
 
   expireVote(voteId) {
     if (!this.vote || this.vote.id !== voteId) return;
-    this.addLog(`The vote for ${this.players[this.vote.candidate].name} ran out, so the answer is no.`);
+    this.addLog(this.vote.kind === 'settings' ? 'The settings vote ran out, so the answer is no.' : `The vote for ${this.players[this.vote.candidate].name} ran out, so the answer is no.`);
     this.vote = null;
   }
 
@@ -397,9 +423,42 @@ export class Table {
     p.connected = false;
   }
 
+  // Buying in more play chips. The host approves each request.
+  requestBuyIn(clientId, amount) {
+    const p = this.mustPlayer(clientId);
+    amount = Math.round(Number(amount) || 0);
+    if (amount < 1 || amount > 1000000) throw new Error('Pick an amount between 1 and 1,000,000.');
+    this.buyIns = this.buyIns || [];
+    if (this.buyIns.some((b) => b.playerId === clientId)) throw new Error('You already have a buy-in waiting for the host.');
+    this.buyInSeq = (this.buyInSeq || 0) + 1;
+    const req = { id: this.buyInSeq, playerId: clientId, amount };
+    this.buyIns.push(req);
+    return req;
+  }
+
+  answerBuyIn(reqId, yes) {
+    this.buyIns = this.buyIns || [];
+    const i = this.buyIns.findIndex((b) => b.id === reqId);
+    if (i < 0) return;
+    const req = this.buyIns.splice(i, 1)[0];
+    const p = this.players[req.playerId];
+    if (!p) return;
+    if (yes) {
+      p.chips += req.amount;
+      p.boughtIn = (p.boughtIn || 0) + req.amount;
+      p.totalIn = (p.totalIn ?? this.settings.startChips) + req.amount;
+      this.addLog(`${p.name} bought in ${req.amount.toLocaleString()} more chips.`);
+    } else {
+      this.addLog(`The host said no to ${p.name}'s buy-in.`);
+    }
+  }
+
   giveChips(clientId, amount) {
     const p = this.mustPlayer(clientId);
+    const before = p.chips;
     p.chips = Math.max(0, p.chips + Math.round(Number(amount) || 0));
+    // Chips the host gives count as a buy-in; chips taken count as cashed out.
+    p.totalIn = (p.totalIn ?? this.settings.startChips) + (p.chips - before);
   }
 
   mustPlayer(clientId) {
@@ -723,6 +782,7 @@ export class Table {
     } else this.bankerNet = null;
     this.phase = 'settled';
     if (this.pendingBanker) this.applyDealer(this.pendingBanker);
+    if (this.pendingSettings) this.applySettings(this.pendingSettings);
     this.turn = null;
     this.addLog(`Dealer ${dealerBJ ? 'blackjack' : dealerBust ? 'busts with ' + d : 'has ' + d}.`);
   }
@@ -751,6 +811,8 @@ export class Table {
       },
       vote: this.vote ? {
         id: this.vote.id,
+        kind: this.vote.kind || 'dealer',
+        summary: this.vote.summary || null,
         candidate: this.vote.candidate,
         name: this.players[this.vote.candidate].name,
         voters: this.vote.voters.length,
@@ -775,7 +837,14 @@ export class Table {
           hands: s.hands.map((h) => ({ ...h, ...handTotal(h.cards), blackjack: isBlackjack(h) })),
         };
       }),
-      players: Object.values(this.players).filter((p) => !p.kicked).map((p) => ({ id: p.id, name: p.name, chips: p.chips, seat: p.seat, connected: p.connected })),
+      players: Object.values(this.players).filter((p) => !p.kicked).map((p) => ({ id: p.id, name: p.name, chips: p.chips, seat: p.seat, connected: p.connected, boughtIn: p.boughtIn || 0, totalIn: p.totalIn ?? this.settings.startChips, left: !!p.kicked })),
+      hostId: this.hostId || null,
+      count: {
+        running: (this.runCount || 0) - (hide ? hiLo(this.dealer.cards[1]) : 0),
+        decksLeft: (this.shoe.length + (hide ? 1 : 0)) / 52,
+      },
+      ledger: Object.values(this.players).map((p) => ({ id: p.id, name: p.name, totalIn: p.totalIn ?? this.settings.startChips, chips: p.chips, connected: p.connected, kicked: !!p.kicked })),
+      buyIns: (this.buyIns || []).filter((b) => b.playerId === forClientId).map((b) => ({ id: b.id, amount: b.amount })),
       shoe: { left: this.shoe.length, size: this.shoeSize, roundsSinceShuffle: this.roundsSinceShuffle },
       log: this.log.slice(-12),
       you: forClientId,
@@ -785,8 +854,8 @@ export class Table {
 
   // Save and restore so the host can refresh the page without losing the table.
   toJSON() {
-    const { settings, seats, players, phase, dealer, turn, round, roundsSinceShuffle, log, shoe, shoeSize, banker, bankerNet, pendingBanker } = this;
-    return { settings, seats, players, phase, dealer, turn, round, roundsSinceShuffle, log, shoe, shoeSize, banker, bankerNet, pendingBanker };
+    const { settings, seats, players, phase, dealer, turn, round, roundsSinceShuffle, log, shoe, shoeSize, banker, bankerNet, pendingBanker, buyIns, runCount, hostId, pendingSettings } = this;
+    return { settings, seats, players, phase, dealer, turn, round, roundsSinceShuffle, log, shoe, shoeSize, banker, bankerNet, pendingBanker, buyIns, runCount, hostId, pendingSettings };
   }
   static fromJSON(obj) {
     const t = new Table(obj.settings);
