@@ -2,7 +2,7 @@
 
 A live blackjack table for you and up to 4 friends, played in the browser. You host the table and act as the dealer, send a link, and everyone plays together in real time. Chips are play money only, and there is no rake or fee.
 
-Play here once GitHub Pages is on: **https://yasuic.github.io/blackjack/**
+Play here once GitHub Pages is on: **https://blackjack.thedegengamblers.com** (also reachable at https://yasuic.github.io/blackjack/)
 
 ## Do I need a server?
 
@@ -20,6 +20,10 @@ The one rule: keep your tab open while you play. If you refresh, the page reopen
 2. Under "Build and deployment", set Source to "Deploy from a branch".
 3. Set Branch to `main` and folder to `/ (root)`, then press Save.
 4. Wait about a minute. The page appears at https://yasuic.github.io/blackjack/
+
+## Custom domain
+
+The `CNAME` file holds the custom domain `blackjack.thedegengamblers.com`. At Squarespace, the domain has one DNS record for it: Host `blackjack`, Type `CNAME`, Data `yasuic.github.io`. In the GitHub Pages settings the same name is under "Custom domain", with "Enforce HTTPS" ticked.
 
 ## How to play with friends
 
