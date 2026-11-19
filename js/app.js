@@ -1,10 +1,11 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, MAX_SEATS, handTotal } from './game.js?v=20261119c';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261119c';
-import { tickSound, winSound } from './fx.js?v=20261119c';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261119c';
+import { Table, SIDE_BETS, SIDE_KEYS, MAX_SEATS, handTotal } from './game.js?v=20261119d';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261119d';
+import { tickSound, winSound } from './fx.js?v=20261119d';
+import { webglOK, initRoom } from './room3d.js?v=20261119d';
+import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261119d';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -414,6 +415,7 @@ function buildLayout() {
             <button class="menu-item" data-act="train" id="train-btn">${trainingOn() ? 'Count training: on' : 'Count training: off'}</button>
             <button class="menu-item" data-act="chart">Basic strategy chart</button>
             <button class="menu-item" data-act="hints" id="hints-btn">${hintsOn() ? 'Strategy hints: on' : 'Strategy hints: off'}</button>
+            <button class="menu-item" data-act="room3d">${use3D() ? '3D room: on' : '3D room: off'}</button>
             <button class="menu-item" data-act="mute" id="mute-btn">${isMuted() ? 'Sound: off' : 'Sound: on'}</button>`)}
           ${host ? `
           ${fold('m-round', 'Round', '<div id="host-round"></div>')}
@@ -429,19 +431,28 @@ function buildLayout() {
     </div>
     <div class="main player">
       <div>
-        <div class="table-stage" id="stage"><div class="felt" id="felt"></div><div class="felt-actions" id="felt-actions"></div></div>
+        ${use3D() ? '<div class="room" id="room"><div class="felt" id="felt"></div></div><div class="felt-actions hud" id="felt-actions"></div>'
+          : '<div class="table-stage" id="stage"><div class="felt" id="felt"></div><div class="felt-actions" id="felt-actions"></div></div>'}
         <div class="tray" id="tray"></div>
         <div class="panel controls" id="controls"></div>
       </div>
     </div>
     <button class="float-chart" data-act="chart" title="Basic strategy chart">Chart</button>
     <button class="float-balance" id="float-balance" data-act="buyin-open" title="Tap to buy in more chips" hidden></button>
-    <div class="zoom-ctl"><label class="tilt-ctl" title="Camera angle: drag to tilt the table"><span>Angle</span><input type="range" id="tilt" min="0" max="50" step="1" /></label><button data-act="zoom" data-d="-1" aria-label="Zoom out">−</button><span id="zoom-val"></span><button data-act="zoom" data-d="1" aria-label="Zoom in">+</button></div>
+    <div class="zoom-ctl">${use3D() ? '<button class="view-reset" data-act="view-reset" title="Back to your seat">Reset view</button>' : ''}<label class="tilt-ctl" title="Camera angle: drag to tilt the table"><span>Angle</span><input type="range" id="tilt" min="0" max="50" step="1" /></label><button data-act="zoom" data-d="-1" aria-label="Zoom out">−</button><span id="zoom-val"></span><button data-act="zoom" data-d="1" aria-label="Zoom in">+</button></div>
     <div class="buyin-pop" id="buyin-pop" hidden></div>
     <div class="host-pops" id="host-pops"></div>
     <div class="ledger ${safeGet('bj-ledger') === '0' || (safeGet('bj-ledger') === null && innerWidth < 700) ? 'closed' : ''}" id="ledger"></div>`;
   applyZoom();
+  if (use3D()) {
+    document.body.classList.add('room3d');
+    try { S.room = initRoom($('#room'), $('#felt'), { phone: innerWidth < 700 }); }
+    catch (e) { console.error(e); safeSet('bj-3d', '0'); toast('The 3D room could not start on this device.'); }
+  }
 }
+
+// The 3D room is on unless the browser cannot draw it or the person turned it off.
+function use3D() { return params.get('flat') !== '1' && (safeGet('bj-3d') === '1' || params.get('room') === '3d' || params.get('3d') === '1') && webglOK(); }
 
 // Zoom the table a little in or out. Saved for next time on this device.
 function getZoom() { const z = Number(safeGet('bj-zoom')); return z >= 0.6 && z <= 1.6 ? z : 1; }
@@ -561,7 +572,8 @@ function render(note) {
   if (prev && prev.phase !== st.phase && !(st.phase === 'betting' || st.phase === 'settled')) S.chip = null;
   $('#felt').innerHTML = feltHTML(st);
   // The dealer sees the table from the dealer's side: dealer at the bottom, players across the top.
-  $('#felt').classList.toggle('flip', myInfo(st).isBanker);
+  if (S.room) S.room.setSide(myInfo(st).isBanker ? 'dealer' : 'player');
+  else $('#felt').classList.toggle('flip', myInfo(st).isBanker);
   const tray = $('#tray');
   // During a hand the move buttons appear in the middle of the table, only when you have to act.
   const between = st.phase === 'betting' || st.phase === 'settled';
@@ -740,7 +752,7 @@ function myInfo(st) {
 // Each person sees their own seat in the middle, with friends around them in table order.
 function seatOrder(st) {
   const { me, isBanker } = myInfo(st);
-  if (isBanker) return Array.from({ length: MAX_SEATS }, (_, i) => i);
+  if (isBanker && !S.room) return Array.from({ length: MAX_SEATS }, (_, i) => i);
   const center = Math.floor(MAX_SEATS / 2);
   const shift = me && me.seat !== null ? me.seat - center : 0;
   // First base (seat 1, dealt first) is on the dealer's left, which is the right side of the screen.
@@ -1283,7 +1295,9 @@ app.addEventListener('click', (e) => {
     case 'buyin-open': openBuyIn(); break;
     case 'ledger-toggle': { const l = $('#ledger'); l.classList.toggle('closed'); safeSet('bj-ledger', l.classList.contains('closed') ? '0' : '1'); renderLedger(S.state); break; }
     case 'buyin-answer': hostDo((t) => t.answerBuyIn(Number(el.dataset.id), el.dataset.yes === '1')); break;
-    case 'zoom': safeSet('bj-zoom', String(Math.round(Math.min(1.6, Math.max(0.6, getZoom() + 0.1 * Number(el.dataset.d))) * 10) / 10)); applyZoom(); break;
+    case 'view-reset': S.room?.home(); break;
+    case 'room3d': safeSet('bj-3d', use3D() ? '0' : '1'); location.reload(); break;
+    case 'zoom': if (S.room) { S.room.zoomBy(Number(el.dataset.d)); break; } safeSet('bj-zoom', String(Math.round(Math.min(1.6, Math.max(0.6, getZoom() + 0.1 * Number(el.dataset.d))) * 10) / 10)); applyZoom(); break;
     case 'menu': $('#menu-wrap').classList.toggle('open'); break;
     case 'mute': setMuted(!isMuted()); el.textContent = isMuted() ? 'Sound: off' : 'Sound: on'; if (!isMuted()) chipSound(); break;
     case 'sit-dealer': send({ t: 'sit-dealer' }); break;

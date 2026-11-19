@@ -717,3 +717,23 @@ body.in-room .tray { height: 150px; min-height: 150px; overflow: hidden; align-c
 .move-btn.tile.dim { opacity: 1; filter: grayscale(.7) brightness(.55); }
 .move-btn.tile.dim:hover { filter: none; }
 .move-btn.tile:disabled { background: #2b3038; opacity: 1; color: rgba(255,255,255,.35); }
+
+/* ---------- 3D room ---------- */
+body.room3d .main.player { padding: 0; }
+body.room3d .room { position: fixed; left: 0; right: 0; bottom: 0; top: 60px; overflow: hidden; background: #120806; z-index: 0; }
+body.room3d .room-css, body.room3d .room-gl { position: absolute !important; inset: 0; }
+body.room3d .room-gl { pointer-events: none; z-index: 1; }
+body.room3d .room-css { z-index: 0; }
+body.room3d .room { cursor: grab; touch-action: none; }
+body.room3d .room:active { cursor: grabbing; }
+.felt.in3d { margin: 0 !important; box-shadow: inset 0 0 90px rgba(0,0,0,.5) !important; border-radius: 28px 28px 50% 50% / 28px 28px 34% 34% !important; transform-style: flat; cursor: default; }
+.felt.in3d::before { border-radius: 20px 20px 50% 50% / 20px 20px 34% 34% !important; }
+body.room3d .tray { position: fixed; left: 50%; bottom: 10px; transform: translateX(-50%); z-index: 30; background: rgba(12,15,20,.86); backdrop-filter: blur(6px); margin: 0; }
+body.room3d .tray:empty, body.room3d .tray:not(:has(*)) { visibility: hidden; }
+body.room3d .felt-actions.hud { position: fixed !important; left: 50%; top: 22%; transform: translateX(-50%); z-index: 25 !important; }
+body.room3d .tilt-ctl { display: none; }
+body.room3d #zoom-val { display: none; }
+.view-reset { width: auto !important; padding: 0 12px; font-size: 13px !important; }
+@media (max-width: 560px) { body.room3d .felt-actions.hud { top: 16%; } }
+body.room3d .felt-actions.hud { top: auto; bottom: 18px; }
+body.room3d .felt-actions.hud > .decide { padding: 12px 30px 6px; }
