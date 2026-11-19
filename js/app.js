@@ -519,9 +519,11 @@ function render(note) {
   if (prev && st.round !== prev.round) { S.undo = []; S.mainChips = []; }
   $('#felt').innerHTML = feltHTML(st);
   const tray = $('#tray');
-  tray.innerHTML = trayHTML(st);
-  // During a hand the bar only appears, floating, when you have to act.
-  tray.classList.toggle('overlay', !(st.phase === 'betting' || st.phase === 'settled'));
+  // During a hand the move buttons appear in the middle of the table, only when you have to act.
+  const between = st.phase === 'betting' || st.phase === 'settled';
+  tray.innerHTML = between ? trayHTML(st) : '';
+  const fa = $('#felt-actions');
+  if (fa) fa.innerHTML = between ? '' : trayHTML(st);
   $('#controls').innerHTML = controlsHTML(st);
   $('#controls').hidden = !$('#controls').innerHTML.trim();
   if (S.role === 'host') renderHostPanel(st);
@@ -729,6 +731,7 @@ function feltHTML(st) {
     ${arcTextHTML(st)}
     <div class="status">${esc(statusText(st))} <span id="timer" class="timer" hidden></span></div>
     ${dealMeInHTML(st)}
+    <div class="felt-actions" id="felt-actions"></div>
     <div class="seats">${order.map((i, pos) => seatHTML(st, st.seats[i], i, pos)).join('')}</div>`;
 }
 
@@ -778,7 +781,7 @@ function seatHTML(st, s, i, pos) {
     return `<div class="hand ${active ? 'active' : ''} ${split ? 'split' : ''}">
       <div class="cards fan">${cardsHtml}</div>
       <div class="meta">${total}${res}</div>
-      ${split ? `<div class="hand-bet">${stackHTML(h.bet)}<span>${money(h.bet)}</span></div>` : (h.doubled ? `<div class="meta"><span>Doubled ${money(h.bet)}</span></div>` : '')}
+      ${split ? `<div class="hand-bet"><span class="chipv hb-chip ${chipClass(h.bet)}"></span><span class="hb-amt">${money(h.bet)}</span></div>` : (h.doubled ? `<div class="meta"><span>Doubled ${money(h.bet)}</span></div>` : '')}
     </div>`;
   }).join('');
   const sides = isMe && s.sideResults.length ? `<div class="side-results">${s.sideResults.map((r) =>
@@ -804,7 +807,7 @@ function spotAreaHTML(st, s, i, isMe, mainAmt) {
     const tag = canBet ? 'button' : 'div';
     const angle = -90 + (360 / n) * idx + 180 / n;
     return `<${tag} class="sb ${amt ? 'on' : ''} ${res ? (res.win ? 'won' : 'lost') : ''}" ${canBet ? `data-act="side-spot" data-k="${k}"` : ''} id="sb-${i}-${k}" style="--a:${angle}deg" title="${esc(SIDE_BETS[k].name)}: ${esc(SIDE_BETS[k].about)}">
-      <span class="sb-name">${SIDE_BETS[k].short}</span>${amt ? `<span class="sb-amt">${money(amt)}</span>` : ''}</${tag}>`;
+      ${amt ? `<span class="chipv sb-chip ${chipClass(amt)}"></span><span class="sb-amt">${money(amt)}</span><span class="sb-tag">${SIDE_BETS[k].short}</span>` : `<span class="sb-name">${SIDE_BETS[k].short}</span>`}</${tag}>`;
   }).join('');
   const ins = s?.insurance ? `<span class="ins-tag">Insurance ${money(s.insurance)}</span>` : '';
   return `<div class="spot-area ${canBet ? 'live' : ''}">

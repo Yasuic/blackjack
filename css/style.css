@@ -510,3 +510,33 @@ html, body, button, input, select { font-family: Lato, system-ui, sans-serif; }
 .topbar .title, .deal-btn, .move-btn, .result-pop, .vote-title, .dealer-name, .status, .landing h1, .chart-title, .ledger-head, .menu-title, .fold > summary, .float-balance b, .balance b, .spot-amt, .chipv span, .seat .name { font-family: Cinzel, Georgia, serif; }
 .move-btn { letter-spacing: 1.5px; }
 .result-pop b { font-weight: 800; }
+/* Clear bet amounts */
+.spot-amt { bottom: auto; top: 50%; transform: translate(-50%, -50%); font-size: 17px; padding: 2px 9px; border-radius: 10px; background: rgba(0,0,0,.82); border: 1.5px solid var(--gold); color: #fff; z-index: 3; box-shadow: 0 2px 6px rgba(0,0,0,.5); }
+.sb { width: 40px; height: 40px; margin: -20px 0 0 -20px; transform: rotate(var(--a)) translate(62px) rotate(calc(-1 * var(--a))); }
+.sb-name { font-size: 9.5px; }
+.sb-chip { position: absolute; inset: 3px; width: auto; height: auto; pointer-events: none; cursor: inherit; box-shadow: 0 2px 3px rgba(0,0,0,.5); }
+.sb-chip:hover { transform: none; }
+.sb-amt { position: relative; z-index: 2; font-size: 12px; font-weight: 900; color: #fff; background: rgba(0,0,0,.82); border: 1px solid var(--gold); border-radius: 7px; padding: 0 4px; line-height: 15px; margin: 0; font-family: Cinzel, Georgia, serif; }
+.sb.on { border-color: var(--gold); background: transparent; }
+.spot-area { width: 160px; height: 160px; }
+@media (max-width: 700px) { .seat.pos2 .spot-area { transform: scale(.85); margin: -12px; } }
+/* Very clear active hand */
+.hand.active { position: relative; outline: 3px solid #ffe27a; outline-offset: 3px; border-radius: 10px; background: rgba(255,226,122,.16); box-shadow: 0 0 0 7px rgba(255,226,122,.18), 0 0 26px rgba(255,226,122,.55); }
+.hand.active .cards { filter: none; }
+.hand.active::before { content: '▼'; position: absolute; top: -26px; left: 50%; transform: translateX(-50%); color: #ffe27a; font-size: 18px; text-shadow: 0 0 8px rgba(0,0,0,.8); animation: bob 1s ease-in-out infinite; }
+@keyframes bob { 50% { transform: translate(-50%, 4px); } }
+.hands:has(.hand.active) .hand.split:not(.active) { opacity: .45; filter: saturate(.6); }
+.felt-actions { position: absolute !important; left: 50%; top: 300px; transform: translateX(-50%); z-index: 6 !important; width: min(720px, 96%); }
+.felt-actions:empty { display: none; }
+.felt-actions > * { background: rgba(8,10,14,.86); border: 1px solid rgba(232,196,106,.4); border-radius: 16px; padding: 12px; box-shadow: 0 16px 40px rgba(0,0,0,.55); animation: pop .18s ease-out; }
+.felt-actions .tray-msg { margin-bottom: 0; color: var(--text); }
+.felt-actions .tray-msg + .actions { border: none; box-shadow: none; padding-top: 0; margin-top: -14px; border-radius: 0 0 16px 16px; }
+@keyframes pop { from { opacity: 0; transform: scale(.94); } to { opacity: 1; transform: none; } }
+.felt-actions .actions.play { flex-wrap: nowrap; }
+.felt-actions .move-btn { min-width: 0; flex: 1; font-size: 19px; padding: 14px 8px; }
+@media (max-width: 700px) { .felt-actions { top: 190px; } .felt-actions .actions.play { flex-wrap: wrap; } .felt-actions .move-btn { flex: 1 1 28%; font-size: 15px; padding: 11px 4px; } }
+.sb-tag { position: absolute; left: 50%; bottom: -13px; transform: translateX(-50%); font-size: 9px; font-weight: 800; color: var(--gold); white-space: nowrap; text-shadow: 0 1px 2px #000; }
+.hand-bet { position: relative; width: 32px; height: 32px; margin: 6px auto 4px; }
+.hb-chip { position: absolute; inset: 0; width: 32px; height: 32px; cursor: default; }
+.hb-amt { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); font-size: 12px; font-weight: 900; color: #fff; background: rgba(0,0,0,.82); border: 1px solid var(--gold); border-radius: 6px; padding: 0 4px; z-index: 2; font-family: Cinzel, Georgia, serif; }
+.hb-chip { background: var(--c) !important; border: 3px dashed rgba(255,255,255,.75) !important; border-radius: 50% !important; box-shadow: 0 2px 4px rgba(0,0,0,.5) !important; }
