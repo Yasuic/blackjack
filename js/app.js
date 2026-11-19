@@ -1,11 +1,11 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261119t';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261119t';
-import { tickSound, winSound } from './fx.js?v=20261119t';
-import { webglOK, initRoom } from './room3d.js?v=20261119t';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261119t';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261119u';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261119u';
+import { tickSound, winSound } from './fx.js?v=20261119u';
+import { webglOK, initRoom } from './room3d.js?v=20261119u';
+import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261119u';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -2267,7 +2267,7 @@ function playMove(a) {
 // Keyboard play: H hit, S stand, D double, P split, U surrender, Y and N answer insurance,
 // R type a bet (Enter confirms), B rebet, Space deal me in.
 const KEY_HELP = [['H', 'Hit'], ['S', 'Stand'], ['D', 'Double'], ['P', 'Split'], ['U', 'Surrender'], ['Y / N', 'Take insurance, or say no'],
-  ['R', 'Type your bet, then Enter'], ['B', 'Rebet: the same bet as last round'], ['Space', 'Deal me in'], ['Esc', 'Put the picked chip down']];
+  ['R', 'Type your bet, then Enter'], ['B', 'Rebet: the same bet as last round'], ['Space / Enter', 'Deal me in'], ['?', 'Show this list'], ['Esc', 'Put the picked chip down']];
 function keysHTML() {
   return `<h2 style="margin-top:0">Keyboard keys</h2><table class="keys-help">${KEY_HELP.map(([k, what]) => `<tr><td>${k.split(' / ').map((x) => `<kbd>${x}</kbd>`).join(' ')}</td><td>${what}</td></tr>`).join('')}</table>
     <p class="hint">Keys work when you are not typing in a box.</p>`;
@@ -2278,6 +2278,7 @@ document.addEventListener('keydown', (e) => {
   const st = S.state;
   if (!st) return;
   const k = e.key.toLowerCase();
+  if (e.key === '?') { $('#modal-body').innerHTML = keysHTML(); $('#modal').showModal(); return; }
   const map = { h: 'hit', s: 'stand', d: 'double', p: 'split', u: 'surrender' };
   // While the first cards are still being dealt there is nothing to decide yet.
   const wait = dealingNow() && S.dealMany;
@@ -2294,7 +2295,7 @@ document.addEventListener('keydown', (e) => {
   }
   if (st.phase !== 'betting') return;
   if (k === 'r') { e.preventDefault(); openRaise(); }
-  else if (e.key === ' ' || e.code === 'Space') {
+  else if (e.key === ' ' || e.code === 'Space' || (e.key === 'Enter' && !e.target.closest('button, a, [tabindex]'))) {
     e.preventDefault();
     if (st.noDealer) toast('The cards wait for a dealer.');
     else if (seat.bet.main >= st.settings.minBet && !seat.ready) placeBet(seat.bet, true);

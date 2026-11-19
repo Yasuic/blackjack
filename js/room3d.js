@@ -1007,7 +1007,10 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     const low = (o, pad = 0) => { tmp.setFromMatrixPosition(o.matrixWorld).project(camera); return tmp.y < -0.95 + pad; };
     camera.updateMatrixWorld();
     // A seated figure stands on the floor: its base is well below the screen when it is next to you.
-    for (const f of others) { f.updateMatrixWorld(); f.visible = !seated || !low(f, 0.35); }
+    // A neighbour whose chest would be drawn at the far left or right edge shows only as arms cut off by
+    // the screen, so it is left out as well until you turn your head towards it.
+    const edge = (o) => { tmp.setFromMatrixPosition(o.matrixWorld); tmp.y += 110 * U; tmp.project(camera); return Math.abs(tmp.x) > 0.72 || tmp.y < -0.6; };
+    for (const f of others) { f.updateMatrixWorld(); f.visible = !seated || !(low(f, 0.35) || edge(f)); }
     for (const r of racks) { r.updateMatrixWorld(); r.visible = !seated || !low(r, 0.95); }
     if (myRack) myRack.visible = !seated;
     gl.render(scene, camera);
