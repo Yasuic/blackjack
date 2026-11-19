@@ -29,10 +29,16 @@ const S = {
   undo: [],          // my bet before each chip, for Undo
   mainChips: [],     // chips I put on my main bet, in order
   cardAt: new Map(), // card key -> time it is dealt
-  pendingNew: [],
   nextCardAt: 0,
   holeHidden: new Set(),
   prevView: null,
+  pend: null,        // my newest bet while the table has not confirmed it yet: { bet, ready, seq, round, at }
+  betSeq: Date.now() % 1e9,
+  serverBet: null,   // my bet as the table last sent it
+  dealEnds: 0,       // when the last card now flying lands
+  dealStart: 0,
+  dealMany: false,   // the cards now flying are a whole deal, not one card for a hit
+  goneTimers: {},    // host only: clientId -> timer that stands a player who dropped out
   // host only
   table: null,
   peer: null,
@@ -54,6 +60,10 @@ if (safeGet('bj-four') === '1') document.body.classList.add('four-colour');
 function safeGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
 function safeSet(k, v) { try { localStorage.setItem(k, v); } catch {} }
 function safeDel(k) { try { localStorage.removeItem(k); } catch {} }
+// What a guest typed to join a table, kept for this browser tab so a reload goes straight back in.
+function sessGet(k) { try { return sessionStorage.getItem(k); } catch { return null; } }
+function sessSet(k, v) { try { sessionStorage.setItem(k, v); } catch {} }
+function sessDel(k) { try { sessionStorage.removeItem(k); } catch {} }
 function getClientId() {
   let id = safeGet('bj-client-id');
   if (!id) { id = 'p' + Math.random().toString(36).slice(2, 10); safeSet('bj-client-id', id); }
@@ -151,7 +161,12 @@ function startHost(resume) {
   if (!readName()) return;
   S.role = 'host';
   clearInterval(S.pinger);
-  S.pinger = setInterval(() => Object.values(S.conns || {}).forEach((c) => { try { c?.open && c.send({ t: 'ping' }); } catch {} }), 4000);
+  S.pinger = setInterval(() => Object.values(S.conns || {}).forEach((c) => {
+    try { c?.open && c.send({ t: 'ping' }); } catch {}
+    // A guest's browser answers every ping. When the answers stop, the tab is closed or asleep. The
+    // link itself can take half a minute to notice, so the host does not wait for it.
+    if (c?.answers && Date.now() - c.lastSeen > 9000) { connLost(c); try { c.close(); } catch {} }
+  }), 4000);
   if (resume) {
     try {
       const saved = JSON.parse(safeGet('bj-host'));
@@ -165,6 +180,8 @@ function startHost(resume) {
   }
   S.table.join(S.myId, S.name, S.buyIn, S.look);
   S.table.hostId = S.myId;
+  // After the host reloads nobody is connected yet. Give everyone the usual time to come back.
+  if (resume) Object.values(S.table.players).forEach((p) => { if (!p.connected && !p.kicked && p.id !== S.myId) awayClock(p.id); });
   history.replaceState(null, '', location.pathname + '?' + new URLSearchParams({ ...Object.fromEntries(params), host: S.code }).toString());
   buildLayout();
   openHostPeer(0);
@@ -177,21 +194,7 @@ function openHostPeer(attempt) {
   peer.on('open', () => { S.online = true; render(); });
   peer.on('connection', (conn) => {
     conn.on('data', (msg) => onHostMessage(conn, msg));
-    conn.on('close', () => {
-      if (conn.clientId && S.conns[conn.clientId] === conn) {
-        delete S.conns[conn.clientId];
-        S.table.disconnect(conn.clientId);
-        S.table.addLog(`${S.table.players[conn.clientId]?.name || 'A player'} left.`);
-        // If it was their turn, move on.
-        const t = S.table.turn;
-        if (t && S.table.seats[t.seat]?.playerId === conn.clientId) S.table.skipTurn();
-        if (S.table.phase === 'insurance') {
-          const seat = S.table.seats[S.table.players[conn.clientId]?.seat];
-          if (seat) { try { S.table.insurance(conn.clientId, false); } catch {} }
-        }
-        hostChanged();
-      }
-    });
+    conn.on('close', () => connLost(conn));
   });
   peer.on('disconnected', () => { S.online = false; render(); setTimeout(() => !peer.destroyed && peer.reconnect(), 1500); });
   peer.on('error', (e) => {
@@ -207,8 +210,23 @@ function openHostPeer(attempt) {
   });
 }
 
+// A guest's link is gone. A reload or a short drop is not the end of their hand: they get a little
+// time to come back before the dealer stands for them.
+function connLost(conn) {
+  const id = conn.clientId;
+  if (!id || S.conns[id] !== conn) return;
+  delete S.conns[id];
+  conn.clientId = null;
+  S.table.disconnect(id);
+  S.table.addLog(`${S.table.players[id]?.name || 'A player'} lost the connection.`);
+  awayClock(id, Date.now() - (conn.lastSeen || Date.now()));
+  hostChanged();
+}
+
 function onHostMessage(conn, msg) {
   if (!msg || typeof msg !== 'object') return;
+  conn.lastSeen = Date.now();
+  if (msg.t === 'pong') { conn.answers = true; return; }
   if (msg.t === 'join') {
     const id = String(msg.clientId || '').slice(0, 20);
     if (!id || id === S.myId) { conn.send({ t: 'error', msg: 'Open the link in another browser or device.' }); return; }
@@ -218,6 +236,7 @@ function onHostMessage(conn, msg) {
     if (old && old !== old.closed) { old.clientId = null; try { old.close(); } catch {} }
     conn.clientId = id;
     S.conns[id] = conn;
+    clearTimeout(S.goneTimers[id]); delete S.goneTimers[id];
     S.table.join(id, msg.name, msg.buyIn, msg.look);
     hostChanged();
     return;
@@ -225,7 +244,32 @@ function onHostMessage(conn, msg) {
   if (!conn.clientId) return;
   if (msg.t === 'throw') { relayThrow(conn.clientId, msg); return; }
   if (msg.t === 'keys') { gotNonce(msg, conn.clientId); return; }
-  fresh(moveCount(msg), () => runAction(conn.clientId, msg, (err) => conn.open && conn.send({ t: 'error', msg: err })));
+  fresh(moveCount(msg), () => runAction(conn.clientId, msg, (err) => conn.open && conn.send({ t: 'error', msg: err, bet: msg.t === 'bet' })));
+}
+
+// How long a player who dropped out may stay away before the dealer stands their hand. Their own
+// turn clock keeps running as well, so whichever ends first counts.
+const AWAY_MS = 20000;
+function awayClock(id, already = 0) {
+  clearTimeout(S.goneTimers[id]);
+  S.goneTimers[id] = setTimeout(() => {
+    delete S.goneTimers[id];
+    fresh(() => 0, () => hostDo((tb) => tb.markGone(id)));
+  }, Math.max(3000, AWAY_MS - already)); // "already" is how long they had been silent when the host noticed
+}
+// Tell everyone something that happened to one player (shown as a banner to them, a short note to the rest).
+function tellAll(note) {
+  const msg = { t: 'note', ...note };
+  for (const conn of Object.values(S.conns)) if (conn.open) conn.send(msg);
+  showNote(msg);
+}
+function showNote(msg) {
+  if (msg.kind === 'timeout') {
+    if (msg.id === S.myId) { S.timedOutRound = S.state?.round; banner('Time ran out', 'Your hand was stood.', 'bad', 5000); }
+    else toast(`${msg.name || 'A player'} ran out of time. Their hand was stood.`);
+  } else if (msg.kind === 'ins-timeout') {
+    if (Array.isArray(msg.ids) && msg.ids.includes(S.myId)) banner('Time ran out', 'Insurance was not taken.', 'bad', 4000);
+  }
 }
 
 // Moves any player (including the host as a player) can make.
@@ -385,13 +429,16 @@ function hostChanged() {
       }, 900);
     }
   }
+  // New cards get their place in the deal animation first, so a turn clock can wait for them to land.
+  const mine = t.publicState(S.myId);
+  queueCards(mine);
   scheduleTimer();
   const timer = S.timer ? { kind: S.timer.kind, endsIn: S.timer.ends - Date.now() } : null;
   const voteEndsIn = t.vote ? Math.max(0, S.voteEnds - Date.now()) : 0;
   for (const [id, conn] of Object.entries(S.conns)) {
     if (conn.open) conn.send({ t: 'state', state: { ...t.publicState(id), timer, voteEndsIn } });
   }
-  S.state = { ...t.publicState(S.myId), timer, voteEndsIn };
+  setState({ ...mine, timer, voteEndsIn });
   setTimerFromState(S.state);
   safeSet('bj-host', JSON.stringify({ code: S.code, table: t }));
   render();
@@ -403,9 +450,12 @@ function scheduleTimer() {
   const t = S.table;
   const s = t.settings;
   let want = null;
-  if ((t.phase === 'betting' || t.phase === 'settled') && s.betTimer > 0 &&
-      t.seats.some((x) => x && x.bet.main > 0 && t.players[x.playerId].connected)) {
-    want = { key: `deal-${t.round}-${t.phase}`, kind: 'deal', secs: t.phase === 'settled' ? s.betTimer + 4 : s.betTimer };
+  // The betting clock only runs when a deal can really happen: a dealer (or the frozen ledger), a bank
+  // that covers the bets, and at least one fresh bet of the minimum or more. Bets left on the table
+  // from the round that just ended are not bets for the next one, so nothing counts down while the
+  // results are showing.
+  if (t.phase === 'betting' && s.betTimer > 0 && t.canDeal()) {
+    want = { key: `deal-${t.round}`, kind: 'deal', secs: s.betTimer };
   } else if (t.phase === 'insurance' && s.turnTimer > 0) {
     want = { key: `ins-${t.round}`, kind: 'insurance', secs: Math.min(s.turnTimer, 15) };
   } else if (t.phase === 'playing' && t.turn && s.turnTimer > 0) {
@@ -417,11 +467,26 @@ function scheduleTimer() {
   if (!want) return;
   const fire = () => {
     S.timer = null;
-    if (want.kind === 'deal') fresh((tb) => tb.dealCount(), () => hostDo((tb) => { if (tb.phase === 'settled') tb.startBetting(); if (tb.phase === 'betting' && tb.canDeal()) tb.deal(); }));
-    else if (want.kind === 'insurance') hostDo((tb) => tb.forceInsurance());
-    else hostDo((tb) => { tb.addLog(`Time ran out for ${tb.seats[tb.turn.seat].playerId === S.myId ? 'you' : tb.players[tb.seats[tb.turn.seat].playerId].name}, dealer stands.`); tb.skipTurn(); });
+    if (want.kind === 'deal') fresh((tb) => tb.dealCount(), () => hostDo((tb) => { if (tb.phase === 'betting' && tb.canDeal()) tb.deal(); }));
+    else if (want.kind === 'insurance') fresh(() => 0, () => {
+      const t2 = S.table;
+      if (t2.phase !== 'insurance') return;
+      const ids = t2.seats.filter((x) => x && x.hands.length && !x.insuranceDecided && t2.players[x.playerId].connected).map((x) => x.playerId);
+      hostDo((tb) => tb.forceInsurance());
+      if (ids.length) tellAll({ kind: 'ins-timeout', ids });
+    });
+    else fresh(() => 0, () => {
+      const t2 = S.table;
+      if (t2.phase !== 'playing' || !t2.turn) return;
+      const p = t2.players[t2.seats[t2.turn.seat].playerId];
+      hostDo((tb) => { tb.addLog(`Time ran out for ${p.name}, dealer stands.`); tb.skipTurn(); });
+      tellAll({ kind: 'timeout', id: p.id, name: p.name });
+    });
   };
-  S.timer = { key: want.key, kind: want.kind, ends: Date.now() + want.secs * 1000, handle: setTimeout(fire, want.secs * 1000) };
+  // A turn clock starts when the player can act: after the cards that are still being dealt have landed.
+  const lead = want.kind === 'deal' ? 0 : Math.max(0, S.dealEnds - performance.now());
+  const ms = lead + want.secs * 1000;
+  S.timer = { key: want.key, kind: want.kind, ends: Date.now() + ms, handle: setTimeout(fire, ms) };
 }
 
 function setTimerFromState(st) {
@@ -433,8 +498,11 @@ function setTimerFromState(st) {
 function updateTimer() {
   const el = $('#timer');
   if (!el) return;
-  const left = Math.max(0, Math.ceil((S.timerEnds - Date.now()) / 1000));
-  if (!S.timerKind || !S.timerEnds) { el.hidden = true; return; }
+  let left = Math.max(0, Math.ceil((S.timerEnds - Date.now()) / 1000));
+  // While the cards are still being dealt the clock has not started yet.
+  const cap = S.timerKind === 'turn' ? S.state?.settings?.turnTimer : S.timerKind === 'insurance' ? Math.min(S.state?.settings?.turnTimer || 15, 15) : 0;
+  if (cap) left = Math.min(left, cap);
+  if (!S.timerKind || !S.timerEnds || (S.timerKind !== 'deal' && dealingNow() && S.dealMany)) { el.hidden = true; return; }
   el.hidden = false;
   el.classList.toggle('urgent', left <= 5);
   // Tick for the last 5 seconds when it is my move.
@@ -449,16 +517,22 @@ function updateTimer() {
     dn.textContent = S.timerKind === 'turn' ? left : '';
     $('#decide-timer').classList.toggle('urgent', S.timerKind === 'turn' && left <= 5);
     $('#decide-bar').style.transform = `scaleX(${frac})`;
+    const warn = $('#decide-warn');
+    if (warn) { const on = S.timerKind === 'turn' && left <= 5; warn.hidden = !on; if (on) warn.textContent = left > 0 ? `${left} second${left === 1 ? '' : 's'} left. After that your hand is stood.` : 'Time is up.'; }
   }
   el.textContent = S.timerKind === 'deal' ? `Dealing in ${left}s` : S.timerKind === 'insurance' ? `Insurance closes in ${left}s` : `${left}s to act`;
 }
 setInterval(updateTimer, 250);
 
 // ---------- Player ----------
-function startPlayer(code) {
-  if (!readName()) return;
+function startPlayer(code, saved) {
+  code = String(code || '').trim().toLowerCase();
+  if (saved) { S.name = saved.name; S.buyIn = saved.buyIn; S.look = saved.look; }
+  else if (!readName()) return;
   S.role = 'player';
-  S.code = code.trim().toLowerCase();
+  S.code = code;
+  // Remembered for this tab only, under the table's code: a reload joins the same table again.
+  sessSet('bj-join-' + code, JSON.stringify({ name: S.name, buyIn: S.buyIn, look: S.look }));
   buildLayout();
   render();
   const peer = new Peer(peerOptions());
@@ -487,13 +561,14 @@ function connectToHost() {
   });
   conn.on('data', (msg) => {
     S.lastSeen = Date.now();
-    if (msg.t === 'ping') return;
-    if (msg.t === 'state') { S.state = msg.state; render(); setTimerFromState(msg.state); }
-    else if (msg.t === 'error') toast(msg.msg);
+    if (msg.t === 'ping') { try { conn.send({ t: 'pong' }); } catch {} return; }
+    if (msg.t === 'state') { setState(msg.state); render(); setTimerFromState(msg.state); }
+    else if (msg.t === 'error') { toast(msg.msg); if (msg.bet) dropPend(); }
+    else if (msg.t === 'note') showNote(msg);
     else if (msg.t === 'fx') showThrow(msg);
     else if (msg.t === 'peek') showPeek(msg.card, msg.by);
     else if (msg.t === 'key-req') conn.send({ t: 'keys', rid: msg.rid, keys: serveKeys(msg) });
-    else if (msg.t === 'kicked') { S.kicked = true; S.peer.destroy(); app.innerHTML = '<div class="center-msg"><h2>You were removed from the table.</h2></div>'; }
+    else if (msg.t === 'kicked') { S.kicked = true; sessDel('bj-join-' + S.code); S.peer.destroy(); app.innerHTML = '<div class="center-msg"><h2>You were removed from the table.</h2></div>'; }
   });
   const lost = () => {
     if (S.kicked || S.conn !== conn) return;
@@ -517,9 +592,66 @@ function connectToHost() {
 // Send a move: players send it to the host, the host runs it directly.
 function send(msg) {
   if (S.role === 'host' && msg.t === 'throw') relayThrow(S.myId, msg);
-  else if (S.role === 'host') fresh(moveCount(msg), () => runAction(S.myId, msg, toast));
+  else if (S.role === 'host') fresh(moveCount(msg), () => runAction(S.myId, msg, (err) => { toast(err); if (msg.t === 'bet') dropPend(); }));
   else if (S.conn?.open) S.conn.send(msg);
   else toast('Not connected to the table.');
+}
+
+// ---------- My own bet, one step ahead of the table ----------
+// A tap changes my bet here at once and that is what is sent. The table's copy of my bet replaces
+// it only when it is the answer to the last bet I sent (the table sends my bet's number back),
+// when the round moves on, or when the table said no. So quick taps add up, and a state that
+// was already on its way cannot put my bet back to an older amount.
+function setState(state) {
+  S.state = state;
+  const { seat } = myInfo(state);
+  const between = state.phase === 'betting' || state.phase === 'settled';
+  S.serverBet = seat ? { bet: seat.bet, ready: seat.ready } : null;
+  if (S.pend && (!seat || !between || state.round !== S.pend.round || seat.betSeq === S.pend.seq || Date.now() - S.pend.at > 4000)) S.pend = null;
+  overlayBet();
+  // A rebet asked for while the results were showing goes down as soon as the cards are cleared.
+  if (S.rebetWhenOpen != null && (S.rebetWhenOpen !== state.round || !seat || !between)) S.rebetWhenOpen = null;
+  if (S.rebetWhenOpen != null && state.phase === 'betting') { S.rebetWhenOpen = null; setTimeout(doRebet, 0); }
+}
+function overlayBet() {
+  const st = S.state;
+  if (!st || !S.serverBet) return;
+  const { seat } = myInfo(st);
+  if (!seat) return;
+  const src = S.pend || S.serverBet;
+  seat.bet = structuredClone(src.bet);
+  seat.ready = src.ready;
+}
+function dropPend() {
+  if (!S.pend) return;
+  S.pend = null;
+  overlayBet();
+  render();
+}
+function placeBet(bet, ready = false) {
+  const st = S.state;
+  const b = { main: bet.main, sides: { ...bet.sides } };
+  if (!b.main) b.sides = {};
+  if (b.sides.friendBust && bet.target != null) b.target = bet.target;
+  S.pend = { bet: b, ready: b.main > 0 && !!ready, seq: ++S.betSeq, round: st.round, at: Date.now() };
+  overlayBet();
+  send({ t: 'bet', main: b.main, sides: b.sides, target: b.target, ready, seq: S.pend.seq });
+  render();
+}
+// Put last round's bet down again. Only ever called from the Rebet button or the B key.
+function doRebet() {
+  const st = S.state;
+  if (!st) return;
+  const { me, seat } = myInfo(st);
+  if (!seat || !st.rebet) return;
+  if (st.phase === 'settled') { S.rebetWhenOpen = S.rebetWhenOpen === st.round ? null : st.round; render(); return; }
+  if (st.phase !== 'betting') return;
+  if (betTotal(seat.bet)) { toast('You already have a bet down. Clear it first to rebet.'); return; }
+  S.undo.push(structuredClone(seat.bet));
+  S.mainChips = [];
+  S.sideChips = {};
+  flyChip($('.rebet-btn') || $('#float-balance'), $(`#spot-${me.seat}`), st.rebet.main);
+  placeBet(st.rebet);
 }
 
 // ---------- Layout and rendering ----------
@@ -548,7 +680,8 @@ function buildLayout() {
             <button class="menu-item" data-act="chart">📊 Basic strategy chart</button>
             <button class="menu-item" data-act="hints" id="hints-btn">${hintsOn() ? '💡 Strategy hints: on' : '💡 Strategy hints: off'}</button>
             <button class="menu-item" data-act="room3d">${use3D() ? '🧊 3D room: on' : '🧊 3D room: off'}</button>
-            <button class="menu-item" data-act="mute" id="mute-btn">${isMuted() ? '🔇 Sound: off' : '🔊 Sound: on'}</button>`)}
+            <button class="menu-item" data-act="mute" id="mute-btn">${isMuted() ? '🔇 Sound: off' : '🔊 Sound: on'}</button>
+            <button class="menu-item" data-act="keys">⌨️ Keyboard keys</button>`)}
           ${host ? `
           ${fold('m-round', '🃏 Round', '<div id="host-round"></div>')}
           ${fold('m-players', '👥 Players', `
@@ -623,7 +756,8 @@ function renderBalance(st) {
   if (!el) return;
   const { me, seat } = myInfo(st);
   if (!me) { el.hidden = true; return; }
-  const onTable = seat && (st.phase === 'betting' || st.phase === 'settled') ? betTotal(seat.bet) : 0;
+  // Only a bet for the coming round is still to be taken from the balance. After a round the old bet is already paid out.
+  const onTable = seat && st.phase === 'betting' ? betTotal(seat.bet) : 0;
   const waiting = st.buyIns?.length ? `<small class="pending">Buy-in of ${money(st.buyIns[0].amount)} waiting for the host</small>` : '<small>Tap to buy in more</small>';
   el.hidden = false;
   el.innerHTML = `<span class="lbl">Balance</span><b>${money(me.chips - onTable)}</b>${waiting}`;
@@ -688,6 +822,14 @@ function renderHostPops() {
     <div class="actions"><button class="btn small primary" data-act="buyin-answer" data-id="${r.id}" data-yes="1">Approve</button><button class="btn small danger" data-act="buyin-answer" data-id="${r.id}" data-yes="0">Say no</button></div></div>`).join('');
 }
 
+// Put HTML into a part of the page only when it really changed. The table sends a new state for
+// every chip anyone moves; leaving untouched parts alone keeps buttons, hover and focus steady.
+function setHTML(el, html) {
+  if (!el || el._html === html) return;
+  el._html = html;
+  el.innerHTML = html;
+}
+
 function render(note) {
   if (!S.role) return;
   const st = S.state;
@@ -712,11 +854,13 @@ function render(note) {
     if (!S.online && !S.offTick) S.offTick = setInterval(() => { if (S.online) { clearInterval(S.offTick); S.offTick = null; } render(); }, 2000);
   }
   if (!st) {
-    $('#felt').innerHTML = `<div class="center-msg">${esc(note || 'Connecting to the table...')}</div>`;
-    $('#tray').innerHTML = '';
+    setHTML($('#felt'), `<div class="center-msg">${esc(note || 'Connecting to the table...')}</div>`);
+    setHTML($('#tray'), '');
     $('#controls').innerHTML = '';
     return;
   }
+  queueCards(st);
+  S.dealing = dealingNow();
   fairWatch(st);
   { const fp = $('#fair-pill'), bad = !!S.fair?.alert || Object.values(S.fair?.checks || {}).some((k) => !k.ok); if (fp) { fp.classList.toggle('bad', bad); fp.innerHTML = bad ? '⚠️<span class="fp-t"> Shuffle check failed</span>' : '🔐<span class="fp-t"> Provably fair</span>'; } }
   const prev = S.prevView;
@@ -726,13 +870,15 @@ function render(note) {
   // The dealer sees the table from the dealer's side: dealer at the bottom, players across the top.
   if (S.room) S.room.setSide(myInfo(st).isBanker ? 'dealer' : 'player');
   else $('#felt').classList.toggle('flip', myInfo(st).isBanker);
-  $('#felt').innerHTML = feltHTML(st);
+  setHTML($('#felt'), feltHTML(st));
   const tray = $('#tray');
-  // During a hand the move buttons appear in the middle of the table, only when you have to act.
+  // During a hand the move buttons appear in the middle of the table, only when you have to act,
+  // and only once the cards being dealt have landed.
   const between = st.phase === 'betting' || st.phase === 'settled';
-  tray.innerHTML = between ? trayHTML(st) : '';
-  const fa = $('#felt-actions');
-  if (fa) fa.innerHTML = between ? '' : trayHTML(st);
+  setHTML(tray, between ? trayHTML(st) : '');
+  setHTML($('#felt-actions'), between || S.dealing ? '' : trayHTML(st));
+  // The round result stays up until the cards are cleared.
+  if (st.phase !== 'settled') { clearTimeout(S.resultTimer); $('#result-pop')?.remove(); }
   $('#controls').innerHTML = controlsHTML(st);
   $('#controls').hidden = !$('#controls').innerHTML.trim();
   if (S.role === 'host') renderHostPanel(st);
@@ -802,7 +948,19 @@ function animateChanges(prev, st) {
       setTimeout(() => { send({ t: 'throw', item: 'fire', to: S.myId }); toast('🔥 Dumb luck! Wrong play, still won.'); }, 1200);
     }
   }
+  // A new round started without me: say so once, with the reason.
+  if (st.round !== prev.round && (prev.phase === 'betting' || prev.phase === 'settled') && st.phase !== 'betting' && st.phase !== 'settled') {
+    const { me, seat } = myInfo(st);
+    if (me && seat && !seat.hands.length) {
+      const min = st.settings.minBet, main = seat.bet.main;
+      if (!main) toast('You did not place a bet, so you were not dealt in this round.');
+      else if (main < min) banner('You were not dealt in', `Table minimum is ${money(min)}. Your bet was ${money(main)}.`, 'bad', 5000);
+      else banner('You were not dealt in', 'Your bet was more than your chips.', 'bad', 5000);
+    }
+  }
   const dealer = $('#dealer-zone .cards') || $('#dealer-zone');
+  // Chips are paid and collected after the last card has landed.
+  const payDelay = Math.max(300, S.dealEnds - performance.now() + 150);
   // Insurance: after the dealer checks the hole card, say what happened.
   if (prev.phase === 'insurance' && st.phase !== 'insurance' && prev.round === st.round) {
     const anyIns = st.seats.some((x) => x && x.insurance > 0);
@@ -825,8 +983,8 @@ function animateChanges(prev, st) {
     if (st.phase === 'settled' && prev.phase !== 'settled' && s.hands.length && s.net) {
       const n = Math.min(5, 1 + Math.floor(Math.abs(s.net) / 50));
       for (let k = 0; k < n; k++) {
-        if (s.net > 0) flyChip(dealer, spot, Math.abs(s.net), 300 + k * 90, false);
-        else flyChip(spot, dealer, Math.abs(s.net), 300 + k * 90, false);
+        if (s.net > 0) flyChip(dealer, spot, Math.abs(s.net), payDelay + k * 90, false);
+        else flyChip(spot, dealer, Math.abs(s.net), payDelay + k * 90, false);
       }
     }
   });
@@ -839,22 +997,29 @@ function showResult(st) {
   if (isBanker) net = st.banker.net;
   else if (seat && seat.hands.length) net = seat.net;
   if (net === null || net === undefined) return;
+  $('#result-pop')?.remove();
   const el = document.createElement('div');
+  el.id = 'result-pop';
   el.className = 'result-pop ' + (net > 0 ? 'win' : net < 0 ? 'lose' : 'push');
   el.innerHTML = (net > 0 ? `<small>You win</small><b>${money(net)}</b>` : net < 0 ? `<small>You lose</small><b>${money(-net)}</b>` : '<small>Push</small><b>Even</b>') +
+    (S.timedOutRound === st.round ? '<em class="warn">Time ran out. Your hand was stood.</em>' : '') +
     (st.frozen ? '<em>House dealer: not counted in the ledger</em>' : '');
   const felt = document.body;
   // Wait for the last cards and chips to land first.
-  setTimeout(() => {
+  // It stays up until the cards are cleared (render takes it away when the next round opens).
+  clearTimeout(S.resultTimer);
+  S.resultTimer = setTimeout(() => {
+    if (S.state?.phase !== 'settled') return;
     felt.appendChild(el);
     if (net > 0) winSound(net >= 500);
     el.animate([
       { opacity: 0, transform: 'translate(-50%, -50%) scale(.6)' },
-      { opacity: 1, transform: 'translate(-50%, -50%) scale(1.05)', offset: 0.12 },
-      { opacity: 1, transform: 'translate(-50%, -50%) scale(1)', offset: 0.75 },
-      { opacity: 0, transform: 'translate(-50%, -50%) scale(1)' },
-    ], { duration: 3200, easing: 'ease-out', fill: 'forwards' }).onfinish = () => el.remove();
-  }, Math.max(600, S.nextCardAt - performance.now() + 400));
+      { opacity: 1, transform: 'translate(-50%, -50%) scale(1.05)', offset: 0.4 },
+      { opacity: 1, transform: 'translate(-50%, -50%) scale(1)' },
+    ], { duration: 420, easing: 'ease-out' });
+    // After a moment it makes itself small and moves up, so the hands and their results can be read.
+    setTimeout(() => { el.classList.add('stay'); document.querySelectorAll('.table-banner').forEach((b) => b.classList.add('out')); }, 1300);
+  }, Math.max(350, S.dealEnds - performance.now() + 250));
 }
 
 function suitClass(s) { return { '♠': 's-s', '♥': 's-h', '♦': 's-d', '♣': 's-c' }[s] || ''; }
@@ -866,12 +1031,10 @@ function cardHTML(c, big, key, order) {
   let extra = '';
   if (key) {
     const now = performance.now();
-    if (!S.cardAt.has(key)) {
-      S.cardAt.set(key, null); // time is set after sorting this render's new cards
-      S.pendingNew.push({ key, order: order || [0, 0] });
-    }
+    // queueCards gave every card on the table its time before this drawing started.
+    if (!S.cardAt.has(key)) S.cardAt.set(key, now - 10000);
     const at = S.cardAt.get(key);
-    if (at === null || at > now - 50) { cls += ' pending'; extra = ` data-key="${key}"`; }
+    if (at > now - 50) { cls += ' pending'; extra = ` data-key="${key}"`; }
     // The dealer's hole card turns over in place.
     if (c.hidden) S.holeHidden.add(key);
     else if (S.holeHidden.has(key)) { S.holeHidden.delete(key); cls += ' flip'; setTimeout(cardSound, 0); }
@@ -880,18 +1043,43 @@ function cardHTML(c, big, key, order) {
   return `<div class="${cls} ${suitClass(c.s)}"${extra}><span class="rk">${c.r}</span><span class="st">${c.s}</span></div>`;
 }
 
-function runDealQueue() {
+const FLIGHT = 420; // how long a card takes from the shoe to its place
+// Give every card that is new in this state its moment in the deal. This runs before the table is
+// drawn, so the drawing knows which hands still have a card on the way. While cards are flying,
+// totals, results, side bet results, the turn highlight and the move buttons stay hidden; one more
+// drawing is booked for the moment the last card lands.
+function queueCards(st) {
   const now = performance.now();
+  const add = [];
+  const see = (key, order) => { if (!S.cardAt.has(key)) { S.cardAt.set(key, null); add.push({ key, order }); } };
+  const r = st.round;
+  st.dealer.cards.forEach((c, i) => see(`${r}-d-${i}`, [i, st.seats.length]));
+  st.seats.forEach((seat, i) => seat && seat.hands.forEach((h, j) => h.cards.forEach((c, k) => see(`${r}-${i}-${j}-${k}`, [k + j * 10, i]))));
+  if (!add.length) return;
+  // The first look at a table (joining, or coming back after a reload): the cards are already there.
+  if (!S.prevView) { add.forEach((p) => S.cardAt.set(p.key, now - 10000)); return; }
   // Deal in casino order: first card to each seat, then the dealer, then the second card.
-  S.pendingNew.sort((a, b) => a.order[0] - b.order[0] || a.order[1] - b.order[1]);
-  for (const p of S.pendingNew) {
+  add.sort((a, b) => a.order[0] - b.order[0] || a.order[1] - b.order[1]);
+  if (now >= S.dealEnds) { S.dealStart = now; S.dealMany = false; }
+  for (const p of add) {
     const at = Math.max(now, S.nextCardAt);
     S.cardAt.set(p.key, at);
     S.nextCardAt = at + DEAL_GAP;
   }
-  S.pendingNew = [];
+  if (add.length >= 4) S.dealMany = true;
+  S.dealEnds = S.nextCardAt - DEAL_GAP + FLIGHT;
+  clearTimeout(S.dealDone);
+  S.dealDone = setTimeout(render, S.dealEnds - now + 40);
+}
+function dealingNow() { return performance.now() < S.dealEnds; }
+// True while any of these cards belongs to the deal that is still going on.
+function inFlight(keys) { return S.dealing && keys.some((k) => (S.cardAt.get(k) ?? 0) >= S.dealStart); }
+
+function runDealQueue() {
   const shoe = $('#shoe');
   document.querySelectorAll('.card.pending[data-key]').forEach((el) => {
+    if (el._queued) return;
+    el._queued = true;
     const at = S.cardAt.get(el.dataset.key);
     const delay = Math.max(0, at - performance.now());
     setTimeout(() => {
@@ -906,19 +1094,20 @@ function runDealQueue() {
       el.animate([
         { transform: `translate(${dx}px, ${dy}px) rotate(-25deg) scale(.6)`, opacity: 0.6 },
         { transform: 'none', opacity: 1 },
-      ], { duration: 420, easing: 'cubic-bezier(.2,.7,.3,1)' });
+      ], { duration: FLIGHT, easing: 'cubic-bezier(.2,.7,.3,1)' });
     }, delay);
   });
 }
 
 function statusText(st) {
   const turnSeat = st.turn && st.seats[st.turn.seat];
+  if (S.dealing && S.dealMany && (st.phase === 'insurance' || st.phase === 'playing')) return 'Dealing the cards';
   switch (st.phase) {
     case 'betting': return st.noDealer ? 'Bets can go down. The cards wait for a dealer' : st.bankShort ? `The dealer has ${money(st.banker?.chips || 0)} chips, fewer than the bets on the table. Lower the bets or the dealer buys in` : 'Place your bets';
     case 'insurance': return 'Dealer shows an ace. Insurance?';
     case 'playing': return turnSeat ? (turnSeat.playerId === S.myId ? 'Your turn' : `${turnSeat.name} is playing`) : '';
     case 'dealer': return 'Dealer is playing';
-    case 'settled': return 'Round over. Place your next bet';
+    case 'settled': return S.dealing ? (S.dealMany ? 'Dealing the cards' : 'Dealer is playing') : 'Round over. The cards are cleared in a moment';
   }
   return '';
 }
@@ -1030,11 +1219,12 @@ function feltHTML(st) {
   const shoeTxt = st.settings.decks === 'csm' ? 'Randomized: shuffled every round' :
     `${st.settings.decks} deck${st.settings.decks > 1 ? 's' : ''} · ${st.shoe.left} cards left · ` +
     (st.settings.shuffleMode === 'rounds' ? `shuffle every ${st.settings.shuffleEvery} rounds` : `shuffle at ${st.settings.penetration}%`);
-  const dealerTotal = d.cards.length ? `<span class="total">${d.total > 21 ? 'Bust ' + d.total : d.total + (d.soft && d.total < 21 ? ' soft' : '')}</span>` : '';
+  const dealerBusy = inFlight(d.cards.map((c, i) => `${r}-d-${i}`));
+  const dealerTotal = d.cards.length && !dealerBusy ? `<span class="total">${d.total > 21 ? 'Bust ' + d.total : d.total + (d.soft && d.total < 21 ? ' soft' : '')}</span>` : '';
   const b = st.banker;
   let dealerSeat;
   if (b) {
-    const net = b.net ? `<span class="net ${b.net > 0 ? 'up' : 'down'}">${b.net > 0 ? '+' : ''}${money(b.net)}</span>` : '';
+    const net = b.net && !S.dealing ? `<span class="net ${b.net > 0 ? 'up' : 'down'}">${b.net > 0 ? '+' : ''}${money(b.net)}</span>` : '';
     dealerSeat = `<div class="dealer-name" ${isBanker ? '' : `data-throw-at="${b.id}" title="Tap to throw something at the dealer"`}>${esc(b.name)}${isBanker ? ' (you)' : ''} is the dealer <span class="chips">${money(b.chips)}</span> ${net}
 </div>`;
   } else {
@@ -1049,7 +1239,7 @@ function feltHTML(st) {
     <div class="dealer" id="dealer-zone">
       ${dealerSeat}
       <div class="cards">${d.cards.map((c, i) => cardHTML(c, true, `${r}-d-${i}`, [i, st.seats.length])).join('')}</div>
-      <div class="dealer-total">${dealerTotal}${S.fav === 'dealer' ? ' <span class="fav-tag">Favourite</span>' : ''}</div>
+      <div class="dealer-total">${dealerTotal}${S.fav === 'dealer' && !S.dealing ? ' <span class="fav-tag">Favourite</span>' : ''}</div>
     </div>
     ${arcTextHTML(st)}
     <div class="mid-band">
@@ -1084,7 +1274,7 @@ function computeOdds(st) {
 }
 function oddsHTML(key) {
   const o = S.odds?.[key];
-  if (!o) return '';
+  if (!o || S.dealing) return '';
   const pct = (x) => Math.round(x * 100) + '%';
   return `<div class="odds ${S.fav === key ? 'fav' : ''}" title="Win ${pct(o.win)}, push ${pct(o.push)}, lose ${pct(o.lose)}">${S.fav === key ? '<span class="fav-tag">Favourite</span>' : ''}<b>${pct(o.win)}</b><small>win</small><span class="odds-sep">·</span><small>push ${pct(o.push)}</small></div>`;
 }
@@ -1107,7 +1297,9 @@ function frozenHTML(st) {
 // Big "Deal me in" button on the table once you have a bet down.
 function dealMeInHTML(st) {
   const { seat, isBanker } = myInfo(st);
-  if (isBanker || !seat || !(st.phase === 'betting' || st.phase === 'settled') || !seat.bet.main) return '';
+  // Only for a fresh bet, and only when the table can deal: with no dealer, or a dealer whose chips
+  // do not cover the bets, the line above already says what the table is waiting for.
+  if (isBanker || !seat || st.phase !== 'betting' || !seat.bet.main || st.noDealer || st.bankShort) return '';
   if (seat.ready) return `<div class="deal-me-in waiting"><span>Waiting for the others...</span><button class="btn small" data-act="ready">Not ready</button></div>`;
   if (seat.bet.main < st.settings.minBet) return `<div class="deal-me-in waiting"><span class="under-min">Table minimum ${money(st.settings.minBet)}. Add ${money(st.settings.minBet - seat.bet.main)} more to be dealt in.</span></div>`;
   return `<div class="deal-me-in"><button class="deal-btn" data-act="ready">Deal me in</button></div>`;
@@ -1138,11 +1330,13 @@ function seatHTML(st, s, i, focus, spot) {
     return `<div class="seat empty ${focus ? 'focus' : ''}" id="seat-${i}" ${place}>${spotAreaHTML(st, null, i, false, 0)}${canSit ? `<button class="btn small" data-act="sit" data-seat="${i}">Sit here</button>` : `<span>Seat ${i + 1}</span>`}</div>`;
   }
   const isMe = s.playerId === S.myId;
-  const turn = st.turn && st.turn.seat === i;
+  // Whose turn it is shows once the deal is finished, not while the first cards are still going round.
+  const turn = st.turn && st.turn.seat === i && !(S.dealing && S.dealMany);
   const hands = s.hands.map((h, j) => {
     const active = turn && st.turn.hand === j;
-    const res = h.result ? `<span class="result ${h.result.toLowerCase()}">${h.result}</span>` : (h.blackjack ? '<span class="result blackjack">Blackjack</span>' : '');
-    const total = h.cards.length ? `<span class="total">${h.total > 21 ? 'Bust ' + h.total : h.total + (h.soft && h.total < 21 ? ' soft' : '')}</span>` : '';
+    const busy = inFlight(h.cards.map((c, k) => `${st.round}-${i}-${j}-${k}`));
+    const res = S.dealing ? '' : handResultHTML(h);
+    const total = h.cards.length && !busy ? `<span class="total">${h.total > 21 ? 'Bust ' + h.total : h.total + (h.soft && h.total < 21 ? ' soft' : '')}</span>` : '';
     // A doubled hand's last card is dealt sideways, as in a casino.
     const cardsHtml = h.cards.map((c, k) => {
       const html = cardHTML(c, false, `${st.round}-${i}-${j}-${k}`, [k + j * 10, i]);
@@ -1156,9 +1350,9 @@ function seatHTML(st, s, i, focus, spot) {
       ${split ? `<div class="hand-bet"><span class="chipv hb-chip ${chipClass(h.bet)}"></span><span class="hb-amt">${money(h.bet)}</span></div>` : (h.doubled ? `<div class="meta"><span>Doubled ${money(h.bet)}</span></div>` : '')}
     </div>`;
   }).join('');
-  const sides = isMe && s.sideResults.length ? `<div class="side-results">${s.sideResults.map((r) =>
-    `<div class="side-res ${r.win ? 'win' : ''}" title="${esc(r.label)}"><span>${esc(r.name)}: ${esc(r.label)}</span><b>${r.win ? '+' + money(r.pay - r.stake) : '-' + money(r.stake)}</b></div>`).join('')}</div>` : '';
-  const net = st.phase === 'settled' && s.net !== null && s.hands.length ? `<div class="net ${s.net > 0 ? 'up' : s.net < 0 ? 'down' : ''}">${s.net > 0 ? 'Won ' + money(s.net) : s.net < 0 ? 'Lost ' + money(-s.net) : 'Even'}</div>` : '';
+  const sides = isMe && s.sideResults.length && !S.dealing ? `<div class="side-results">${s.sideResults.map((r) =>
+    `<div class="side-res ${r.win ? 'win' : ''}" title="${esc(r.label)}"><span>${esc(r.name)}: ${esc(r.label)}</span><b>${sideAmount(r)}</b></div>`).join('')}</div>` : '';
+  const net = st.phase === 'settled' && s.net !== null && s.hands.length && !S.dealing ? `<div class="net ${s.net > 0 ? 'up' : s.net < 0 ? 'down' : ''}">${s.net > 0 ? 'Won ' + money(s.net) : s.net < 0 ? 'Lost ' + money(-s.net) : 'Even'}</div>` : '';
   const ready = st.phase === 'betting' && s.ready ? '<span class="ready-tag">Ready</span>' : '';
   const shownBet = s.hands.length > 1 ? s.bet.main : s.hands.length ? s.hands[0].bet : s.bet.main;
   const hot = s.streak >= 3 ? `hot ${s.streak >= 5 ? 'blazing' : ''}` : '';
@@ -1170,12 +1364,23 @@ function seatHTML(st, s, i, focus, spot) {
   </div>`;
 }
 
+// What one hand won or lost, shown on the hand when the round is settled: "Win +50", "Push", "Lose -50".
+function handNet(h) { return (h.paid || 0) - h.bet; }
+function signed(n) { return n > 0 ? '+' + money(n) : n < 0 ? '-' + money(-n) : ''; }
+function handResultText(h) { return h.result + (handNet(h) ? ' ' + signed(handNet(h)) : ''); }
+function handResultHTML(h) {
+  if (!h.result) return h.blackjack ? '<span class="result blackjack">Blackjack</span>' : '';
+  return `<span class="result ${h.result.toLowerCase()}">${handResultText(h)}</span>`;
+}
+// What a side bet won or lost. A bet that came back (the friend was not dealt in) shows as returned.
+function sideAmount(r) { return r.win ? '+' + money(r.pay - r.stake) : r.push ? 'Back ' + money(r.pay) : '-' + money(r.stake); }
+
 // Side bets this table offers (the host picks them in the settings).
 function sideKeys(st) { return (st?.settings?.sideBets || SIDE_KEYS).filter((k) => SIDE_BETS[k]); }
 
 // The main betting circle with the side bets in a ring around it.
 function spotAreaHTML(st, s, i, isMe, mainAmt) {
-  const canBet = isMe && (st.phase === 'betting' || st.phase === 'settled');
+  const canBet = isMe && st.phase === 'betting';
   const keys = sideKeys(st).filter((k) => !SIDE_BETS[k].pvp); // bets on your own cards only; the PvP bet has its own button
   const n = Math.max(1, keys.length);
   // Side bets are slices of one ring around the main bet.
@@ -1183,7 +1388,7 @@ function spotAreaHTML(st, s, i, isMe, mainAmt) {
   const pt = (r, deg) => { const a = (deg * Math.PI) / 180; return `${(r * Math.cos(a)).toFixed(2)} ${(r * Math.sin(a)).toFixed(2)}`; };
   const slices = keys.map((k, idx) => {
     const amt = s?.bet.sides[k] || 0;
-    const res = s?.sideResults.find((r) => r.key === k);
+    const res = S.dealing ? null : s?.sideResults.find((r) => r.key === k);
     const a0 = -90 + (360 / n) * idx + GAP / 2, a1 = -90 + (360 / n) * (idx + 1) - GAP / 2, mid = (a0 + a1) / 2;
     const d = `M ${pt(R2, a0)} A ${R2} ${R2} 0 0 1 ${pt(R2, a1)} L ${pt(R1, a1)} A ${R1} ${R1} 0 0 0 ${pt(R1, a0)} Z`;
     const [lx, ly] = pt((R1 + R2) / 2, mid).split(' ');
@@ -1292,11 +1497,26 @@ function trayHTML(st) {
   if (!seat) {
     return `<div class="tray-msg">${S.role === 'host' ? 'You are hosting. Press "Sit here" to play, or "Ask to be dealer" to be the bank.' : 'Press "Sit here" on an empty seat to play, or "Ask to be dealer" to be the bank.'} You have ${money(me.chips)} chips.</div>`;
   }
-  if (ph === 'betting' || ph === 'settled') {
+  if (ph === 'settled') {
+    // The round is over. Say what it paid; the bets on the table are last round's, not new ones.
+    if (S.dealing) return `<div class="tray-msg round-result"><b>${S.dealMany ? 'Dealing the cards' : 'Dealer is playing'}</b></div>`;
+    const parts = seat.hands.map((h, j) => `<span class="rr-part ${handNet(h) > 0 ? 'up' : handNet(h) < 0 ? 'down' : ''}">${seat.hands.length > 1 ? `Hand ${j + 1}: ` : ''}${handResultText(h)}</span>`)
+      .concat(seat.hands.length ? seat.sideResults.map((r) => `<span class="rr-part ${r.win ? 'up' : r.push ? '' : 'down'}">${esc(r.name)}: ${sideAmount(r)}</span>`) : []);
+    const head = !seat.hands.length ? 'You sat this round out' : seat.net > 0 ? `You won ${money(seat.net)}` : seat.net < 0 ? `You lost ${money(-seat.net)}` : 'You broke even';
+    const queued = S.rebetWhenOpen === st.round;
+    const rb = st.rebet ? `<button class="btn gold rebet-btn ${queued ? 'on' : ''}" data-act="rebet" title="Bet the same as last round (B)">${queued ? `✓ Rebet ${money(betTotal(st.rebet))} goes down when betting opens. Tap to cancel` : `↻ Rebet ${money(betTotal(st.rebet))}`}</button>` : '';
+    return `<div class="tray-msg round-result"><b class="${seat.net > 0 ? 'up' : seat.net < 0 ? 'down' : ''}">${head}</b>${parts.length ? `<div class="rr-parts">${parts.join('')}</div>` : ''}</div>
+      <div class="actions">${rb}<span class="hint">Betting opens when the cards are cleared.</span></div>`;
+  }
+  if (ph === 'betting') {
     const b = seat.bet;
+    const s = st.settings;
+    const limits = `<small>Table limits</small><span>Bet ${money(s.minBet)} to ${money(s.maxBet)}</span>${sideKeys(st).length ? `<span>Side bets up to ${money(s.maxSideBet)}</span>` : ''}`;
+    // With no bet down there is nothing to clear, so that place offers last round's bet again.
+    const rebet = st.rebet && !betTotal(b) ? `<button class="btn gold rebet-btn" data-act="rebet" title="Bet the same as last round (B)">↻ Rebet ${money(betTotal(st.rebet))}</button>` : '';
     return `
       <div class="tray-row">
-        <div class="balance"></div>
+        <div class="balance limits">${limits}</div>
         <div class="chip-rack">
           <button class="icon-btn" data-act="undo" ${S.undo.length ? '' : 'disabled'} title="Undo your last chip"><span class="ico">↶</span>Undo</button>
           ${CHIPS.map((v) => `<button class="chipv ${chipClass(v)} ${S.chip === v ? 'sel' : ''}" data-act="chip" data-v="${v}" title="Bet ${v}"><span>${v}</span></button>`).join('')}
@@ -1307,7 +1527,7 @@ function trayHTML(st) {
       <div class="actions">
         ${pvpBtnHTML(st, seat)}
         ${peekBtnHTML(st)}
-        <button class="btn" data-act="clear" ${betTotal(b) ? '' : 'disabled'}>Clear all</button>
+        ${rebet || `<button class="btn" data-act="clear" ${betTotal(b) ? '' : 'disabled'}>Clear all</button>`}
         <button class="btn danger" data-act="stand-up">Leave seat</button>
       </div>`;
   }
@@ -1339,6 +1559,7 @@ function trayHTML(st) {
       }).join('')}</div>`).join('')}</div>
       ${peekBtnHTML(st)}
       <div class="decide-timer" id="decide-timer"><span class="bar"><i id="decide-bar"></i></span><span class="num" id="decide-num"></span></div>
+      <div class="decide-warn" id="decide-warn" role="alert" hidden></div>
     </div>`;
   }
   return '';
@@ -1363,7 +1584,7 @@ function renderHostPanel(st) {
   const bettors = t.seats.filter((s) => s && s.bet.main > 0).length;
   $('#host-round').innerHTML = `
     <div class="actions" style="justify-content:flex-start">
-      <button class="btn primary" data-act="h-deal" ${(ph === 'betting' || ph === 'settled') && bettors ? '' : 'disabled'}>Deal</button>
+      <button class="btn primary" data-act="h-deal" ${ph === 'betting' && t.canDeal() ? '' : 'disabled'}>Deal</button>
       <button class="btn" data-act="h-ins" ${ph === 'insurance' ? '' : 'disabled'}>Close insurance</button>
       <button class="btn" data-act="h-skip" ${ph === 'playing' ? '' : 'disabled'}>Stand for slow player</button>
     </div>
@@ -1545,15 +1766,38 @@ function rulesHTML() {
 }
 
 // ---------- Clicks ----------
+// Chips, betting spots and move buttons act the moment the finger or mouse goes down. The table is
+// redrawn whenever anyone at it does something, and a button that is swapped between press and
+// release never gets its click, so waiting for the click loses taps at a busy table. The click that
+// follows a press is then ignored. A click with no press before it (Enter or Space on a focused
+// button, or a screen reader) still works as before.
+const FAST_ACTS = new Set(['chip', 'main-spot', 'side-spot', 'take-chip', 'undo', 'double-bet', 'clear', 'rebet', 'ready', 'ins', 'play', 'pvp-clear']);
+const BET_ACTS = new Set(['chip', 'main-spot', 'side-spot', 'take-chip', 'undo', 'double-bet', 'clear', 'ready', 'side-clear', 'pvp', 'pvp-clear']);
+let pressHandled = false;
+document.addEventListener('pointerdown', (e) => {
+  pressHandled = false;
+  if (e.button !== 0 || e.isPrimary === false || S.aim) return; // while aiming a reaction, taps on the table throw it
+  const el = e.target.closest?.('[data-act]');
+  if (!el || el.disabled || !app.contains(el) || !FAST_ACTS.has(el.dataset.act)) return;
+  pressHandled = true;
+  runAct(el);
+}, true);
 app.addEventListener('click', (e) => {
   const el = e.target.closest('[data-act]');
   if (!el || el.disabled) return;
+  // e.detail is 0 for a click made by the keyboard or by code, 1 or more for a mouse or touch click.
+  if (FAST_ACTS.has(el.dataset.act) && e.detail > 0 && pressHandled) { pressHandled = false; return; }
+  runAct(el);
+});
+function runAct(el) {
   const act = el.dataset.act;
   const st = S.state;
   const me = st?.players.find((p) => p.id === S.myId);
   const seat = me && me.seat !== null ? st.seats[me.seat] : null;
+  // Bets are only taken while betting is open.
+  if (BET_ACTS.has(act) && seat && st.phase !== 'betting') return;
   const bet = seat ? structuredClone(seat.bet) : { main: 0, sides: {} };
-  const sendBet = (ready = false) => send({ t: 'bet', main: bet.main, sides: bet.sides, target: bet.sides.friendBust ? bet.target : undefined, ready });
+  const sendBet = (ready = false) => placeBet(bet, ready);
   switch (act) {
     case 'look': {
       const l = readLook(); l[el.dataset.kind] = Number(el.dataset.i);
@@ -1619,7 +1863,7 @@ app.addEventListener('click', (e) => {
           b2.target = target;
           (S.sideChips.friendBust = S.sideChips.friendBust || []).push(S.chip);
           flyChip($(`.chip-rack [data-v="${S.chip}"]`) || el, el, S.chip);
-          send({ t: 'bet', main: b2.main, sides: b2.sides, target, ready: false });
+          placeBet(b2);
         });
         break;
       }
@@ -1667,7 +1911,9 @@ app.addEventListener('click', (e) => {
       sendBet();
       break;
     }
-    case 'undo': if (S.undo.length) { S.mainChips.pop(); const last = S.undo.pop(); send({ t: 'bet', main: last.main, sides: last.sides, target: last.target, ready: false }); chipSound(); } break;
+    case 'undo': if (S.undo.length) { S.mainChips.pop(); const last = S.undo.pop(); chipSound(); placeBet(last); } break;
+    case 'rebet': doRebet(); break;
+    case 'keys': $('#modal-body').innerHTML = keysHTML(); $('#modal').showModal(); break;
     case 'double-bet': {
       S.undo.push(structuredClone(seat.bet));
       S.mainChips = S.mainChips.concat(S.mainChips);
@@ -1705,7 +1951,7 @@ app.addEventListener('click', (e) => {
         b2.sides.friendBust = (b2.sides.friendBust || 0) + amount;
         b2.target = target;
         chipSound(1);
-        send({ t: 'bet', main: b2.main, sides: b2.sides, target, ready: false });
+        placeBet(b2);
       };
       if (bet.sides.friendBust && bet.target != null && st.seats[bet.target] && bet.target !== me.seat) add(bet.target);
       else pickFriend(st, me.seat, add);
@@ -1723,7 +1969,7 @@ app.addEventListener('click', (e) => {
       t.addLog(t.frozen ? 'The host froze the ledger: the house deals and those hands are not counted.' : 'The ledger freeze is off. The table waits for a player to be the dealer.');
     }); break;
     case 'h-ins': hostDo((t) => t.forceInsurance()); break;
-    case 'h-skip': hostDo((t) => t.skipTurn()); break;
+    case 'h-skip': fresh(() => 0, () => hostDo((t) => t.skipTurn())); break;
     case 'h-shuffle': hostDo((t) => t.newShoe()); break;
     case 'h-give': {
       const amt = Math.abs(Number($('#give-amt').value) || 0) * Number(el.dataset.sign);
@@ -1755,7 +2001,7 @@ app.addEventListener('click', (e) => {
       break;
     }
   }
-});
+}
 
 // Close the menu when clicking anywhere else.
 document.addEventListener('click', (e) => {
@@ -1787,22 +2033,42 @@ function playMove(a) {
   send({ t: 'action', a });
 }
 
-// Keyboard play: H hit, S stand, D double, P split, U surrender, R type a bet (Enter confirms), Space deal me in.
+// Keyboard play: H hit, S stand, D double, P split, U surrender, Y and N answer insurance,
+// R type a bet (Enter confirms), B rebet, Space deal me in.
+const KEY_HELP = [['H', 'Hit'], ['S', 'Stand'], ['D', 'Double'], ['P', 'Split'], ['U', 'Surrender'], ['Y / N', 'Take insurance, or say no'],
+  ['R', 'Type your bet, then Enter'], ['B', 'Rebet: the same bet as last round'], ['Space', 'Deal me in'], ['Esc', 'Put the picked chip down']];
+function keysHTML() {
+  return `<h2 style="margin-top:0">Keyboard keys</h2><table class="keys-help">${KEY_HELP.map(([k, what]) => `<tr><td>${k.split(' / ').map((x) => `<kbd>${x}</kbd>`).join(' ')}</td><td>${what}</td></tr>`).join('')}</table>
+    <p class="hint">Keys work when you are not typing in a box.</p>`;
+}
 document.addEventListener('keydown', (e) => {
-  if (e.target.matches('input, select, textarea') || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.target.matches('input, select, textarea') || e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
+  if ($('#modal')?.open) return;
   const st = S.state;
   if (!st) return;
   const k = e.key.toLowerCase();
   const map = { h: 'hit', s: 'stand', d: 'double', p: 'split', u: 'surrender' };
-  if (map[k] && st.actions?.includes(map[k])) { playMove(map[k]); return; }
+  // While the first cards are still being dealt there is nothing to decide yet.
+  const wait = dealingNow() && S.dealMany;
+  if (map[k] && st.actions?.includes(map[k])) { if (!wait) playMove(map[k]); return; }
   const { seat } = myInfo(st);
-  const between = st.phase === 'betting' || st.phase === 'settled';
-  if (!seat || !between) return;
+  if (!seat) return;
+  if (st.phase === 'insurance' && (k === 'y' || k === 'n')) {
+    if (!wait && seat.hands.length && !seat.insuranceDecided) send({ t: 'insurance', take: k === 'y' });
+    return;
+  }
+  if (k === 'b' && (st.phase === 'betting' || st.phase === 'settled')) {
+    if (st.rebet) doRebet(); else toast('There is no earlier bet to repeat yet.');
+    return;
+  }
+  if (st.phase !== 'betting') return;
   if (k === 'r') { e.preventDefault(); openRaise(); }
   else if (e.key === ' ' || e.code === 'Space') {
     e.preventDefault();
-    if (seat.bet.main >= st.settings.minBet && !seat.ready) send({ t: 'bet', main: seat.bet.main, sides: seat.bet.sides, target: seat.bet.target, ready: true });
-    else if (!seat.bet.main) toast('Place a bet first. Press R to type one.');
+    if (st.noDealer) toast('The cards wait for a dealer.');
+    else if (seat.bet.main >= st.settings.minBet && !seat.ready) placeBet(seat.bet, true);
+    else if (!seat.bet.main) toast('Place a bet first. Press R to type one, or B to rebet.');
+    else if (seat.bet.main < st.settings.minBet) toast(`Table minimum is ${money(st.settings.minBet)}.`);
   }
 });
 
@@ -1831,8 +2097,8 @@ function openRaise() {
     const cur = S.state.seats[me.seat].bet;
     S.undo.push(structuredClone(cur));
     S.mainChips = [];
-    send({ t: 'bet', main: amt, sides: amt ? cur.sides : {}, target: cur.target, ready: false });
     chipSound(2);
+    placeBet({ main: amt, sides: amt ? cur.sides : {}, target: cur.target });
     close();
   });
 }
@@ -1845,7 +2111,12 @@ if (params.get('host') && safeGet('bj-host')) {
     startHost(true);
   } else showLanding();
 } else {
-  showLanding();
+  // A guest who reloads the page goes straight back to the same table with the same name, buy-in and look.
+  const room = (params.get('room') || '').trim().toLowerCase();
+  let back = null;
+  try { back = room && JSON.parse(sessGet('bj-join-' + room) || 'null'); } catch {}
+  if (back && back.name && back.buyIn >= 1) startPlayer(room, back);
+  else showLanding();
 }
 
 
@@ -2108,13 +2379,14 @@ function badBeat(st) {
 
 
 // Short message across the middle of the table.
-function banner(title, sub, kind) {
+function banner(title, sub, kind, ms = 2700) {
   const el = document.createElement('div');
   el.className = 'table-banner ' + (kind || '');
+  el.setAttribute('role', 'status');
   el.innerHTML = `<b>${esc(title)}</b>${sub ? `<span>${esc(sub)}</span>` : ''}`;
   document.body.appendChild(el);
-  setTimeout(() => el.classList.add('out'), 2200);
-  setTimeout(() => el.remove(), 2700);
+  setTimeout(() => el.classList.add('out'), ms - 500);
+  setTimeout(() => el.remove(), ms);
 }
 
 document.addEventListener('change', (e) => {

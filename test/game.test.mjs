@@ -262,3 +262,116 @@ const da = t.players.a.chips, dd = t.players.d.chips;
   t.deal(); assert.throws(() => t.peek('a'));
   console.log('dealer bank limit tests passed');
 }
+{
+  // Rebet: the last played bet is offered again, cut down to what fits now. It is never placed on its own.
+  const t = Object.assign(new G.Table({ maxSideBet: 100 }), { frozen: true });
+  t.join('a', 'A', 1000); t.join('b', 'B', 1000); t.sit('a', 0); t.sit('b', 2);
+  assert.equal(t.rebetFor('a'), null);
+  assert.equal(t.publicState('a').rebet, null);
+  t.setBet('a', { main: 50, sides: { hot3: 10, bustIt: 5, friendBust: 5 }, target: 2, seq: 7 });
+  assert.equal(t.seats[0].betSeq, 7);
+  assert.equal(t.publicState('a').seats[0].betSeq, 7);
+  assert.throws(() => t.setBet('a', { main: 5000, sides: {}, seq: 8 }));
+  assert.equal(t.seats[0].betSeq, 7); // a refused bet keeps the old number
+  t.setBet('b', { main: 25, sides: {} });
+  t.deal();
+  let g = 0;
+  while (t.phase !== 'settled' && g++ < 200) { if (t.phase === 'insurance') t.forceInsurance(); else if (t.phase === 'playing') t.skipTurn(); else t.dealerStep(); }
+  t.startBetting();
+  assert.deepEqual(t.seats[0].bet, { main: 0, sides: {} }); // nothing is bet again by itself
+  t.players.a.chips = 1000;
+  assert.deepEqual(t.rebetFor('a'), { main: 50, sides: { hot3: 10, friendBust: 5, bustIt: 5 }, target: 2 });
+  assert.deepEqual(t.publicState('a').rebet, t.rebetFor('a'));
+  assert.equal(t.publicState('b').rebet.main, 25);
+  // The friend moved to another seat: the PvP bet follows the person, not the chair.
+  t.sit('b', 4);
+  assert.equal(t.rebetFor('a').target, 4);
+  // The friend left: the PvP part is dropped.
+  t.standUp('b');
+  assert.equal(t.rebetFor('a').sides.friendBust, undefined);
+  assert.equal(t.rebetFor('a').target, undefined);
+  // A side bet the table no longer offers is dropped, and limits apply.
+  t.updateSettings({ sideBets: ['hot3'], maxSideBet: 4, maxBet: 40 });
+  assert.deepEqual(t.rebetFor('a'), { main: 40, sides: { hot3: 4 } });
+  // Never more than the chips the player has: the main bet first, then side bets.
+  t.players.a.chips = 42;
+  assert.deepEqual(t.rebetFor('a'), { main: 40, sides: { hot3: 2 } });
+  t.players.a.chips = 30;
+  assert.deepEqual(t.rebetFor('a'), { main: 30, sides: {} });
+  t.players.a.chips = 0;
+  assert.equal(t.rebetFor('a'), null);
+  // The offered bet is always one the table accepts.
+  t.players.a.chips = 42;
+  t.setBet('a', { ...t.rebetFor('a'), ready: true });
+  assert.equal(t.seats[0].bet.main, 40);
+  t.standUp('a');
+  assert.equal(t.rebetFor('a'), null);
+  console.log('rebet tests passed');
+}
+{
+  // A player who drops out has a short while to come back before their hand is stood.
+  const mk = () => {
+    const t = Object.assign(new G.Table(), { frozen: true });
+    t.join('a', 'A', 1000); t.join('b', 'B', 1000); t.sit('a', 0); t.sit('b', 1);
+    t.setBet('a', { main: 10, sides: {} }); t.setBet('b', { main: 10, sides: {} });
+    return t;
+  };
+  // Cards in the order they are dealt: seat 0, seat 1, dealer, seat 0, seat 1, dealer.
+  const deal = (t, str) => {
+    t.deal();
+    const [a1, b1, d1, a2, b2, d2] = cs(str);
+    t.seats[0].hands[0].cards = [a1, a2]; t.seats[1].hands[0].cards = [b1, b2]; t.dealer.cards = [d1, d2];
+    t.seats.forEach((s) => s && s.hands.forEach((h) => (h.done = false)));
+    t.phase = d1.r === 'A' ? 'insurance' : 'playing';
+    t.seats.forEach((s) => { if (s) s.insuranceDecided = false; });
+    t.turn = t.phase === 'playing' ? { seat: 0, hand: 0 } : null;
+  };
+  let t = mk(); deal(t, '5♠ 6♠ 9♦ 7♥ 8♥ 7♣');
+  assert.equal(t.phase, 'playing'); assert.deepEqual(t.turn, { seat: 0, hand: 0 });
+  t.disconnect('a');
+  assert.equal(t.publicState('b').seats[0].connected, false);
+  assert.deepEqual(t.turn, { seat: 0, hand: 0 }); // still their turn
+  // They come back in time and play on.
+  t.join('a', 'A');
+  assert.equal(t.players.a.gone, false);
+  assert.equal(t.markGone('a'), false);
+  t.action('a', 'stand'); assert.deepEqual(t.turn, { seat: 1, hand: 0 });
+  // They stay away: their hand is stood and the next player is up.
+  t = mk(); deal(t, '5♠ 6♠ 9♦ 7♥ 8♥ 7♣');
+  t.disconnect('a');
+  assert.equal(t.markGone('a'), true);
+  assert.equal(t.seats[0].hands[0].done, true); assert.deepEqual(t.turn, { seat: 1, hand: 0 });
+  // Dropping out before their turn: the turn waits for them until they count as gone.
+  t = mk(); deal(t, '5♠ 6♠ 9♦ 7♥ 8♥ 7♣');
+  t.disconnect('b');
+  t.action('a', 'stand');
+  assert.deepEqual(t.turn, { seat: 1, hand: 0 }); assert.equal(t.phase, 'playing');
+  t.markGone('b');
+  assert.equal(t.phase, 'dealer');
+  // Already gone when their turn comes: skipped at once.
+  t = mk(); deal(t, '5♠ 6♠ 9♦ 7♥ 8♥ 7♣');
+  t.disconnect('b'); t.markGone('b');
+  assert.deepEqual(t.turn, { seat: 0, hand: 0 });
+  t.action('a', 'stand');
+  assert.equal(t.phase, 'dealer');
+  // Insurance: a gone player counts as "no", and the round goes on.
+  t = mk(); deal(t, '5♠ 6♠ A♦ 7♥ 8♥ 7♣');
+  assert.equal(t.phase, 'insurance');
+  t.insurance('a', false); t.disconnect('b');
+  assert.equal(t.phase, 'insurance');
+  t.markGone('b');
+  assert.equal(t.phase, 'playing');
+  // Later rounds: a player who is away is not dealt in and does not hold up the deal.
+  let g = 0; while (t.phase !== 'settled' && g++ < 200) { if (t.phase === 'playing') t.skipTurn(); else t.dealerStep(); }
+  assert.equal(t.phase, 'settled');
+  t.startBetting();
+  t.setBet('a', { main: 10, sides: {}, ready: true });
+  assert.equal(t.canDeal(), true); assert.equal(t.dealCount(), 4);
+  t.deal();
+  assert.equal(t.seats[1].hands.length, 0); assert.equal(t.seats[0].hands.length, 1);
+  // A kicked player whose turn it is does not hold up the round.
+  t = mk(); deal(t, '5♠ 6♠ 9♦ 7♥ 8♥ 7♣');
+  t.kick('a');
+  assert.deepEqual(t.turn, { seat: 1, hand: 0 });
+  console.log('away player tests passed');
+}

@@ -436,6 +436,7 @@ export class Table {
     let p = this.players[clientId];
     if (p) {
       p.connected = true;
+      p.gone = false;
       p.name = name;
       if (look) p.look = lk;
       return p;
@@ -569,6 +570,25 @@ export class Table {
     p.connected = false;
   }
 
+  // A player who lost the connection gets a short while to come back (the host's browser keeps the
+  // clock). When that time is up they count as gone: the hand they are on is stood, a pending
+  // insurance offer is turned down, and their later turns are skipped until they return.
+  markGone(clientId) {
+    const p = this.players[clientId];
+    if (!p || p.connected) return false;
+    p.gone = true;
+    const seat = p.seat !== null ? this.seats[p.seat] : null;
+    if (!seat || !seat.hands.length) return true;
+    if (this.phase === 'insurance' && !seat.insuranceDecided) {
+      seat.insuranceDecided = true;
+      if (this.allInsuranceDecided()) this.afterInsurance();
+    } else if (this.phase === 'playing' && this.turn && this.turn.seat === p.seat) {
+      this.addLog(`${p.name} is away, dealer stands.`);
+      this.skipTurn();
+    }
+    return true;
+  }
+
   kick(clientId) {
     const p = this.players[clientId];
     if (!p) return;
@@ -586,6 +606,9 @@ export class Table {
     if (this.banker === clientId && !this.inRound()) this.banker = null;
     p.kicked = true;
     p.connected = false;
+    p.gone = true;
+    // If it was their turn, the round moves on.
+    if (this.phase === 'playing' && this.turn && this.seats[this.turn.seat]?.playerId === clientId) this.advance();
   }
 
   // Buying in more play chips. The host approves each request.
@@ -691,6 +714,38 @@ export class Table {
     if (total > p.chips) throw new Error('Not enough chips.');
     seat.bet = target === null ? { main, sides } : { main, sides, target };
     seat.ready = main > 0 && !!bet.ready;
+    // The number the player's browser gave this bet. It comes back in their state, so the browser
+    // knows which of its own taps the table has already counted.
+    seat.betSeq = Number(bet.seq) || 0;
+  }
+
+  // The player's bet from the last round they played, cut down to what fits now: their chips, the
+  // table limits, the side bets still offered and a PvP friend who is still sitting. Null if there is none.
+  // Nothing is placed here; the player presses Rebet and it goes through setBet like any other bet.
+  rebetFor(clientId) {
+    const p = this.players[clientId];
+    const last = p?.lastBet;
+    if (!p || p.seat === null || !last || !(last.main > 0)) return null;
+    const s = this.settings;
+    let left = p.chips;
+    const main = Math.min(last.main, s.maxBet, left);
+    if (!(main > 0)) return null;
+    left -= main;
+    const on = s.sideBets || SIDE_KEYS;
+    const sides = {};
+    let target = null;
+    for (const k of SIDE_KEYS) {
+      const v = Math.min(last.sides?.[k] || 0, s.maxSideBet, left);
+      if (!(v > 0) || !on.includes(k)) continue;
+      if (k === 'friendBust') {
+        const ti = this.seats.findIndex((x) => x && x.playerId === last.targetId && x.playerId !== clientId);
+        if (ti < 0) continue;
+        target = ti;
+      }
+      sides[k] = v;
+      left -= v;
+    }
+    return target === null ? { main, sides } : { main, sides, target };
   }
 
   startBetting() {
@@ -752,7 +807,7 @@ export class Table {
       // A bet under the minimum when betting closes stays on the spot but is not dealt.
       if (seat.bet.main >= this.settings.minBet && stake <= p.chips && p.connected !== false) {
         p.chips -= stake;
-        p.lastBet = seat.bet;
+        p.lastBet = { main: seat.bet.main, sides: { ...seat.bet.sides }, targetId: this.seats[seat.bet.target]?.playerId ?? null };
         seat.hands = [newHand(seat.bet.main)];
         seat.staked = stake;
         seat.returned = 0;
@@ -934,9 +989,10 @@ export class Table {
       for (let j = 0; j < seat.hands.length; j++) {
         if (!seat.hands[j].done) {
           this.turn = { seat: i, hand: j };
-          // A player who left gets an automatic stand.
+          // A player who is gone gets an automatic stand. One who only just dropped out still has
+          // a little time to come back (see markGone), so the turn waits for them.
           const p = this.players[seat.playerId];
-          if (!p.connected) { seat.hands[j].done = true; continue; }
+          if (!p.connected && (p.gone || p.kicked)) { seat.hands[j].done = true; continue; }
           return;
         }
       }
@@ -1089,6 +1145,7 @@ export class Table {
           connected: p.connected,
           bet: s.bet,
           ready: s.ready,
+          betSeq: s.betSeq || 0,
           streak: this.players[s.playerId]?.streak || 0,
           insurance: s.insurance,
           insuranceDecided: s.insuranceDecided,
@@ -1113,6 +1170,7 @@ export class Table {
       shoe: { left: this.shoe.length, size: this.shoeSize, roundsSinceShuffle: this.roundsSinceShuffle },
       log: this.log.slice(-12),
       you: forClientId,
+      rebet: this.rebetFor(forClientId),
       actions: this.allowedActions(forClientId),
     };
   }
@@ -1130,6 +1188,8 @@ export class Table {
     if (!Array.isArray(t.seats) || !t.seats.length) t.seats = Array(seatCount(obj.settings?.seats)).fill(null);
     t.settings = { ...DEFAULT_SETTINGS, ...obj.settings, seats: t.seats.length };
     Object.values(t.players).forEach((p) => (p.connected = false));
+    // Nobody is here straight after a reload. They get the usual short while to come back.
+    Object.values(t.players).forEach((p) => (p.gone = false));
     return t;
   }
 }
