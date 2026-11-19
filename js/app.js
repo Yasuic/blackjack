@@ -1185,7 +1185,7 @@ function statusText(st) {
   const turnSeat = st.turn && st.seats[st.turn.seat];
   if (S.dealing && S.dealMany && (st.phase === 'insurance' || st.phase === 'playing')) return 'Dealing the cards';
   switch (st.phase) {
-    case 'betting': return st.noDealer ? 'Bets can go down. The cards wait for a dealer' : st.bankShort ? `The dealer has ${money(st.banker?.chips || 0)} chips, fewer than the bets on the table. Lower the bets or the dealer buys in` : 'Place your bets';
+    case 'betting': return st.noDealer ? 'Bets can go down. The cards wait for a dealer' : st.bankShort ? ((st.banker?.chips || 0) < 0 ? `The dealer owes ${money(-st.banker.chips)} chips and has to buy in before the next deal` : `The dealer has ${money(st.banker?.chips || 0)} chips, fewer than the bets on the table. Lower the bets or the dealer buys in`) : waitingOnMe(st) ? 'The others are ready. Bet to join this round' : 'Place your bets';
     case 'insurance': return 'Dealer shows an ace. Insurance?';
     case 'playing': return turnSeat ? (turnSeat.playerId === S.myId ? 'Your turn' : turnSeat.connected === false ? `${turnSeat.name} is away. The dealer stands for them soon` : `${turnSeat.name} is playing`) : '';
     case 'dealer': return 'Dealer is playing';
@@ -1194,6 +1194,11 @@ function statusText(st) {
   return '';
 }
 
+// You are seated with no bet down while somebody else has already pressed "Deal me in".
+function waitingOnMe(st) {
+  const { seat, isBanker } = myInfo(st);
+  return !!seat && !isBanker && !seat.bet.main && st.seats.some((s) => s && s.ready);
+}
 function myInfo(st) {
   const me = st.players.find((p) => p.id === S.myId);
   const seat = me && me.seat !== null ? st.seats[me.seat] : null;
@@ -1346,7 +1351,7 @@ function feltHTML(st) {
   let dealerSeat;
   if (b) {
     const net = b.net && !S.dealing ? `<span class="net ${b.net > 0 ? 'up' : 'down'}">${b.net > 0 ? '+' : ''}${money(b.net)}</span>` : '';
-    dealerSeat = `<div class="dealer-name" ${isBanker ? '' : `data-throw-at="${b.id}" title="Tap to throw something at the dealer"`}>${esc(b.name)}${isBanker ? ' (you)' : ''} is the dealer <span class="chips">${money(b.chips)}</span> ${net}
+    dealerSeat = `<div class="dealer-name" ${isBanker ? '' : `data-throw-at="${b.id}" title="Tap to throw something at the dealer"`}>${esc(b.name)}${isBanker ? ' (you)' : ''} is the dealer ${isBanker ? '' : `<span class="chips">${money(b.chips)}</span>`} ${net}
 </div>`;
   } else {
     dealerSeat = `<div class="dealer-name">${st.frozen ? 'Dealer: house (automatic)' : 'No dealer yet'}
@@ -1433,7 +1438,10 @@ function dealMeInHTML(st) {
   // Only for a fresh bet, and only when the table can deal: with no dealer, or a dealer whose chips
   // do not cover the bets, the line above already says what the table is waiting for.
   if (isBanker || !seat || st.phase !== 'betting' || !seat.bet.main || st.noDealer || st.bankShort) return '';
-  if (seat.ready) return `<div class="deal-me-in waiting"><span>Waiting for the others...</span><button class="btn small" data-act="ready">Not ready</button></div>`;
+  if (seat.ready) {
+    const slow = st.seats.filter((s) => s && !s.ready && s.connected !== false && s.playerId !== S.myId).map((s) => s.name);
+    return `<div class="deal-me-in waiting"><span>Waiting for ${slow.length ? esc(slow.slice(0, 2).join(' and ')) + (slow.length > 2 ? ' and others' : '') : 'the deal'}</span><button class="btn small" data-act="ready">Not ready</button></div>`;
+  }
   if (seat.bet.main < st.settings.minBet) return `<div class="deal-me-in waiting"><span class="under-min">Table minimum ${money(st.settings.minBet)}. Add ${money(st.settings.minBet - seat.bet.main)} more to be dealt in.</span></div>`;
   return `<div class="deal-me-in"><button class="deal-btn" data-act="ready">Deal me in</button></div>`;
 }
@@ -1701,7 +1709,7 @@ function trayHTML(st) {
   const ph = st.phase;
   if (isBanker) {
     if (!(ph === 'betting' || ph === 'settled')) return '';
-    return `<div class="tray-msg">You are the dealer. Your ${money(st.banker.chips)} chips pay winners and collect losing bets.</div>
+    return `<div class="tray-msg">${st.banker.chips < 0 ? `You are the dealer and you owe ${money(-st.banker.chips)} chips. Tap your balance to buy in.` : 'You are the dealer. Your chips pay winners and collect losing bets.'}</div>
       ${st.phase === 'betting' || st.phase === 'settled' ? '<div class="actions"><button class="btn" data-act="leave-dealer">Leave dealer seat</button></div>' : ''}`;
   }
   if (!seat) {
