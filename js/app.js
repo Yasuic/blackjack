@@ -530,6 +530,7 @@ function buildLayout() {
             <button class="menu-item" data-act="chart">📊 Basic strategy chart</button>
             <button class="menu-item" data-act="hints" id="hints-btn">${hintsOn() ? '💡 Strategy hints: on' : '💡 Strategy hints: off'}</button>
             <button class="menu-item" data-act="room3d">${use3D() ? '🧊 3D room: on' : '🧊 3D room: off'}</button>
+            ${use3D() ? `<button class="menu-item" data-act="pixel">${pixelOn() ? '👾 Pixel look: on' : '👾 Pixel look: off'}</button>` : ''}
             <button class="menu-item" data-act="mute" id="mute-btn">${isMuted() ? '🔇 Sound: off' : '🔊 Sound: on'}</button>`)}
           ${host ? `
           ${fold('m-round', '🃏 Round', '<div id="host-round"></div>')}
@@ -545,9 +546,9 @@ function buildLayout() {
     </div>
     <div class="main player">
       <div>
-        ${use3D() ? '<div class="room" id="room"><div class="felt" id="felt"></div></div><div class="felt-actions hud" id="felt-actions"></div>'
+        ${use3D() ? '<div class="room" id="room"><div class="felt" id="felt"></div></div><div class="hud3d" id="hud3d"><div class="hud-top" id="hud-top"></div><div class="felt-actions hud" id="felt-actions"></div><div class="tray" id="tray"></div></div>'
           : '<div class="table-stage" id="stage"><div class="felt" id="felt"></div><div class="felt-actions" id="felt-actions"></div></div>'}
-        <div class="tray" id="tray"></div>
+        ${use3D() ? '' : '<div class="tray" id="tray"></div>'}
         <div class="panel controls" id="controls"></div>
       </div>
     </div>
@@ -555,14 +556,14 @@ function buildLayout() {
     <button class="float-throw" data-act="throw-open" title="Pick a reaction, then tap a player or the dealer">😀 Reactions</button>
     <button class="float-chart" data-act="chart" title="Basic strategy chart">Chart</button>
     <button class="float-balance" id="float-balance" data-act="buyin-open" title="Tap to buy in more chips" hidden></button>
-    <div class="zoom-ctl">${use3D() ? '<button class="view-reset" data-act="view-reset" title="Back to your seat">Reset view</button>' : ''}<label class="tilt-ctl" title="Camera angle: drag to tilt the table"><span>Angle</span><input type="range" id="tilt" min="0" max="50" step="1" /></label><button data-act="zoom" data-d="-1" aria-label="Zoom out">−</button><span id="zoom-val"></span><button data-act="zoom" data-d="1" aria-label="Zoom in">+</button></div>
+    <div class="zoom-ctl">${use3D() ? '<button class="view-btn" data-act="look" data-d="1" title="Turn to the players on your left" aria-label="Look left">◀<span> Look left</span></button><button class="view-btn view-reset" data-act="view-reset" title="Back to your own seat">Reset view</button><button class="view-btn" data-act="look" data-d="-1" title="Turn to the players on your right" aria-label="Look right"><span>Look right </span>▶</button>' : ''}<label class="tilt-ctl" title="Camera angle: drag to tilt the table"><span>Angle</span><input type="range" id="tilt" min="0" max="50" step="1" /></label><button data-act="zoom" data-d="-1" aria-label="Zoom out">−</button><span id="zoom-val"></span><button data-act="zoom" data-d="1" aria-label="Zoom in">+</button></div>
     <div class="buyin-pop" id="buyin-pop" hidden></div>
     <div class="host-pops" id="host-pops"></div>
     <div class="ledger ${safeGet('bj-ledger') !== '1' ? 'closed' : ''}" id="ledger"></div>`;
   applyZoom();
   if (use3D()) {
     document.body.classList.add('room3d');
-    try { S.room = initRoom($('#room'), $('#felt'), { phone: innerWidth < 700 }); }
+    try { S.room = initRoom($('#room'), $('#felt'), { phone: innerWidth < 700, pixel: pixelOn(), hud: $('#hud3d') }); }
     catch (e) { console.error(e); safeSet('bj-3d', '0'); toast('The 3D room could not start on this device.'); }
   }
 }
@@ -571,6 +572,19 @@ function buildLayout() {
 function use3D() { return params.get('flat') !== '1' && (safeGet('bj-3d') === '1' || params.get('room') === '3d' || params.get('3d') === '1') && webglOK(); }
 
 // Zoom the table a little in or out. Saved for next time on this device.
+function pixelOn() { return safeGet('bj-pixel') === '1'; }
+// Who is sitting where, for the figures in the 3D room.
+function roomPeople(st) {
+  const { order, spots } = seatSpots(st);
+  const at = {};
+  order.forEach((i, pos) => { at[i] = spots[pos]; });
+  const list = st.players.filter((p) => (p.seat !== null && p.seat !== undefined) || st.banker?.id === p.id).map((p) => {
+    const isDealer = st.banker?.id === p.id, seat = isDealer ? null : p.seat;
+    return { id: p.id, name: p.name, look: p.look || { skin: 2, hair: 0 }, seat, seats: st.seats.length, isMe: p.id === S.myId, isDealer,
+      x: at[seat]?.x, y: at[seat]?.y, bet: seat !== null && st.seats[seat] ? betTotal(st.seats[seat].bet) : 0 };
+  });
+  return [list, order.map((i, pos) => ({ seat: i, x: spots[pos].x, y: spots[pos].y }))];
+}
 function getZoom() { const z = Number(safeGet('bj-zoom')); return z >= 0.6 && z <= 1.6 ? z : 1; }
 function getTilt() { const v = safeGet('bj-tilt'); const n = Number(v); return v !== null && n >= 0 && n <= 50 ? n : 30; }
 // The table is drawn at one fixed size and scaled to fit the window, so the page never scrolls.
@@ -708,6 +722,11 @@ function render(note) {
   if (S.room) S.room.setSide(myInfo(st).isBanker ? 'dealer' : 'player');
   else $('#felt').classList.toggle('flip', myInfo(st).isBanker);
   $('#felt').innerHTML = feltHTML(st);
+  // In the 3D room the status line, the timer and "Deal me in" sit with the buttons at the bottom of the screen, so they never leave it.
+  if (S.room) {
+    $('#hud-top').innerHTML = `<div class="status">${esc(statusText(st))} <span id="timer" class="timer" hidden></span></div>${dealMeInHTML(st)}`;
+    S.room.setPeople(...roomPeople(st));
+  }
   const tray = $('#tray');
   // During a hand the move buttons appear in the middle of the table, only when you have to act.
   const between = st.phase === 'betting' || st.phase === 'settled';
@@ -1035,8 +1054,8 @@ function feltHTML(st) {
     ${arcTextHTML(st)}
     <div class="mid-band">
       ${frozenHTML(st)}
-      <div class="status">${esc(statusText(st))} <span id="timer" class="timer" hidden></span></div>
-      ${dealMeInHTML(st)}
+      ${S.room ? '' : `<div class="status">${esc(statusText(st))} <span id="timer" class="timer" hidden></span></div>
+      ${dealMeInHTML(st)}`}
     </div>
     <div class="seats">${order.map((i, pos) => seatHTML(st, st.seats[i], i, pos === mid, spots[pos])).join('')}</div>`;
 }
@@ -1631,6 +1650,8 @@ app.addEventListener('click', (e) => {
     case 'throw-open': openThrowPanel(el); break;
     case 'poop-dealer': send({ t: 'throw', item: 'poop', to: st.banker ? st.banker.id : 'house', paid: true }); el.closest('.badbeat')?.remove(); break;
     case 'view-reset': S.room?.home(); break;
+    case 'look': S.room?.look(Number(el.dataset.d)); break;
+    case 'pixel': safeSet('bj-pixel', pixelOn() ? '0' : '1'); el.textContent = pixelOn() ? '👾 Pixel look: on' : '👾 Pixel look: off'; S.room?.setPixel(pixelOn()); break;
     case 'room3d': safeSet('bj-3d', use3D() ? '0' : '1'); location.reload(); break;
     case 'zoom': if (S.room) { S.room.zoomBy(Number(el.dataset.d)); break; } safeSet('bj-zoom', String(Math.round(Math.min(1.6, Math.max(0.6, getZoom() + 0.1 * Number(el.dataset.d))) * 10) / 10)); applyZoom(); break;
     case 'menu': $('#menu-wrap').classList.toggle('open'); break;

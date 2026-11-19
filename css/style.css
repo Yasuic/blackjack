@@ -706,25 +706,6 @@ body.in-room .tray { height: 150px; min-height: 150px; overflow: hidden; align-c
 .move-btn.tile.dim:hover { filter: none; }
 .move-btn.tile:disabled { background: #2b3038; opacity: 1; color: rgba(255,255,255,.35); }
 
-/* ---------- 3D room ---------- */
-body.room3d .main.player { padding: 0; }
-body.room3d .room { position: fixed; left: 0; right: 0; bottom: 0; top: 60px; overflow: hidden; background: #120806; z-index: 0; }
-body.room3d .room-css, body.room3d .room-gl { position: absolute !important; inset: 0; }
-body.room3d .room-gl { pointer-events: none; z-index: 1; }
-body.room3d .room-css { z-index: 0; }
-body.room3d .room { cursor: grab; touch-action: none; }
-body.room3d .room:active { cursor: grabbing; }
-.felt.in3d { margin: 0 !important; box-shadow: inset 0 0 90px rgba(0,0,0,.5) !important; border-radius: 28px 28px 50% 50% / 28px 28px 34% 34% !important; transform-style: flat; cursor: default; }
-.felt.in3d::before { border-radius: 20px 20px 50% 50% / 20px 20px 34% 34% !important; }
-body.room3d .tray { position: fixed; left: 50%; bottom: 10px; transform: translateX(-50%); z-index: 30; background: rgba(12,15,20,.86); backdrop-filter: blur(6px); margin: 0; }
-body.room3d .tray:empty, body.room3d .tray:not(:has(*)) { visibility: hidden; }
-body.room3d .felt-actions.hud { position: fixed !important; left: 50%; top: 22%; transform: translateX(-50%); z-index: 25 !important; }
-body.room3d .tilt-ctl { display: none; }
-body.room3d #zoom-val { display: none; }
-.view-reset { width: auto !important; padding: 0 12px; font-size: 13px !important; }
-@media (max-width: 560px) { body.room3d .felt-actions.hud { top: 16%; } }
-body.room3d .felt-actions.hud { top: auto; bottom: 18px; }
-body.room3d .felt-actions.hud > .decide { padding: 12px 30px 6px; }
 /* Ledger sits at the top right under the menu bar so it never covers the chips. */
 body.in-room .ledger { top: 70px; bottom: auto; right: 12px; }
 .table-stage { --uz: 1; }
@@ -842,3 +823,51 @@ body.aiming .seat[id^="seat-"]:not(.empty), body.aiming #dealer-zone { cursor: c
 
 .offline-note { position: fixed; left: 50%; top: 84px; transform: translateX(-50%); z-index: 80; width: min(460px, calc(100vw - 24px)); padding: 14px 16px; border-radius: 14px; background: rgba(20,14,14,.96); border: 1px solid rgba(255,120,120,.55); box-shadow: 0 12px 30px rgba(0,0,0,.6); font-size: 14px; line-height: 1.45; display: grid; gap: 10px; text-align: center; }
 .offline-note .btn { text-decoration: none; display: inline-block; }
+
+
+/* ---------- 3D room ---------- */
+body.room3d .main.player { padding: 0; }
+body.room3d .room { position: fixed; left: 0; right: 0; bottom: 0; top: 60px; overflow: hidden; z-index: 0; cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; overscroll-behavior: none;
+  background: radial-gradient(ellipse at 50% 40%, #2a1710 0%, #120806 70%); }
+body.room3d .room.dragging { cursor: grabbing; }
+body.room3d .room-css, body.room3d .room-gl { position: absolute !important; inset: 0; }
+body.room3d .room-gl { pointer-events: none; z-index: 1; }
+body.room3d .room-gl.pixel { image-rendering: pixelated; image-rendering: crisp-edges; image-rendering: pixelated; }
+body.room3d .room-css { z-index: 0; }
+.felt.in3d { margin: 0 !important; box-shadow: inset 0 0 90px rgba(0,0,0,.5) !important; border-radius: 28px 28px 50% 50% / 28px 28px 34% 34% !important; transform-style: flat; cursor: default; backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+.felt.in3d::before { border-radius: 20px 20px 50% 50% / 20px 20px 34% 34% !important; }
+/* The padded rail hides a thin strip at the near edge of the felt, so the seats sit a little further in. */
+.felt.in3d > .seats { bottom: 18px; }
+/* Everything you press during a hand lives in one stack at the bottom of the screen. It never moves with the camera. */
+body.room3d .hud3d { position: fixed; left: 50%; bottom: calc(8px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 30; width: min(720px, calc(100vw - 12px)); display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; user-select: none; -webkit-user-select: none; }
+body.room3d .hud3d > * { pointer-events: auto; }
+body.room3d .hud3d .hud-top { display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; }
+body.room3d .hud3d .hud-top > * { pointer-events: auto; }
+body.room3d .hud3d .status { margin: 0; background: rgba(8,10,14,.84); font-size: 14px; max-width: calc(100vw - 24px); }
+body.room3d .hud3d .deal-me-in { margin: 0; }
+body.room3d .hud3d .deal-btn { font-size: 18px; padding: 10px 32px; }
+body.room3d.in-room .hud3d .tray { position: static; transform: none; width: 100%; max-width: none; height: auto; min-height: 0; margin: 0; padding: 8px 12px; gap: 6px; overflow: visible; box-sizing: border-box; background: rgba(12,15,20,.88); backdrop-filter: blur(6px); }
+body.room3d.in-room .hud3d .tray:empty, body.room3d.in-room .hud3d .tray:not(:has(*)) { display: none; }
+body.room3d .hud3d .felt-actions.hud { position: static !important; transform: none; width: 100%; top: auto; left: auto; }
+body.room3d .hud3d .felt-actions.hud:empty { display: none; }
+body.room3d .hud3d .felt-actions.hud > .decide { padding: 8px 24px 2px; gap: 6px; }
+body.room3d .hud3d .decide-title { font-size: 19px; }
+body.room3d .hud3d .decide-timer { height: 34px; }
+/* View buttons: look left, reset, look right, and zoom. */
+body.room3d .tilt-ctl, body.room3d #zoom-val { display: none; }
+body.room3d .zoom-ctl { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; width: 208px; }
+body.room3d .zoom-ctl button { width: auto; }
+body.room3d .zoom-ctl .view-btn { font-size: 13px; padding: 0 8px; white-space: nowrap; }
+body.room3d .zoom-ctl .view-reset { grid-column: 1 / -1; background: var(--gold); color: #1b1300; }
+@media (max-width: 1180px) { body.room3d .zoom-ctl { bottom: auto; top: 118px; right: 12px; } }
+@media (max-width: 560px) {
+  body.room3d .hud3d { gap: 4px; }
+  body.room3d .hud3d .status { font-size: 12px; padding: 4px 10px; }
+  body.room3d.in-room .hud3d .tray { padding: 6px; }
+  body.room3d .hud3d .deal-btn { font-size: 15px; padding: 8px 24px; }
+  body.room3d .zoom-ctl { top: 62px; right: 6px; width: 150px; transform: none; }
+  body.room3d .zoom-ctl button { height: 30px; }
+  body.room3d .zoom-ctl .view-btn { font-size: 11px; padding: 0 4px; }
+  body.room3d.in-room .float-balance { top: 230px; bottom: auto; left: 6px; }
+  body.room3d.in-room .ledger { top: 62px; left: 6px; right: auto; max-width: 52vw; }
+}
