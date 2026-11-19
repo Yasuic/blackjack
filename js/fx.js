@@ -73,24 +73,120 @@ export function chipSound(count = 1) {
 }
 
 let lastCard = 0;
+// A dealt card: a soft paper slide across the felt, then a crisp snap as it lands and flips.
 export function cardSound() {
   if (muted) return;
   const ac = audio();
   if (!ac) return;
-  const now = ac.currentTime;
-  const t = Math.max(now + 0.01, lastCard + 0.09);
+  const t = Math.max(ac.currentTime + 0.01, lastCard + 0.11);
   lastCard = t;
-  const src = ac.createBufferSource();
-  src.buffer = noise(ac);
+  // Slide: noise swept from high to mid, rising then fading.
+  const slide = ac.createBufferSource();
+  slide.buffer = noise(ac);
+  const bp = ac.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.Q.value = 0.9;
+  bp.frequency.setValueAtTime(5200, t);
+  bp.frequency.exponentialRampToValueAtTime(1700, t + 0.13);
+  const sg = ac.createGain();
+  sg.gain.setValueAtTime(0.0001, t);
+  sg.gain.exponentialRampToValueAtTime(0.16, t + 0.05);
+  sg.gain.exponentialRampToValueAtTime(0.0001, t + 0.15);
+  slide.connect(bp).connect(sg).connect(ac.destination);
+  slide.start(t, Math.random() * 0.3, 0.17);
+  // Snap: a short bright click with a little body underneath.
+  const at = t + 0.13;
+  const snap = ac.createBufferSource();
+  snap.buffer = noise(ac);
   const hp = ac.createBiquadFilter();
   hp.type = 'highpass';
-  hp.frequency.value = 1800;
+  hp.frequency.value = 2400;
+  const ng = ac.createGain();
+  ng.gain.setValueAtTime(0.0001, at);
+  ng.gain.exponentialRampToValueAtTime(0.42, at + 0.002);
+  ng.gain.exponentialRampToValueAtTime(0.0001, at + 0.035);
+  snap.connect(hp).connect(ng).connect(ac.destination);
+  snap.start(at, Math.random() * 0.3, 0.05);
+  const body = ac.createOscillator();
+  body.type = 'sine';
+  body.frequency.setValueAtTime(320, at);
+  body.frequency.exponentialRampToValueAtTime(140, at + 0.05);
+  const bg = ac.createGain();
+  bg.gain.setValueAtTime(0.0001, at);
+  bg.gain.exponentialRampToValueAtTime(0.14, at + 0.003);
+  bg.gain.exponentialRampToValueAtTime(0.0001, at + 0.07);
+  body.connect(bg).connect(ac.destination);
+  body.start(at);
+  body.stop(at + 0.08);
+}
+
+// Low knock on the felt.
+function knock(ac, when, level) {
+  const o = ac.createOscillator();
+  o.type = 'sine';
+  o.frequency.setValueAtTime(180, when);
+  o.frequency.exponentialRampToValueAtTime(70, when + 0.08);
+  const g = ac.createGain();
+  g.gain.setValueAtTime(0.0001, when);
+  g.gain.exponentialRampToValueAtTime(0.5 * level, when + 0.004);
+  g.gain.exponentialRampToValueAtTime(0.0001, when + 0.12);
+  o.connect(g).connect(ac.destination);
+  o.start(when);
+  o.stop(when + 0.13);
+  const n = ac.createBufferSource();
+  n.buffer = noise(ac);
+  const lp = ac.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.frequency.value = 900;
+  const ng = ac.createGain();
+  ng.gain.setValueAtTime(0.0001, when);
+  ng.gain.exponentialRampToValueAtTime(0.35 * level, when + 0.003);
+  ng.gain.exponentialRampToValueAtTime(0.0001, when + 0.05);
+  n.connect(lp).connect(ng).connect(ac.destination);
+  n.start(when, Math.random() * 0.3, 0.06);
+}
+
+// Hit: two taps on the table, the way players ask for a card.
+export function hitSound() {
+  if (muted) return;
+  const ac = audio();
+  if (!ac) return;
+  const t = ac.currentTime + 0.01;
+  knock(ac, t, 1);
+  knock(ac, t + 0.13, 0.8);
+}
+
+// Stand: a soft wave of the hand, an airy sweep with a low settle at the end.
+export function standSound() {
+  if (muted) return;
+  const ac = audio();
+  if (!ac) return;
+  const t = ac.currentTime + 0.01;
+  const n = ac.createBufferSource();
+  n.buffer = noise(ac);
+  const bp = ac.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.Q.value = 1.2;
+  bp.frequency.setValueAtTime(700, t);
+  bp.frequency.exponentialRampToValueAtTime(2600, t + 0.16);
+  bp.frequency.exponentialRampToValueAtTime(900, t + 0.34);
   const g = ac.createGain();
   g.gain.setValueAtTime(0.0001, t);
-  g.gain.exponentialRampToValueAtTime(0.25, t + 0.015);
-  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.12);
-  src.connect(hp).connect(g).connect(ac.destination);
-  src.start(t, Math.random() * 0.3, 0.14);
+  g.gain.exponentialRampToValueAtTime(0.22, t + 0.14);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.36);
+  n.connect(bp).connect(g).connect(ac.destination);
+  n.start(t, 0, 0.4);
+  const o = ac.createOscillator();
+  o.type = 'triangle';
+  o.frequency.setValueAtTime(392, t + 0.18);
+  o.frequency.exponentialRampToValueAtTime(294, t + 0.4);
+  const og = ac.createGain();
+  og.gain.setValueAtTime(0.0001, t + 0.18);
+  og.gain.exponentialRampToValueAtTime(0.06, t + 0.2);
+  og.gain.exponentialRampToValueAtTime(0.0001, t + 0.45);
+  o.connect(og).connect(ac.destination);
+  o.start(t + 0.18);
+  o.stop(t + 0.5);
 }
 
 // ---------- Chips ----------
@@ -187,4 +283,98 @@ export function winSound(big = false) {
     }
   });
   setTimeout(() => chipSound(big ? 8 : 5), 260);
+}
+
+// ---------- Funny sounds for things thrown at players ----------
+function tone(ac, type, f0, f1, t, dur, level) {
+  const o = ac.createOscillator();
+  o.type = type;
+  o.frequency.setValueAtTime(f0, t);
+  o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+  const g = ac.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(level, t + 0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g).connect(ac.destination);
+  o.start(t);
+  o.stop(t + dur + 0.02);
+  return o;
+}
+function burst(ac, t, dur, level, type, freq, q = 1) {
+  const n = ac.createBufferSource();
+  n.buffer = noise(ac);
+  const f = ac.createBiquadFilter();
+  f.type = type;
+  f.frequency.value = freq;
+  f.Q.value = q;
+  const g = ac.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(level, t + 0.005);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  n.connect(f).connect(g).connect(ac.destination);
+  n.start(t, Math.random() * 0.2, dur + 0.02);
+}
+
+export function throwSound(item, stage) {
+  if (muted) return;
+  const ac = audio();
+  if (!ac) return;
+  const t = ac.currentTime + 0.01;
+  if (stage === 'whoosh') {
+    // Cartoon whistle while it flies.
+    tone(ac, 'sine', 1400, 500, t, 0.7, 0.05);
+    return;
+  }
+  switch (item) {
+    case 'egg': // crack then a wet splat
+      burst(ac, t, 0.04, 0.5, 'highpass', 3000);
+      burst(ac, t + 0.05, 0.25, 0.4, 'lowpass', 900);
+      tone(ac, 'sine', 600, 120, t + 0.05, 0.2, 0.12);
+      break;
+    case 'tomato': // big squelch
+      burst(ac, t, 0.35, 0.5, 'lowpass', 700);
+      tone(ac, 'sawtooth', 220, 60, t, 0.3, 0.08);
+      break;
+    case 'poop': { // a long wobbly raspberry
+      const o = ac.createOscillator();
+      o.type = 'sawtooth';
+      o.frequency.setValueAtTime(110, t);
+      o.frequency.exponentialRampToValueAtTime(70, t + 0.7);
+      const lfo = ac.createOscillator();
+      lfo.frequency.value = 28;
+      const lg = ac.createGain();
+      lg.gain.value = 30;
+      lfo.connect(lg).connect(o.frequency);
+      const lp = ac.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = 500;
+      const g = ac.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.35, t + 0.04);
+      g.gain.setValueAtTime(0.3, t + 0.5);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.75);
+      o.connect(lp).connect(g).connect(ac.destination);
+      o.start(t); lfo.start(t);
+      o.stop(t + 0.8); lfo.stop(t + 0.8);
+      tone(ac, 'sine', 800, 1600, t + 0.8, 0.15, 0.05);
+      break;
+    }
+    case 'clap':
+      for (let i = 0; i < 6; i++) burst(ac, t + i * 0.11 + Math.random() * 0.02, 0.06, 0.4, 'bandpass', 1500, 0.8);
+      break;
+    case 'beer': // glass clink
+      tone(ac, 'sine', 2637, 2600, t, 0.5, 0.12);
+      tone(ac, 'sine', 3951, 3900, t, 0.35, 0.06);
+      break;
+    case 'rose': // sweet chime
+      [784, 988, 1175].forEach((f, i) => tone(ac, 'sine', f, f, t + i * 0.09, 0.6, 0.1));
+      break;
+    case 'fire':
+      burst(ac, t, 0.6, 0.3, 'bandpass', 500, 0.6);
+      tone(ac, 'triangle', 200, 900, t, 0.4, 0.06);
+      break;
+    case 'cry': // sad trombone
+      [[392, 0], [370, 0.28], [349, 0.56], [330, 0.84]].forEach(([f, d], i) => tone(ac, 'sawtooth', f, i === 3 ? f * 0.94 : f, t + d, i === 3 ? 0.7 : 0.26, 0.06));
+      break;
+  }
 }

@@ -26,7 +26,7 @@ assert.equal(G.evalBustIt(cs('10♦ 6♣ 9♠')).mult, 1);
 assert.equal(G.evalBustIt(cs('2♦ 3♣ 4♠ 2♠ 5♠ K♠')).mult, 50);
 // full rounds random fuzz: chips conservation
 for (const decks of [1, 6, 'csm']) {
-  const t = new G.Table({ decks, shuffleMode: 'rounds', shuffleEvery: 3 });
+  const t = Object.assign(new G.Table({ decks, shuffleMode: 'rounds', shuffleEvery: 3 }), { frozen: true });
   const ids = ['a', 'b', 'c', 'd', 'e'];
   ids.forEach((id, i) => { t.join(id, id); t.sit(id, i); });
   t.join('bank', 'Bank'); t.sitDealer('bank');
@@ -62,14 +62,14 @@ for (const decks of [1, 6, 'csm']) {
   assert.equal(t2.shoe.length, t.shoe.length);
 }
 // hidden hole card
-const t = new G.Table(); t.join('x', 'X'); t.sit('x', 0); t.setBet('x', { main: 10, sides: {} }); t.deal();
+const t = Object.assign(new G.Table(), { frozen: true }); t.join('x', 'X'); t.sit('x', 0); t.setBet('x', { main: 10, sides: {} }); t.deal();
 const ps = t.publicState('x');
 if (t.phase === 'playing') assert.ok(ps.dealer.cards[1].hidden);
 console.log('all game tests passed');
 
 // dealer seat rules
 {
-  const t = new G.Table(); t.join('a', 'A'); t.join('b', 'B'); t.sit('a', 0); t.sitDealer('a');
+  const t = Object.assign(new G.Table(), { frozen: true }); t.join('a', 'A'); t.join('b', 'B'); t.sit('a', 0); t.sitDealer('a');
   assert.equal(t.players.a.seat, null);
   assert.throws(() => t.sitDealer('b'));
   assert.throws(() => t.sit('a', 1));
@@ -78,7 +78,7 @@ console.log('all game tests passed');
 console.log('dealer seat tests passed');
 
 {
-  const t = new G.Table(); ['a','b','c'].forEach((x) => t.join(x, x));
+  const t = Object.assign(new G.Table(), { frozen: true }); ['a','b','c'].forEach((x) => t.join(x, x));
   const id = t.requestDealer('a'); t.castVote('b', true); assert.equal(t.banker, null);
   t.castVote('c', true); assert.equal(t.banker, 'a');
   t.requestDealer('b'); t.castVote('a', false); assert.equal(t.banker, 'a'); assert.equal(t.vote, null);
@@ -101,7 +101,7 @@ import { bestMove } from '../js/strategy.js';
   console.log('strategy tests passed');
 }
 {
-  const t = new G.Table(); t.join('a', 'A'); t.join('h', 'H');
+  const t = Object.assign(new G.Table(), { frozen: true }); t.join('a', 'A'); t.join('h', 'H');
   const r = t.requestBuyIn('a', 500); assert.throws(() => t.requestBuyIn('a', 100));
   t.answerBuyIn(r.id, true); assert.equal(t.players.a.chips, 1500); assert.equal(t.players.a.totalIn, 1500);
   const r2 = t.requestBuyIn('a', 300); t.answerBuyIn(r2.id, false); assert.equal(t.players.a.chips, 1500);
@@ -110,11 +110,23 @@ import { bestMove } from '../js/strategy.js';
 }
 
 {
-  const t = new G.Table(); t.join('h', 'H'); t.join('a', 'A'); t.join('b', 'B');
+  const t = Object.assign(new G.Table(), { frozen: true }); t.join('h', 'H'); t.join('a', 'A'); t.join('b', 'B');
   t.proposeSettings('h', { decks: 1 }, 'x'); t.castVote('a', true); assert.equal(t.settings.decks, 6);
   t.castVote('b', true); assert.equal(t.settings.decks, 1);
   t.proposeSettings('h', { decks: 8 }, 'x'); t.castVote('a', false); assert.equal(t.settings.decks, 1);
   // count matches cards drawn
-  const t2 = new G.Table({ decks: 1 }); let rc = 0; for (let i = 0; i < 20; i++) rc += G.hiLo(t2.draw()); assert.equal(t2.runCount, rc);
+  const t2 = Object.assign(new G.Table({ decks: 1 }), { frozen: true }); let rc = 0; for (let i = 0; i < 20; i++) rc += G.hiLo(t2.draw()); assert.equal(t2.runCount, rc);
   console.log('settings vote and count tests passed');
+}
+{
+  const t = new G.Table(); t.join('a', 'A'); t.sit('a', 0); t.setBet('a', { main: 50, sides: {} });
+  assert.equal(t.canDeal(), false);
+  assert.throws(() => t.deal());
+  t.frozen = true;
+  for (let i = 0; i < 30; i++) {
+    t.setBet('a', { main: 50, sides: { pp: 5, plus3: 5 } }); t.deal();
+    let g = 0; while (t.phase !== 'settled' && g++ < 50) { if (t.phase === 'insurance') t.forceInsurance ? t.forceInsurance() : t.insurance('a', false); else if (t.phase === 'playing') t.action('a', 'stand'); else if (t.phase === 'dealer') t.dealerStep(); }
+    assert.equal(t.players.a.chips, 1000);
+  }
+  console.log('frozen balance tests passed');
 }

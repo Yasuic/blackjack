@@ -1,6 +1,6 @@
 // Basic strategy for 4 to 8 decks, dealer stands on soft 17, double after split, late surrender.
 // Returns the best move among the moves allowed right now.
-import { handTotal, cardValue } from './game.js';
+import { handTotal, cardValue } from './game.js?v=20261119b';
 
 export function bestMove(cards, dealerUp, allowed, opts = {}) {
   if (!cards?.length || !dealerUp || dealerUp.hidden || !allowed?.length) return null;
@@ -99,3 +99,42 @@ export function describeHand(cards) {
   return `${soft ? 'soft' : 'hard'} ${total}`;
 }
 export const MOVE_NAMES = { hit: 'Hit', stand: 'Stand', double: 'Double', split: 'Split', surrender: 'Surrender' };
+
+// ---------- Live odds ----------
+// Chance that a hand wins, pushes or loses against the dealer's up card, found by playing the rest
+// of the hand many times at random (infinite deck; the player follows basic strategy with hit and stand only).
+const RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+const randCard = () => ({ r: RANKS[(Math.random() * 13) | 0], s: '♠' });
+const oddsCache = new Map();
+export function handOdds(cards, dealerUp, opts = {}, n = 1600) {
+  if (!cards?.length || !dealerUp || dealerUp.hidden) return null;
+  const key = cards.map((c) => c.r).join(',') + '|' + dealerUp.r + '|' + (opts.dealerHitsSoft17 ? 1 : 0) + '|' + (opts.done ? 1 : 0);
+  if (oddsCache.has(key)) return oddsCache.get(key);
+  const upTen = cardValue(dealerUp) === 10, upAce = dealerUp.r === 'A';
+  const playerBJ = cards.length === 2 && handTotal(cards).total === 21 && !opts.fromSplit;
+  let win = 0, push = 0, dealerBust = 0;
+  for (let i = 0; i < n; i++) {
+    let hole = randCard();
+    // The dealer has already checked for blackjack, so the hole card cannot make one.
+    while ((upAce && cardValue(hole) === 10) || (upTen && hole.r === 'A')) hole = randCard();
+    const hand = cards.slice();
+    if (!opts.done && !playerBJ) {
+      while (handTotal(hand).total < 21 && bestMove(hand, dealerUp, ['hit', 'stand'], opts) === 'hit') hand.push(randCard());
+    }
+    const p = handTotal(hand).total;
+    if (p > 21) continue;
+    if (playerBJ) { win++; continue; }
+    const d = [dealerUp, hole];
+    for (;;) {
+      const { total, soft } = handTotal(d);
+      if (total > 17 || (total === 17 && !(soft && opts.dealerHitsSoft17))) break;
+      d.push(randCard());
+    }
+    const dt = handTotal(d).total;
+    if (dt > 21) { dealerBust++; win++; } else if (p > dt) win++; else if (p === dt) push++;
+  }
+  const r = { win: win / n, push: push / n, lose: 1 - (win + push) / n };
+  if (oddsCache.size > 500) oddsCache.clear();
+  oddsCache.set(key, r);
+  return r;
+}

@@ -207,6 +207,7 @@ export class Table {
     this.settings = { ...DEFAULT_SETTINGS, ...settings };
     this.seats = Array(MAX_SEATS).fill(null);
     this.players = {}; // clientId -> { name, chips, seat, connected }
+    this.frozen = false; // host chose to deal with the house dealer and frozen balances
     this.banker = null; // clientId of a player sitting as the dealer (the bank), or null
     this.phase = 'betting';
     this.dealer = { cards: [], revealed: false };
@@ -493,7 +494,8 @@ export class Table {
         sides[k] = v;
       }
     }
-    if (main > 0 && main < s.minBet) throw new Error(`Minimum bet is ${s.minBet}.`);
+    // Chips can go down one at a time; the minimum only counts once you say you are ready.
+    if (bet.ready && main < s.minBet) throw new Error(`Minimum bet is ${s.minBet}. Add more chips before you deal in.`);
     if (main > s.maxBet) throw new Error(`Maximum bet is ${s.maxBet}.`);
     const total = main + sumValues(sides);
     if (total > p.chips) throw new Error('Not enough chips.');
@@ -511,23 +513,23 @@ export class Table {
       if (!seat) continue;
       const p = this.players[seat.playerId];
       if (p.kicked) { this.seats[i] = null; p.seat = null; continue; }
-      const last = seat.bet;
-      const fresh = emptySeat(seat.playerId);
-      // Keep last round's bet if the player can still afford it (rebet).
-      if (last && last.main > 0 && last.main + sumValues(last.sides) <= p.chips) fresh.bet = last;
-      this.seats[i] = fresh;
+      // Every round starts with empty betting spots; players put fresh chips down.
+      this.seats[i] = emptySeat(seat.playerId);
     }
   }
 
   canDeal() {
-    return this.phase === 'betting' && this.seats.some((s) => s && s.bet.main > 0 && this.players[s.playerId].connected !== false);
+    // With no player as the dealer, the table only deals when the host has chosen frozen balances.
+    if (!this.banker && !this.frozen) return false;
+    return this.phase === 'betting' && this.seats.some((s) => s && s.bet.main >= this.settings.minBet && this.players[s.playerId].connected !== false);
   }
 
   // ---- Dealing ----
   deal() {
     if (this.phase === 'settled') this.startBetting();
+    if (!this.banker && !this.frozen) throw new Error('Nobody is the dealer. Someone has to sit as the dealer, or the host can deal with frozen balances.');
     if (!this.canDeal()) throw new Error('Nobody has placed a bet.');
-    const playing = this.seats.filter((x) => x && x.bet.main > 0).length;
+    const playing = this.seats.filter((x) => x && x.bet.main >= this.settings.minBet).length;
     if (this.needsShuffle(playing)) this.newShoe();
     this.round++;
     this.roundsSinceShuffle++;
@@ -536,7 +538,8 @@ export class Table {
       if (!seat) return;
       const p = this.players[seat.playerId];
       const stake = seat.bet.main + sumValues(seat.bet.sides);
-      if (seat.bet.main > 0 && stake <= p.chips && p.connected !== false) {
+      // A bet under the minimum when betting closes stays on the spot but is not dealt.
+      if (seat.bet.main >= this.settings.minBet && stake <= p.chips && p.connected !== false) {
         p.chips -= stake;
         p.lastBet = seat.bet;
         seat.hands = [newHand(seat.bet.main)];
@@ -779,7 +782,15 @@ export class Table {
       const tableNet = this.seats.reduce((sum, seat) => sum + (seat && seat.hands.length ? seat.net : 0), 0);
       this.players[this.banker].chips -= tableNet;
       this.bankerNet = -tableNet;
-    } else this.bankerNet = null;
+    } else {
+      // With the automatic house dealer, nobody's balance moves: money only changes hands between players.
+      for (const seat of this.seats) {
+        if (!seat || !seat.hands.length || !seat.net) continue;
+        this.players[seat.playerId].chips -= seat.net;
+      }
+      this.bankerNet = null;
+    }
+    this.practiceRound = !this.banker;
     this.phase = 'settled';
     if (this.pendingBanker) this.applyDealer(this.pendingBanker);
     if (this.pendingSettings) this.applySettings(this.pendingSettings);
@@ -819,6 +830,8 @@ export class Table {
         yes: Object.values(this.vote.votes).filter(Boolean).length,
         canVote: this.vote.voters.includes(forClientId) && !(forClientId in this.vote.votes),
       } : null,
+      frozen: !this.banker && !!this.frozen,
+      noDealer: !this.banker && !this.frozen,
       banker: this.banker && this.players[this.banker] ? { id: this.banker, name: this.players[this.banker].name, chips: this.players[this.banker].chips, connected: this.players[this.banker].connected, net: this.phase === 'settled' ? this.bankerNet : null } : null,
       seats: this.seats.map((s) => {
         if (!s) return null;
@@ -854,8 +867,8 @@ export class Table {
 
   // Save and restore so the host can refresh the page without losing the table.
   toJSON() {
-    const { settings, seats, players, phase, dealer, turn, round, roundsSinceShuffle, log, shoe, shoeSize, banker, bankerNet, pendingBanker, buyIns, runCount, hostId, pendingSettings } = this;
-    return { settings, seats, players, phase, dealer, turn, round, roundsSinceShuffle, log, shoe, shoeSize, banker, bankerNet, pendingBanker, buyIns, runCount, hostId, pendingSettings };
+    const { settings, seats, players, phase, dealer, turn, round, roundsSinceShuffle, log, shoe, shoeSize, banker, bankerNet, pendingBanker, buyIns, runCount, hostId, pendingSettings, frozen } = this;
+    return { settings, seats, players, phase, dealer, turn, round, roundsSinceShuffle, log, shoe, shoeSize, banker, bankerNet, pendingBanker, buyIns, runCount, hostId, pendingSettings, frozen };
   }
   static fromJSON(obj) {
     const t = new Table(obj.settings);
