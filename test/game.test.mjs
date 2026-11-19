@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import * as G from '../js/game.js';
+G.DEFAULT_SETTINGS.sideBets = G.SIDE_KEYS; // tests cover every side bet
 const c = (s) => ({ r: s.slice(0, -1), s: s.slice(-1) });
 const cs = (str) => str.split(' ').map(c);
 // side bets
@@ -36,7 +37,7 @@ for (const decks of [1, 6, 'csm']) {
       if (p.chips < 50) t.giveChips(id, 1000);
       const sides = {};
       for (const k of G.SIDE_KEYS) if (Math.random() < 0.3) sides[k] = 5;
-      t.setBet(id, { main: 10, sides, ready: true });
+      t.setBet(id, { main: 10, sides, target: (ids.indexOf(id) + 1) % ids.length, ready: true });
     }
     const before = ids.reduce((s, id) => s + t.players[id].chips, 0);
     const bankBefore = t.players.bank.chips;
@@ -126,7 +127,36 @@ import { bestMove } from '../js/strategy.js';
   for (let i = 0; i < 30; i++) {
     t.setBet('a', { main: 50, sides: { pp: 5, plus3: 5 } }); t.deal();
     let g = 0; while (t.phase !== 'settled' && g++ < 50) { if (t.phase === 'insurance') t.forceInsurance ? t.forceInsurance() : t.insurance('a', false); else if (t.phase === 'playing') t.action('a', 'stand'); else if (t.phase === 'dealer') t.dealerStep(); }
-    assert.equal(t.players.a.chips, 1000);
+    assert.equal(t.players.a.chips - (t.players.a.houseNet || 0), 1000);
   }
   console.log('frozen balance tests passed');
+}
+{
+  // Hot 3 and Friend Bust
+  assert.equal(G.evalHot3(cs('7♠ 7♠'), c('7♠')).mult, 100);
+  assert.equal(G.evalHot3(cs('K♠ 5♠'), c('6♠')).mult, 20);
+  assert.equal(G.evalHot3(cs('K♠ 5♥'), c('6♠')).mult, 4);
+  assert.equal(G.evalHot3(cs('K♠ 5♥'), c('5♠')).mult, 2);
+  assert.equal(G.evalHot3(cs('K♠ 5♥'), c('3♠')).win, false);
+  const t = Object.assign(new G.Table(), { frozen: false });
+  t.join('a', 'A', 500); t.join('b', 'B', 700); t.join('d', 'D', 5000);
+  assert.equal(t.players.a.chips, 500);
+  t.sit('a', 0); t.sit('b', 1); t.sitDealer('d');
+  assert.throws(() => t.setBet('a', { main: 10, sides: { friendBust: 10 }, target: 0 }));
+  t.setBet('a', { main: 10, sides: { friendBust: 10 }, target: 1 });
+  t.setBet('b', { main: 10, sides: {} });
+  const total = () => Object.values(t.players).reduce((x, p) => x + p.chips, 0);
+  const before = total();
+  t.deal();
+  let g = 0; while (t.phase !== 'settled' && g++ < 80) { if (t.phase === 'insurance') { t.insurance('a', false); t.insurance('b', false); } else if (t.phase === 'playing') { const id = t.seats[t.turn.seat].playerId; t.action(id, id === 'b' ? 'hit' : 'stand'); } else if (t.phase === 'dealer') t.dealerStep(); }
+  assert.equal(total(), before);
+  const fb = t.seats[0].sideResults.find((r) => r.key === 'friendBust');
+  assert.ok(fb);
+  assert.equal(fb.win, G.handTotal(t.seats[1].hands[0].cards).total > 21);
+  // Peek costs 10 and goes to the dealer.
+  const top = t.shoe[t.shoe.length - 1];
+  const da = t.players.a.chips, dd = t.players.d.chips;
+  assert.deepEqual(t.peek('a'), top);
+  assert.equal(t.players.a.chips, da - 10); assert.equal(t.players.d.chips, dd + 10);
+  console.log('hot 3, friend bust and peek tests passed');
 }

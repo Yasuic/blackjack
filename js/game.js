@@ -19,14 +19,31 @@ export const DEFAULT_SETTINGS = {
   allowSurrender: true,
   autoDeal: true,        // deal as soon as every seated player is ready
   betTimer: 20,          // seconds for betting before the dealer deals on its own (0 = off)
-  turnTimer: 30,         // seconds per decision before the dealer stands for you (0 = off)
+  turnTimer: 30,
+  peekCost: 10,          // price to see the next card in the shoe
+  sideBets: ['hot3', 'bustIt', 'twentyOnePlus3', 'friendBust'], // side bets offered at this table         // seconds per decision before the dealer stands for you (0 = off)
 };
 
 // ---------- Side bets ----------
 // Payouts are "to one": a 25 means a $10 bet wins $250 and you also get your $10 back.
 export const SIDE_BETS = {
+  hot3: {
+    name: 'Hot 3',
+    short: 'Hot 3',
+    icon: '🔥',
+    about: 'Your first two cards plus the dealer up card total 19, 20 or 21.',
+    table: [['Suited 7-7-7', 100], ['Suited 21', 20], ['Any other 21', 4], ['20', 2], ['19', 1]],
+  },
+  friendBust: {
+    name: 'Friend Bust',
+    short: 'Friend',
+    icon: '🎯',
+    about: 'Pick a friend at the table. Pays 2 to 1 if their first hand busts. If they are not dealt in, you get your bet back.',
+    table: [["Your friend's first hand busts", 2]],
+  },
   perfectPairs: {
     name: 'Perfect Pairs',
+    icon: '👯',
     short: 'PP',
     about: 'Your first two cards are a pair.',
     table: [['Perfect pair (same suit)', 25], ['Coloured pair (same colour)', 12], ['Mixed pair', 6]],
@@ -34,42 +51,49 @@ export const SIDE_BETS = {
   twentyOnePlus3: {
     name: '21+3',
     short: '21+3',
+    icon: '🃏',
     about: 'Your first two cards plus the dealer up card make a poker hand.',
     table: [['Suited three of a kind', 100], ['Straight flush', 40], ['Three of a kind', 30], ['Straight', 10], ['Flush', 5]],
   },
   luckyLadies: {
     name: 'Lucky Ladies',
     short: 'LL',
+    icon: '👑',
     about: 'Your first two cards total 20.',
     table: [['Two Q♥ and dealer has blackjack', 1000], ['Two Q♥', 200], ['Matched 20 (same rank and suit)', 25], ['Suited 20', 10], ['Any 20', 4]],
   },
   royalMatch: {
     name: 'Royal Match',
     short: 'RM',
+    icon: '💍',
     about: 'Your first two cards are the same suit.',
     table: [['Suited K and Q', 25], ['Any suited cards', 2.5]],
   },
   luckyLucky: {
     name: 'Lucky Lucky',
     short: 'LkLk',
+    icon: '🍀',
     about: 'Your first two cards plus the dealer up card total 19, 20 or 21.',
     table: [['Suited 7-7-7', 200], ['Suited 6-7-8', 100], ['7-7-7', 50], ['6-7-8', 30], ['Suited 21', 15], ['Any 21', 3], ['20', 2], ['19', 2]],
   },
   over13: {
     name: 'Over 13',
     short: '>13',
+    icon: '⬆️',
     about: 'Your first two cards total more than 13 (aces count as 1).',
     table: [['Total 14 or more', 1]],
   },
   under13: {
     name: 'Under 13',
     short: '<13',
+    icon: '⬇️',
     about: 'Your first two cards total less than 13 (aces count as 1).',
     table: [['Total 12 or less', 1]],
   },
   bustIt: {
     name: 'Dealer Bust',
     short: 'Bust',
+    icon: '💥',
     about: 'The dealer busts. More cards in the busted hand pay more.',
     table: [['8+ cards', 250], ['7 cards', 100], ['6 cards', 50], ['5 cards', 9], ['4 cards', 2], ['3 cards', 1]],
   },
@@ -193,6 +217,17 @@ export function evalOverUnder(p, over) {
   return win ? { win: true, label: `Total ${t}`, mult: 1 } : { win: false, label: `Total ${t}` };
 }
 
+export function evalHot3(p, up) {
+  const cards = [p[0], p[1], up];
+  const { total } = handTotal(cards);
+  const suited = cards.every((c) => c.s === cards[0].s);
+  if (suited && cards.every((c) => c.r === '7')) return { win: true, label: 'Suited 7-7-7', mult: 100 };
+  if (total === 21) return suited ? { win: true, label: 'Suited 21', mult: 20 } : { win: true, label: '21', mult: 4 };
+  if (total === 20) return { win: true, label: '20', mult: 2 };
+  if (total === 19) return { win: true, label: '19', mult: 1 };
+  return { win: false, label: `Total ${total}` };
+}
+
 export function evalBustIt(dealerCards) {
   const { total } = handTotal(dealerCards);
   if (total <= 21) return { win: false, label: 'Dealer did not bust' };
@@ -273,7 +308,7 @@ export class Table {
   }
 
   // ---- Players ----
-  join(clientId, name) {
+  join(clientId, name, buyIn) {
     name = String(name || 'Player').trim().slice(0, 16) || 'Player';
     let p = this.players[clientId];
     if (p) {
@@ -281,7 +316,9 @@ export class Table {
       p.name = name;
       return p;
     }
-    p = { id: clientId, name, chips: this.settings.startChips, seat: null, connected: true, lastBet: null, totalIn: this.settings.startChips };
+    // Each player says how much they buy in for when they arrive. Any positive amount is fine.
+    const start = Math.round(Number(buyIn)) > 0 ? Math.min(Number.MAX_SAFE_INTEGER, Math.round(Number(buyIn))) : this.settings.startChips;
+    p = { id: clientId, name, chips: start, seat: null, connected: true, lastBet: null, totalIn: start };
     this.players[clientId] = p;
     this.addLog(`${name} joined.`);
     return p;
@@ -428,7 +465,7 @@ export class Table {
   requestBuyIn(clientId, amount) {
     const p = this.mustPlayer(clientId);
     amount = Math.round(Number(amount) || 0);
-    if (amount < 1 || amount > 1000000) throw new Error('Pick an amount between 1 and 1,000,000.');
+    if (!(amount >= 1) || amount > Number.MAX_SAFE_INTEGER) throw new Error('Pick an amount of at least 1.');
     this.buyIns = this.buyIns || [];
     if (this.buyIns.some((b) => b.playerId === clientId)) throw new Error('You already have a buy-in waiting for the host.');
     this.buyInSeq = (this.buyInSeq || 0) + 1;
@@ -478,6 +515,21 @@ export class Table {
     return ['insurance', 'playing', 'dealer'].includes(this.phase);
   }
 
+  // Pay to look at the next card in the shoe, just out of curiosity. The fee goes to the player dealer;
+  // with frozen balances nobody's chips move, so it is free.
+  peek(clientId) {
+    const p = this.mustPlayer(clientId);
+    if (!this.shoe.length) throw new Error('The shoe is empty. It is reshuffled before the next card.');
+    const cost = this.settings.peekCost ?? 10;
+    if (this.banker && this.banker !== clientId) {
+      if (p.chips < cost) throw new Error(`Seeing the next card costs ${cost}.`);
+      p.chips -= cost;
+      this.players[this.banker].chips += cost;
+      this.addLog(`${p.name} paid ${cost} to see the next card.`);
+    } else this.addLog(`${p.name} looked at the next card.`);
+    return this.shoe[this.shoe.length - 1];
+  }
+
   // ---- Betting ----
   setBet(clientId, bet) {
     if (this.phase !== 'betting' && this.phase !== 'settled') throw new Error('Bets are closed.');
@@ -486,9 +538,17 @@ export class Table {
     const s = this.settings;
     const main = Math.max(0, Math.round(Number(bet.main) || 0));
     const sides = {};
+    const on = s.sideBets || SIDE_KEYS;
+    let target = null;
     for (const k of SIDE_KEYS) {
       const v = Math.max(0, Math.round(Number(bet.sides?.[k]) || 0));
       if (v > 0) {
+        if (!on.includes(k)) throw new Error(`${SIDE_BETS[k].name} is not offered at this table.`);
+        if (k === 'friendBust') {
+          target = Number(bet.target);
+          const ts = this.seats[target];
+          if (!ts || ts.playerId === clientId) throw new Error('Pick a friend who is sitting at the table.');
+        }
         if (main === 0) throw new Error('Place a main bet before side bets.');
         if (v > s.maxSideBet) throw new Error(`Side bets are at most ${s.maxSideBet}.`);
         sides[k] = v;
@@ -499,7 +559,7 @@ export class Table {
     if (main > s.maxBet) throw new Error(`Maximum bet is ${s.maxBet}.`);
     const total = main + sumValues(sides);
     if (total > p.chips) throw new Error('Not enough chips.');
-    seat.bet = { main, sides };
+    seat.bet = target === null ? { main, sides } : { main, sides, target };
     seat.ready = main > 0 && !!bet.ready;
   }
 
@@ -569,6 +629,7 @@ export class Table {
       if (sides.twentyOnePlus3) this.settleSide(seat, 'twentyOnePlus3', eval21p3(pc, up));
       if (sides.royalMatch) this.settleSide(seat, 'royalMatch', evalRoyalMatch(pc));
       if (sides.luckyLucky) this.settleSide(seat, 'luckyLucky', evalLuckyLucky(pc, up));
+      if (sides.hot3) this.settleSide(seat, 'hot3', evalHot3(pc, up));
       if (sides.over13) this.settleSide(seat, 'over13', evalOverUnder(pc, true));
       if (sides.under13) this.settleSide(seat, 'under13', evalOverUnder(pc, false));
     }
@@ -759,6 +820,20 @@ export class Table {
       if (!seat || !seat.hands.length) continue;
       const p = this.players[seat.playerId];
       if (seat.bet.sides.bustIt) this.settleSide(seat, 'bustIt', evalBustIt(this.dealer.cards));
+      if (seat.bet.sides.friendBust) {
+        const ts = this.seats[seat.bet.target];
+        const fh = ts && ts.hands[0];
+        const name = ts ? this.players[ts.playerId]?.name || 'Your friend' : 'Your friend';
+        if (!fh || !fh.cards.length) {
+          // The friend was not dealt in: the bet comes back.
+          const stake = seat.bet.sides.friendBust;
+          p.chips += stake; seat.returned += stake;
+          seat.sideResults.push({ key: 'friendBust', name: SIDE_BETS.friendBust.name, label: `${name} was not dealt in`, win: false, push: true, stake, pay: stake });
+        } else {
+          const bust = handTotal(fh.cards).total > 21;
+          this.settleSide(seat, 'friendBust', bust ? { win: true, label: `${name} busted`, mult: 2 } : { win: false, label: `${name} did not bust` });
+        }
+      }
       for (const h of seat.hands) {
         const t = handTotal(h.cards).total;
         let pay = 0;
@@ -775,6 +850,8 @@ export class Table {
         seat.returned += pay;
       }
       seat.net = seat.returned - seat.staked;
+      // Win streak, for the fire on a hot player's stack.
+      if (seat.net > 0) p.streak = (p.streak || 0) + 1; else if (seat.net < 0) p.streak = 0;
       seat.ready = false;
     }
     // A player sitting as the dealer pays and collects everything.
@@ -783,10 +860,12 @@ export class Table {
       this.players[this.banker].chips -= tableNet;
       this.bankerNet = -tableNet;
     } else {
-      // With the automatic house dealer, nobody's balance moves: money only changes hands between players.
+      // With the automatic house dealer, wins and losses are practice money: they are not counted between players.
+      // The chips still move against the house, but that part is kept out of the ledger.
       for (const seat of this.seats) {
         if (!seat || !seat.hands.length || !seat.net) continue;
-        this.players[seat.playerId].chips -= seat.net;
+        const p = this.players[seat.playerId];
+        p.houseNet = (p.houseNet || 0) + seat.net;
       }
       this.bankerNet = null;
     }
@@ -843,6 +922,7 @@ export class Table {
           connected: p.connected,
           bet: s.bet,
           ready: s.ready,
+          streak: this.players[s.playerId]?.streak || 0,
           insurance: s.insurance,
           insuranceDecided: s.insuranceDecided,
           sideResults: s.sideResults,
@@ -856,7 +936,7 @@ export class Table {
         running: (this.runCount || 0) - (hide ? hiLo(this.dealer.cards[1]) : 0),
         decksLeft: (this.shoe.length + (hide ? 1 : 0)) / 52,
       },
-      ledger: Object.values(this.players).map((p) => ({ id: p.id, name: p.name, totalIn: p.totalIn ?? this.settings.startChips, chips: p.chips, connected: p.connected, kicked: !!p.kicked })),
+      ledger: Object.values(this.players).map((p) => ({ id: p.id, name: p.name, totalIn: p.totalIn ?? this.settings.startChips, chips: p.chips, houseNet: p.houseNet || 0, connected: p.connected, kicked: !!p.kicked })),
       buyIns: (this.buyIns || []).filter((b) => b.playerId === forClientId).map((b) => ({ id: b.id, amount: b.amount })),
       shoe: { left: this.shoe.length, size: this.shoeSize, roundsSinceShuffle: this.roundsSinceShuffle },
       log: this.log.slice(-12),
@@ -873,6 +953,7 @@ export class Table {
   static fromJSON(obj) {
     const t = new Table(obj.settings);
     Object.assign(t, obj);
+    t.settings = { ...DEFAULT_SETTINGS, ...obj.settings };
     Object.values(t.players).forEach((p) => (p.connected = false));
     return t;
   }

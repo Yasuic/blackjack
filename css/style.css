@@ -262,7 +262,7 @@ body { background: radial-gradient(ellipse at 50% -10%, #1b2330 0%, var(--bg) 60
 .sb.lost { opacity: .45; }
 button.sb { cursor: pointer; }
 button.sb:hover { border-color: var(--gold); background: rgba(232,196,106,.25); }
-.spot-area.live .spot { border-style: dashed; animation: pulse 1.6s ease-in-out infinite; }
+.spot-area.live .spot { border-style: dashed; }
 @keyframes pulse { 50% { box-shadow: 0 0 0 6px rgba(232,196,106,.15); } }
 .ins-tag { position: absolute; left: 50%; bottom: -14px; transform: translateX(-50%); font-size: 10px; font-weight: 700; background: rgba(0,0,0,.6); padding: 1px 6px; border-radius: 6px; white-space: nowrap; }
 
@@ -737,3 +737,94 @@ body.room3d #zoom-val { display: none; }
 @media (max-width: 560px) { body.room3d .felt-actions.hud { top: 16%; } }
 body.room3d .felt-actions.hud { top: auto; bottom: 18px; }
 body.room3d .felt-actions.hud > .decide { padding: 12px 30px 6px; }
+/* Ledger sits at the top right under the menu bar so it never covers the chips. */
+body.in-room .ledger { top: 70px; bottom: auto; right: 12px; }
+.table-stage { --uz: 1; }
+.table-stage .felt { transform: rotateX(var(--tilt)) rotateZ(var(--spin)) scale(var(--uz)); }
+@media (max-width: 700px) { .table-stage .felt { transform: rotateX(calc(var(--tilt) * .7)) rotateZ(var(--spin)) scale(var(--uz)); } }
+body.in-room .tray { position: relative; z-index: 20; }
+/* Doubled card: sideways across the lower half of the first two cards, so their corners stay readable. */
+.cards.fan .sideways { top: 46%; transform: translate(-50%, 0); }
+.cards.fan:has(.sideways) { margin-bottom: 22px; }
+/* Doubled card: sideways just above the hand, covering only the top tenth of the first two cards. */
+.cards.fan .sideways { top: 0; transform: translate(-50%, -75%); }
+.cards.fan:has(.sideways) { margin-bottom: 0; margin-top: 52px; }
+.seat:not(.pos2) .cards.fan:has(.sideways) { margin-top: 30px; }
+.peek-btn { background: rgba(40,30,70,.85) !important; border-color: #9b7cff !important; color: #e6dcff !important; }
+.decide .peek-btn { font-size: 12px; padding: 5px 12px; }
+.peek-pop { position: fixed; left: 50%; top: 40%; transform: translate(-50%, -50%); z-index: 96; background: rgba(12,10,24,.94); border: 2px solid #9b7cff; border-radius: 16px; padding: 14px 22px; text-align: center; box-shadow: 0 20px 50px rgba(0,0,0,.6); animation: pop .2s ease-out; transition: opacity .4s; }
+.peek-pop.out { opacity: 0; }
+.peek-pop .card { margin: 8px auto; }
+.peek-title { font-weight: 800; color: #cdbbff; letter-spacing: 1px; }
+/* Side bet ring icons */
+.ring-icon { font-size: 13px; text-anchor: middle; pointer-events: none; }
+.ring-icon.sm { font-size: 10px; }
+/* Side bet guide, top left */
+.sb-guide { position: fixed; top: 66px; left: 12px; z-index: 35; max-width: min(340px, 80vw); background: rgba(12,15,20,.9); border: 1px solid rgba(232,196,106,.35); border-radius: 12px; backdrop-filter: blur(6px); }
+.sb-guide > summary { list-style: none; cursor: pointer; padding: 8px 14px; font-weight: 800; color: var(--gold); font-size: 13px; letter-spacing: 1px; }
+.sb-guide > summary::-webkit-details-marker { display: none; }
+.sb-guide[open] > summary span { display: inline-block; transform: rotate(180deg); }
+#sb-guide-body { max-height: 60vh; overflow: auto; padding: 0 14px 12px; }
+.g-item { border-top: 1px solid var(--line); padding-top: 8px; margin-top: 8px; }
+.g-item p { margin: 4px 0; font-size: 12px; color: var(--muted); }
+.g-item table { width: 100%; font-size: 12px; border-collapse: collapse; }
+.g-item td:last-child { text-align: right; color: var(--gold); font-weight: 700; white-space: nowrap; }
+@media (max-width: 560px) { .sb-guide { top: 104px; left: 6px; } body.in-room .float-chart { top: 146px; } }
+/* On fire: three or more wins in a row. */
+.seat.hot .spot-area::before { content: ''; position: absolute; left: 50%; top: 50%; width: 120px; height: 120px; margin: -60px 0 0 -60px; border-radius: 50%; z-index: 0; pointer-events: none;
+  background: radial-gradient(circle, rgba(255,170,40,.55) 0%, rgba(255,80,0,.35) 45%, transparent 70%); animation: flicker .45s steps(3) infinite alternate; }
+.seat.hot .spot-area::after { content: '🔥'; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -125%); font-size: 30px; z-index: 4; pointer-events: none; image-rendering: pixelated; animation: flame .6s steps(4) infinite; filter: drop-shadow(0 0 8px #ff7a00); }
+.seat.blazing .spot-area::after { content: '🔥🔥🔥'; font-size: 34px; }
+@keyframes flicker { from { transform: scale(.92); opacity: .75; } to { transform: scale(1.08); opacity: 1; } }
+@keyframes flame { 0% { transform: translate(-50%, -125%) scale(1, 1); } 25% { transform: translate(-52%, -130%) scale(.95, 1.1); } 50% { transform: translate(-48%, -127%) scale(1.05, .95); } 75% { transform: translate(-50%, -132%) scale(.97, 1.12); } }
+/* Hit cards step up and to the side, the way a dealer lays them, so every corner stays readable.
+   On a split, the hands on the left spread to the left and the hands on the right spread to the right, so they never run into each other. */
+.cards.fan { --step: 9px; margin-top: calc((var(--n, 2) - 1) * var(--step)); align-items: flex-start; }
+.cards.fan > .card { position: relative; }
+.cards.fan > .card:nth-child(2) { top: calc(-1 * var(--step)); }
+.cards.fan > .card:nth-child(3) { top: calc(-2 * var(--step)); }
+.cards.fan > .card:nth-child(4) { top: calc(-3 * var(--step)); }
+.cards.fan > .card:nth-child(5) { top: calc(-4 * var(--step)); }
+.cards.fan > .card:nth-child(6) { top: calc(-5 * var(--step)); }
+.cards.fan > .card:nth-child(7) { top: calc(-6 * var(--step)); }
+.cards.fan > .card:nth-child(n+8) { top: calc(-7 * var(--step)); }
+.cards.fan.fan-left { flex-direction: row-reverse; }
+.cards.fan.fan-left .card + .card { margin-left: 0; margin-right: -22px; }
+.seat:not(.pos2) .cards.fan { --step: 5px; }
+.cards.fan:has(.sideways) { margin-top: calc((var(--n, 2) - 1) * var(--step) + 52px); }
+.cards.fan .sideways { top: calc((var(--n, 2) - 1) * var(--step) * -1); }
+.seat:not(.pos2) .cards.fan:has(.sideways) { margin-top: calc((var(--n, 2) - 1) * var(--step) + 30px); }
+@media (max-width: 700px) { .seat:not(.pos2) .cards.fan.fan-left .card + .card { margin-right: -14px; } }
+.move-btn.tile.broke .lbl { font-size: 9px; letter-spacing: 0; color: #ffb3b3; line-height: 1.1; }
+.move-btn.tile.broke { border-color: #ff6b6b; }
+/* Hit and Stand exactly in the middle; Surrender and Double on the left; Split on the right. */
+.decide-row { display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: center; width: 100%; }
+.decide-grp { display: flex; gap: 10px; align-items: center; }
+.decide-grp.g0 { justify-content: flex-end; }
+.decide-grp.g2 { justify-content: flex-start; }
+@media (max-width: 560px) { .decide-row, .decide-grp { gap: 6px; } }
+body.in-room .float-balance { display: block; }
+@media (max-width: 560px) { body.in-room .float-balance { left: 6px; bottom: 200px; padding: 4px 10px; } }
+.float-throw { position: fixed; left: 14px; bottom: 150px; z-index: 40; background: rgba(12,15,20,.92); border: 1px solid rgba(232,196,106,.5); color: var(--text); border-radius: 12px; padding: 8px 12px; font: inherit; font-weight: 700; cursor: pointer; }
+.float-throw:hover { border-color: var(--gold); }
+.throw-pop.wide { width: 260px; }
+.friend-list { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-bottom: 8px; }
+.badbeat { position: fixed; left: 50%; top: 68%; transform: translateX(-50%); z-index: 60; background: rgba(40,20,0,.94); border: 2px solid #c98a2b; border-radius: 14px; padding: 10px 16px; text-align: center; box-shadow: 0 14px 40px rgba(0,0,0,.6); animation: pop .2s ease-out; }
+.badbeat b { color: #ffc56b; margin-right: 6px; }
+.badbeat .btn { margin-left: 8px; }
+@media (max-width: 560px) { .float-throw { left: 6px; top: 188px; bottom: auto; padding: 5px 9px; font-size: 12px; } }
+/* Totals, odds and the decision buttons wait until the cards have landed. */
+.hand:has(.card.pending) .meta, .hand:has(.card.pending) .odds, .dealer:has(.card.pending) .dealer-total { visibility: hidden; }
+body:has(.card.pending) .felt-actions { visibility: hidden; }
+/* Aiming a reaction */
+body.aiming .seat[id^="seat-"]:not(.empty), body.aiming #dealer-zone { cursor: crosshair; outline: 2px dashed rgba(255,226,122,.7); outline-offset: 4px; border-radius: 14px; }
+.throw-grid button.sel { border-color: var(--gold); background: rgba(232,196,106,.25); }
+.table-banner { position: fixed; left: 50%; top: 30%; transform: translate(-50%, -50%); z-index: 70; background: rgba(8,12,10,.92); border: 2px solid #3ee06e; border-radius: 16px; padding: 12px 26px; text-align: center; box-shadow: 0 16px 40px rgba(0,0,0,.6); animation: pop .2s ease-out; transition: opacity .5s; pointer-events: none; }
+.table-banner.bad { border-color: #ff5a54; }
+.table-banner.out { opacity: 0; }
+.table-banner b { display: block; font-family: Cinzel, serif; font-size: 22px; letter-spacing: 2px; text-transform: uppercase; }
+.table-banner span { display: block; margin-top: 4px; color: var(--muted); font-size: 14px; }
+.ins-tag { background: #1b3d7a; border: 1px solid #8fc0ff; color: #fff; font-size: 12px; padding: 2px 8px; z-index: 5; }
+.spot .stack { pointer-events: none; }
+.move-btn.tile::after { content: attr(data-key); position: absolute; top: 3px; right: 6px; font-size: 10px; opacity: .6; font-weight: 700; }
+.move-btn.tile { position: relative; }

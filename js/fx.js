@@ -335,7 +335,12 @@ export function throwSound(item, stage) {
       burst(ac, t, 0.35, 0.5, 'lowpass', 700);
       tone(ac, 'sawtooth', 220, 60, t, 0.3, 0.08);
       break;
-    case 'poop': { // a long wobbly raspberry
+    case 'poop': // wet plop and a low squish
+      burst(ac, t, 0.3, 0.5, 'lowpass', 500);
+      tone(ac, 'sine', 300, 70, t, 0.25, 0.2);
+      tone(ac, 'sine', 160, 60, t + 0.18, 0.2, 0.12);
+      break;
+    case 'fart': { // a long wobbly raspberry
       const o = ac.createOscillator();
       o.type = 'sawtooth';
       o.frequency.setValueAtTime(110, t);
