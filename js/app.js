@@ -1,11 +1,11 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261119r';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261119r';
-import { tickSound, winSound } from './fx.js?v=20261119r';
-import { webglOK, initRoom } from './room3d.js?v=20261119r';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261119r';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261119s';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261119s';
+import { tickSound, winSound } from './fx.js?v=20261119s';
+import { webglOK, initRoom } from './room3d.js?v=20261119s';
+import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261119s';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -722,7 +722,16 @@ function buildLayout() {
 }
 
 // The 3D room is on unless the browser cannot draw it or the person turned it off.
-function use3D() { return params.get('flat') !== '1' && (safeGet('bj-3d') === '1' || params.get('room') === '3d' || params.get('3d') === '1') && webglOK(); }
+// The 3D room is the usual view on a computer. On a phone the flat table is the usual view, because
+// cards are too small in 3D there. The menu switch overrides either one and is remembered.
+function use3D() {
+  if (params.get('flat') === '1' || !webglOK()) return false;
+  if (params.get('room') === '3d' || params.get('3d') === '1') return true;
+  const saved = safeGet('bj-3d');
+  if (saved === '1') return true;
+  if (saved === '0') return false;
+  return Math.min(innerWidth, innerHeight) >= 600 && innerWidth >= 1000;
+}
 
 // Zoom the table a little in or out. Saved for next time on this device.
 function pixelOn() { return safeGet('bj-pixel') === '1'; }
