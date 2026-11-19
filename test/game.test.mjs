@@ -27,7 +27,7 @@ assert.equal(G.evalBustIt(cs('10♦ 6♣ 9♠')).mult, 1);
 assert.equal(G.evalBustIt(cs('2♦ 3♣ 4♠ 2♠ 5♠ K♠')).mult, 50);
 // full rounds random fuzz: chips conservation
 for (const decks of [1, 6, 'csm']) {
-  const t = Object.assign(new G.Table({ decks, shuffleMode: 'rounds', shuffleEvery: 3 }), { frozen: true });
+  const t = Object.assign(new G.Table({ decks, seats: 5, shuffleMode: 'rounds', shuffleEvery: 3 }), { frozen: true });
   const ids = ['a', 'b', 'c', 'd', 'e'];
   ids.forEach((id, i) => { t.join(id, id); t.sit(id, i); });
   t.join('bank', 'Bank'); t.sitDealer('bank');
@@ -195,4 +195,59 @@ const da = t.players.a.chips, dd = t.players.d.chips;
   const keyOf = (x) => x.map((c) => c.r + c.s).sort().join(' ');
   assert.equal(keyOf(again), keyOf(seen));
   console.log('fair shuffle tests passed');
+}
+{
+  // Seat count is a table setting. Seven by default.
+  assert.equal(G.DEFAULT_SETTINGS.seats, 7);
+  const t = Object.assign(new G.Table(), { frozen: true });
+  assert.equal(t.seats.length, 7);
+  assert.equal(t.publicState('nobody').seats.length, 7);
+  assert.equal(new G.Table({ seats: 3 }).seats.length, 3);
+  assert.equal(new G.Table({ seats: 40 }).seats.length, 40);
+  t.join('h', 'H'); t.join('a', 'A'); t.join('b', 'B');
+  t.sit('a', 6);
+  assert.throws(() => t.sit('b', 7), /No such seat/);
+  // Growing adds empty seats at the end and keeps everyone where they are.
+  t.updateSettings({ seats: 10 });
+  assert.equal(t.settings.seats, 10); assert.equal(t.seats.length, 10);
+  assert.equal(t.seats[6].playerId, 'a'); assert.deepEqual(t.seats.slice(7), [null, null, null]);
+  t.sit('b', 9);
+  // Shrinking over taken seats is refused and nothing changes.
+  assert.throws(() => t.updateSettings({ seats: 5 }), /Seats 7 and 10 are still taken/);
+  assert.throws(() => t.updateSettings({ seats: 8, decks: 1 }), /Seat 10 is still taken/);
+  assert.equal(t.settings.seats, 10); assert.equal(t.seats.length, 10); assert.equal(t.settings.decks, 6);
+  assert.throws(() => t.proposeSettings('h', { seats: 5 }, 'x'), /still taken/);
+  assert.equal(t.vote ?? null, null);
+  // Shrinking is fine once the seats being removed are empty.
+  t.sit('b', 0); t.sit('a', 1);
+  t.updateSettings({ seats: 2 });
+  assert.equal(t.settings.seats, 2); assert.equal(t.seats.length, 2);
+  assert.equal(t.players.a.seat, 1); assert.equal(t.players.b.seat, 0);
+  // Goes through the vote like every other setting.
+  t.proposeSettings('h', { seats: 9 }, 'x'); t.castVote('a', true); assert.equal(t.seats.length, 2);
+  t.castVote('b', true); assert.equal(t.seats.length, 9);
+  // Someone sits in a seat that is going away while the vote runs: the change is dropped, not half applied.
+  t.proposeSettings('h', { seats: 4 }, 'x'); t.sit('a', 8); t.castVote('a', true); t.castVote('b', true);
+  assert.equal(t.seats.length, 9); assert.equal(t.settings.seats, 9); assert.equal(t.vote, null);
+  // Other settings leave the seats alone, and odd values fall back to what the table has.
+  t.updateSettings({ decks: 2 }); assert.equal(t.seats.length, 9);
+  t.updateSettings({ seats: 'lots' }); assert.equal(t.seats.length, 9);
+  t.updateSettings({ seats: 0 }); assert.equal(t.seats.length, 9);
+  // A seat count agreed mid round applies when the round ends.
+  t.sit('a', 1); t.setBet('a', { main: 10, sides: {} }); t.deal();
+  if (t.inRound()) {
+    t.applySettings({ seats: 6 }); assert.equal(t.seats.length, 9);
+    let g = 0; while (t.phase !== 'settled' && g++ < 80) { if (t.phase === 'insurance') t.insurance('a', false); else if (t.phase === 'playing') t.action('a', 'stand'); else t.dealerStep(); }
+    assert.equal(t.seats.length, 6);
+  }
+  // Save and restore keeps the seat count, and tables saved with five seats still load with five.
+  const big = G.Table.fromJSON(JSON.parse(JSON.stringify(new G.Table({ seats: 12 }))));
+  assert.equal(big.seats.length, 12); assert.equal(big.settings.seats, 12);
+  const old = JSON.parse(JSON.stringify(new G.Table({ seats: 5 })));
+  delete old.settings.seats;
+  const t5 = G.Table.fromJSON(old);
+  assert.equal(t5.seats.length, 5); assert.equal(t5.settings.seats, 5);
+  t5.join('z', 'Z'); t5.sit('z', 4); assert.throws(() => t5.sit('z', 5));
+  t5.updateSettings({ seats: 7 }); assert.equal(t5.seats.length, 7);
+  console.log('seat count tests passed');
 }

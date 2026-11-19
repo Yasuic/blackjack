@@ -1,11 +1,11 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, MAX_SEATS, handTotal, sha256 } from './game.js?v=20261119h';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261119h';
-import { tickSound, winSound } from './fx.js?v=20261119h';
-import { webglOK, initRoom } from './room3d.js?v=20261119h';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261119h';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261119i';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261119i';
+import { tickSound, winSound } from './fx.js?v=20261119i';
+import { webglOK, initRoom } from './room3d.js?v=20261119i';
+import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261119i';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -677,10 +677,10 @@ function render(note) {
   if (prev && st.round !== prev.round) { S.undo = []; S.mainChips = []; S.sideChips = {}; }
   // Once the cards are dealt, the picked chip is put down, so the next round starts with none picked.
   if (prev && prev.phase !== st.phase && !(st.phase === 'betting' || st.phase === 'settled')) S.chip = null;
-  $('#felt').innerHTML = feltHTML(st);
   // The dealer sees the table from the dealer's side: dealer at the bottom, players across the top.
   if (S.room) S.room.setSide(myInfo(st).isBanker ? 'dealer' : 'player');
   else $('#felt').classList.toggle('flip', myInfo(st).isBanker);
+  $('#felt').innerHTML = feltHTML(st);
   const tray = $('#tray');
   // During a hand the move buttons appear in the middle of the table, only when you have to act.
   const between = st.phase === 'betting' || st.phase === 'settled';
@@ -887,11 +887,93 @@ function myInfo(st) {
 // Each person sees their own seat in the middle, with friends around them in table order.
 function seatOrder(st) {
   const { me, isBanker } = myInfo(st);
-  if (isBanker && !S.room) return Array.from({ length: MAX_SEATS }, (_, i) => i);
-  const center = Math.floor(MAX_SEATS / 2);
+  const n = st.seats.length;
+  if (isBanker && !S.room) return Array.from({ length: n }, (_, i) => i);
+  const center = Math.floor(n / 2);
   const shift = me && me.seat !== null ? me.seat - center : 0;
   // First base (seat 1, dealt first) is on the dealer's left, which is the right side of the screen.
-  return Array.from({ length: MAX_SEATS }, (_, pos) => (pos + shift + MAX_SEATS) % MAX_SEATS).reverse();
+  return Array.from({ length: n }, (_, pos) => (pos + shift + n) % n).reverse();
+}
+
+// Room each seat needs on the felt before any shrinking, in felt pixels: w and h for most seats,
+// fw and fh for the big middle seat. "top" is how far down from the dealer's end the seats must
+// stay (count badge, shoe; flipTop when you are the dealer and see the table from the other side), "curve" is how much of the felt's height the rounded end takes.
+const SEAT_BOX = {
+  desk: { w: 132, h: 300, fw: 190, fh: 346, side: 22, bottom: 26, top: 112, flipTop: 130, curve: 0.34 },
+  phone: { w: 70, h: 240, fw: 146, fh: 312, side: 4, bottom: 28, top: 166, flipTop: 208, curve: 0.22 },
+};
+// Where every seat goes, for any number of seats. `c` is the place in the row (0 = far left) of the big
+// middle seat, which sits at the bottom middle of the felt. The others follow the curved edge of the
+// table to its left and right, and carry on up the straight sides when the curve is full. When they
+// still do not fit, all seats shrink until they do. Returns one { x, y, s, r } per place: x and y are
+// percentages of the felt for the seat's outer edge, s is its size (1 = full), r its lean in degrees.
+function seatLayout(n, c, { W, H, phone, flip, round }) {
+  const B = phone ? SEAT_BOX.phone : SEAT_BOX.desk;
+  const K = Math.max(c, n - 1 - c);
+  const cx = W / 2, by = H - B.bottom;
+  const curve = round ? SEAT_BOX.desk.curve : B.curve;
+  const cy = H * (1 - curve), ry = by - cy;
+  const STEPS = 240;
+  // Try to seat K players on one side at size s with m times the room they need. Null if they do not fit.
+  const place = (s, m, curveOnly) => {
+    const fs = Math.sqrt(s); // the middle seat shrinks more slowly, so your own cards stay easy to read
+    const w = B.w * s, h = B.h * s;
+    const rx = W / 2 - B.side - w / 2;
+    const yTop = Math.min(cy, (flip ? B.flipTop : B.top) + h);
+    const upLen = curveOnly ? 0 : cy - yTop;
+    const curveLen = (Math.PI / 2) * Math.max(rx, ry);
+    const at = (d) => {
+      if (d <= curveLen) { const a = (d / curveLen) * (Math.PI / 2); return { x: rx * Math.sin(a), y: cy + ry * Math.cos(a) }; }
+      return { x: rx, y: cy - (d - curveLen) };
+    };
+    // With room to spare the seats stay on the gentle part of the curve, so nobody is left alone up a corner.
+    const total = curveOnly ? curveLen * 0.7 : curveLen + upLen, out = [];
+    let prev = { x: 0, y: by, w: B.fw * fs, h: B.fh * fs }, d = 0;
+    for (let k = 0; k < K; k++) {
+      let p = null;
+      for (; d <= total; d += total / STEPS) {
+        const q = at(d);
+        if (Math.max((q.x - prev.x) / ((prev.w + w) / 2), (prev.y - q.y) / prev.h) >= m) { p = q; break; }
+      }
+      if (!p) return null;
+      out.push(p);
+      prev = { x: p.x, y: p.y, w, h };
+    }
+    return { s, fs, pts: out };
+  };
+  const search = (lo, hi, fn) => { let best = fn(lo); for (let i = 0; i < 14 && best; i++) { const mid = (lo + hi) / 2, r = fn(mid); if (r) { best = r; lo = mid; } else hi = mid; } return best; };
+  let fit = null;
+  if (place(1, 1, true)) fit = place(1, 1.6, true) || search(1, 1.6, (m) => place(1, m, true)); // room to spare: spread out along the curve
+  else fit = place(1, 1, false) || search(0.02, 1, (s) => place(s, 1, false)) || place(0.02, 0, false);
+  const pct = (v, of) => Math.round((v / of) * 10000) / 100;
+  return Array.from({ length: n }, (_, pos) => {
+    const k = Math.abs(pos - c), side = Math.sign(pos - c);
+    const p = k ? fit.pts[k - 1] : { x: 0, y: by };
+    const x = cx + side * p.x, y = flip ? H - p.y : p.y;
+    const lean = phone ? 0 : -8 * (side * p.x / (W / 2)) * (flip ? -1 : 1);
+    return { x: pct(x, W), y: pct(y, H), s: Math.round((k ? fit.s : fit.fs) * 1000) / 1000, r: Math.round(lean * 10) / 10 };
+  });
+}
+function seatSpots(st) {
+  const { me } = myInfo(st);
+  const order = seatOrder(st);
+  // The big middle seat is your own. Before you sit down it is simply the seat in the middle of the row.
+  const mid = me && me.seat !== null && order.includes(me.seat) ? order.indexOf(me.seat) : order.length - 1 - Math.floor(order.length / 2);
+  return { order, mid, spots: seatLayout(order.length, mid, feltBox()) };
+}
+const spotStyle = (p) => `--x:${p.x}%;--y:${p.y}%;--s:${p.s};--r:${p.r}deg`;
+// The window changed size: move the seats to fit the felt as it is now.
+function placeSeats() {
+  if (!S.state || !$('#felt .seats')) return;
+  const { order, spots } = seatSpots(S.state);
+  order.forEach((i, pos) => { const el = $('#seat-' + i); if (el) el.style.cssText = spotStyle(spots[pos]); });
+}
+function feltBox() {
+  const el = $('#felt');
+  const phone = matchMedia('(max-width: 700px)').matches;
+  const flip = !!el?.classList.contains('flip');
+  const in3d = !!el?.classList.contains('in3d');
+  return { W: el?.clientWidth || (phone ? innerWidth - 16 : 1116), H: el?.clientHeight || (phone ? 560 : 820), phone, flip, round: flip || in3d };
 }
 
 function feltHTML(st) {
@@ -913,14 +995,14 @@ function feltHTML(st) {
     dealerSeat = `<div class="dealer-name">${st.frozen ? 'Dealer: house (automatic)' : 'No dealer yet'}
       ${me && !st.vote ? '<button class="btn small gold" data-act="sit-dealer">Ask to be dealer</button>' : ''}</div>`;
   }
-  const order = seatOrder(st);
+  const { order, mid, spots } = seatSpots(st);
   computeOdds(st);
   return `
     ${countBadgeHTML(st)}
     <div class="shoe-box"><div class="shoe" id="shoe"><div class="shoe-cards"></div><div class="shoe-fill" style="--fill:${Math.round(100 * st.shoe.left / (st.shoe.size || 1))}%"></div></div><div class="shoe-info">${shoeTxt}</div></div>
     <div class="dealer" id="dealer-zone">
       ${dealerSeat}
-      <div class="cards">${d.cards.map((c, i) => cardHTML(c, true, `${r}-d-${i}`, [i, MAX_SEATS])).join('')}</div>
+      <div class="cards">${d.cards.map((c, i) => cardHTML(c, true, `${r}-d-${i}`, [i, st.seats.length])).join('')}</div>
       <div class="dealer-total">${dealerTotal}${S.fav === 'dealer' ? ' <span class="fav-tag">Favourite</span>' : ''}</div>
     </div>
     ${arcTextHTML(st)}
@@ -929,7 +1011,7 @@ function feltHTML(st) {
       <div class="status">${esc(statusText(st))} <span id="timer" class="timer" hidden></span></div>
       ${dealMeInHTML(st)}
     </div>
-    <div class="seats">${order.map((i, pos) => seatHTML(st, st.seats[i], i, pos)).join('')}</div>`;
+    <div class="seats">${order.map((i, pos) => seatHTML(st, st.seats[i], i, pos === mid, spots[pos])).join('')}</div>`;
 }
 
 // Live chances for every hand once the first two cards are out, and the favourite at the table.
@@ -1002,11 +1084,12 @@ function arcTextHTML(st) {
   </svg>`;
 }
 
-function seatHTML(st, s, i, pos) {
+function seatHTML(st, s, i, focus, spot) {
   const { me, isBanker } = myInfo(st);
+  const place = `style="${spotStyle(spot)}"`;
   if (!s) {
     const canSit = me && me.seat === null && !isBanker;
-    return `<div class="seat empty pos${pos}" id="seat-${i}">${spotAreaHTML(st, null, i, false, 0)}${canSit ? `<button class="btn small" data-act="sit" data-seat="${i}">Sit here</button>` : `<span>Seat ${i + 1}</span>`}</div>`;
+    return `<div class="seat empty ${focus ? 'focus' : ''}" id="seat-${i}" ${place}>${spotAreaHTML(st, null, i, false, 0)}${canSit ? `<button class="btn small" data-act="sit" data-seat="${i}">Sit here</button>` : `<span>Seat ${i + 1}</span>`}</div>`;
   }
   const isMe = s.playerId === S.myId;
   const turn = st.turn && st.turn.seat === i;
@@ -1033,7 +1116,7 @@ function seatHTML(st, s, i, pos) {
   const ready = st.phase === 'betting' && s.ready ? '<span class="ready-tag">Ready</span>' : '';
   const shownBet = s.hands.length > 1 ? s.bet.main : s.hands.length ? s.hands[0].bet : s.bet.main;
   const hot = s.streak >= 3 ? `hot ${s.streak >= 5 ? 'blazing' : ''}` : '';
-  return `<div class="seat pos${pos} ${hot} ${isMe ? 'me' : ''} ${turn ? 'turn' : ''} ${s.connected ? '' : 'away'}" id="seat-${i}">
+  return `<div class="seat ${focus ? 'focus' : ''} ${hot} ${isMe ? 'me' : ''} ${turn ? 'turn' : ''} ${s.connected ? '' : 'away'}" id="seat-${i}" ${place}>
     <div class="hands">${hands}</div>
     ${spotAreaHTML(st, s, i, isMe, shownBet)}
     ${sides}${net}
@@ -1250,6 +1333,10 @@ function renderHostPanel(st) {
       <label class="full mode-rounds" ${s.shuffleMode === 'rounds' ? '' : 'hidden'}>Reshuffle every N rounds<input id="set-every" type="number" min="1" max="50" value="${s.shuffleEvery}" ${dis} /></label>
       <button class="btn full" data-act="h-shuffle" ${dis}>Shuffle now</button>
     </div>`, true)}
+    ${fold('set-seats', '🪑 Seats', `<div class="settings-grid">
+      <label class="full">Seats at the table<input id="set-seats" type="number" min="1" step="1" inputmode="numeric" value="${s.seats}" ${dis} /></label>
+      <div class="hint full">Most casino tables have 7. A seat can only be taken away when nobody is sitting in it.</div>
+    </div>`, true)}
     ${fold('set-bets', '💵 Chips and bet limits', `<div class="settings-grid">
       <label>Starting chips<input id="set-start" type="number" min="1" value="${s.startChips}" ${dis} /></label>
       <label>Max side bet<input id="set-maxside" type="number" min="0" value="${s.maxSideBet}" ${dis} /></label>
@@ -1283,6 +1370,7 @@ function renderHostPanel(st) {
 // double any two cards and after splits, split to 4 hands, aces split once, late surrender.
 // Settings changes go to a vote: every other player must say yes.
 const SETTING_NAMES = {
+  seats: ['Seats at the table', (v) => String(v)],
   decks: ['Cards', (v) => (v === 'csm' ? 'randomized' : `${v} deck${v > 1 ? 's' : ''}`)],
   shuffleMode: ['Reshuffle', (v) => (v === 'rounds' ? 'every few rounds' : 'by share of shoe used')],
   penetration: ['Reshuffle at', (v) => v + '% used'],
@@ -1555,8 +1643,10 @@ app.addEventListener('click', (e) => {
     case 'h-settings': {
       const v = (id) => $('#' + id).value;
       const decks = v('set-decks') === 'csm' ? 'csm' : Number(v('set-decks'));
+      const seats = Math.round(Number(v('set-seats')));
+      if (!(seats >= 1)) { toast('The table needs at least 1 seat.'); break; }
       proposeSettings({
-        decks, shuffleMode: v('set-mode'), penetration: Number(v('set-pen')), shuffleEvery: Number(v('set-every')),
+        seats, decks, shuffleMode: v('set-mode'), penetration: Number(v('set-pen')), shuffleEvery: Number(v('set-every')),
         startChips: Number(v('set-start')), minBet: Number(v('set-min')), maxBet: Number(v('set-max')), maxSideBet: Number(v('set-maxside')),
         dealerHitsSoft17: $('#set-h17').checked, allowSurrender: $('#set-sur').checked, autoDeal: $('#set-auto').checked,
         betTimer: Number(v('set-bettimer')), turnTimer: Number(v('set-turntimer')),
@@ -1771,7 +1861,7 @@ document.addEventListener('input', (e) => {
   applyZoom();
 });
 
-addEventListener('resize', () => applyZoom());
+addEventListener('resize', () => { applyZoom(); placeSeats(); });
 
 // Camera: drag an empty part of the table to tilt and turn it, scroll to zoom.
 (() => {

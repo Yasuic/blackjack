@@ -3,9 +3,9 @@
 
 export const SUITS = ['♠', '♥', '♦', '♣'];
 export const RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
-export const MAX_SEATS = 5;
 
 export const DEFAULT_SETTINGS = {
+  seats: 7,              // player seats at the table (any whole number from 1 up)
   decks: 6,              // 1, 2, 6, 8, or 'csm' (randomized: full reshuffle before every round)
   shuffleMode: 'penetration', // 'penetration' or 'rounds'
   penetration: 75,       // reshuffle once this % of the shoe has been dealt
@@ -312,7 +312,8 @@ export function evalBustIt(dealerCards) {
 export class Table {
   constructor(settings = {}) {
     this.settings = { ...DEFAULT_SETTINGS, ...settings };
-    this.seats = Array(MAX_SEATS).fill(null);
+    this.settings.seats = seatCount(this.settings.seats);
+    this.seats = Array(this.settings.seats).fill(null);
     this.players = {}; // clientId -> { name, chips, seat, connected }
     this.frozen = false; // host chose to deal with the house dealer and frozen balances
     this.banker = null; // clientId of a player sitting as the dealer (the bank), or null
@@ -352,7 +353,7 @@ export class Table {
     this.roundsSinceShuffle = 0;
     this.addLog('The shoe was shuffled.');
   }
-  needsShuffle(players = MAX_SEATS) {
+  needsShuffle(players = this.seats.length) {
     const s = this.settings;
     if (s.decks === 'csm') return true;
     // Never start a round with too few cards for a normal round.
@@ -399,8 +400,24 @@ export class Table {
     s.betTimer = Number(s.betTimer) > 0 ? clamp(Math.round(Number(s.betTimer)), 5, 300) : 0;
     s.turnTimer = Number(s.turnTimer) > 0 ? clamp(Math.round(Number(s.turnTimer)), 5, 300) : 0;
     if (![1, 2, 6, 8, 'csm'].includes(s.decks)) s.decks = Number(s.decks) || 'csm';
+    s.seats = seatCount(s.seats, this.seats.length);
+    this.checkSeatCount(s.seats);
     this.settings = s;
+    // Growing adds empty seats at the end. Shrinking only ever removes empty ones (checked above).
+    while (this.seats.length < s.seats) this.seats.push(null);
+    this.seats.length = s.seats;
     if (old.decks !== s.decks) this.newShoe();
+  }
+
+  // The table can only lose seats that nobody is sitting in.
+  checkSeatCount(n) {
+    if (n === undefined || n === null) return;
+    n = seatCount(n, this.seats.length);
+    const taken = [];
+    for (let i = n; i < this.seats.length; i++) if (this.seats[i]) taken.push(i + 1);
+    if (!taken.length) return;
+    const list = taken.length === 1 ? `${taken[0]}` : `${taken.slice(0, -1).join(', ')} and ${taken[taken.length - 1]}`;
+    throw new Error(`${taken.length === 1 ? 'Seat' : 'Seats'} ${list} ${taken.length === 1 ? 'is' : 'are'} still taken. Ask them to move first.`);
   }
 
   addLog(msg) {
@@ -427,7 +444,7 @@ export class Table {
 
   sit(clientId, seatIdx) {
     const p = this.mustPlayer(clientId);
-    if (seatIdx < 0 || seatIdx >= MAX_SEATS) throw new Error('No such seat.');
+    if (seatIdx < 0 || seatIdx >= this.seats.length || !Number.isInteger(seatIdx)) throw new Error('No such seat.');
     if (this.banker === clientId) throw new Error('Leave the dealer seat first.');
     if (this.seats[seatIdx]) throw new Error('That seat is taken.');
     if (p.seat !== null) {
@@ -471,6 +488,7 @@ export class Table {
   // Settings changes from the host also need everyone's yes.
   proposeSettings(hostId, patch, summary) {
     if (this.vote) throw new Error('A vote is already running.');
+    this.checkSeatCount(patch?.seats);
     const voters = Object.values(this.players).filter((x) => x.id !== hostId && x.connected && !x.kicked).map((x) => x.id);
     this.voteSeq = (this.voteSeq || 0) + 1;
     if (!voters.length) { this.applySettings(patch); return null; }
@@ -481,8 +499,9 @@ export class Table {
 
   applySettings(patch) {
     if (this.inRound()) { this.pendingSettings = patch; return; }
-    this.updateSettings(patch);
     this.pendingSettings = null;
+    // Someone may have sat down in a seat that was going away while the vote or the round was running.
+    try { this.updateSettings(patch); } catch (e) { this.addLog(`The settings stay the same. ${e.message}`); return; }
     this.addLog('New settings are in.');
   }
 
@@ -671,7 +690,7 @@ export class Table {
     this.phase = 'betting';
     this.dealer = { cards: [], revealed: false };
     this.turn = null;
-    for (let i = 0; i < MAX_SEATS; i++) {
+    for (let i = 0; i < this.seats.length; i++) {
       const seat = this.seats[i];
       if (!seat) continue;
       const p = this.players[seat.playerId];
@@ -894,7 +913,7 @@ export class Table {
   }
 
   advance() {
-    for (let i = 0; i < MAX_SEATS; i++) {
+    for (let i = 0; i < this.seats.length; i++) {
       const seat = this.seats[i];
       if (!seat) continue;
       for (let j = 0; j < seat.hands.length; j++) {
@@ -1084,7 +1103,9 @@ export class Table {
     const t = new Table(obj.settings);
     Object.assign(t, obj);
     if (!obj.fair) t.fair.current = null; // a table saved before fair shuffles: its shoe has no seed to show
-    t.settings = { ...DEFAULT_SETTINGS, ...obj.settings };
+    // Tables saved before the seat count was a setting keep the seats they had.
+    if (!Array.isArray(t.seats) || !t.seats.length) t.seats = Array(seatCount(obj.settings?.seats)).fill(null);
+    t.settings = { ...DEFAULT_SETTINGS, ...obj.settings, seats: t.seats.length };
     Object.values(t.players).forEach((p) => (p.connected = false));
     return t;
   }
@@ -1098,6 +1119,10 @@ function newHand(bet) {
 }
 function sumValues(o) {
   return Object.values(o || {}).reduce((a, b) => a + b, 0);
+}
+function seatCount(v, fallback = DEFAULT_SETTINGS.seats) {
+  const n = Math.round(Number(v));
+  return n >= 1 && Number.isFinite(n) ? n : fallback;
 }
 function clamp(v, lo, hi) {
   return Math.min(hi, Math.max(lo, isNaN(v) ? lo : v));
