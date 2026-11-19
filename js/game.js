@@ -204,6 +204,7 @@ export class Table {
     this.settings = { ...DEFAULT_SETTINGS, ...settings };
     this.seats = Array(MAX_SEATS).fill(null);
     this.players = {}; // clientId -> { name, chips, seat, connected }
+    this.banker = null; // clientId of a player sitting as the dealer (the bank), or null
     this.phase = 'betting';
     this.dealer = { cards: [], revealed: false };
     this.turn = null; // { seat, hand }
@@ -281,6 +282,7 @@ export class Table {
   sit(clientId, seatIdx) {
     const p = this.mustPlayer(clientId);
     if (seatIdx < 0 || seatIdx >= MAX_SEATS) throw new Error('No such seat.');
+    if (this.banker === clientId) throw new Error('Leave the dealer seat first.');
     if (this.seats[seatIdx]) throw new Error('That seat is taken.');
     if (p.seat !== null) {
       if (this.seats[p.seat]?.hands?.length && this.inRound()) throw new Error('Finish this round first.');
@@ -288,6 +290,77 @@ export class Table {
     }
     this.seats[seatIdx] = emptySeat(clientId);
     p.seat = seatIdx;
+  }
+
+  // A player can sit as the dealer. The dealer still follows the fixed rules,
+  // but their chips act as the bank: they collect what players lose and pay what players win.
+  sitDealer(clientId) {
+    const p = this.mustPlayer(clientId);
+    if (this.inRound()) throw new Error('Wait for the round to end.');
+    if (this.banker && this.banker !== clientId) throw new Error('Someone is already the dealer.');
+    if (p.seat !== null) {
+      this.seats[p.seat] = null;
+      p.seat = null;
+    }
+    this.banker = clientId;
+    this.addLog(`${p.name} is now the dealer.`);
+  }
+
+  // Moving to the dealer seat needs everyone else's approval. A vote that
+  // runs out counts as "no".
+  requestDealer(clientId) {
+    const p = this.mustPlayer(clientId);
+    if (this.banker === clientId) throw new Error('You are already the dealer.');
+    if (this.vote) throw new Error('A vote is already running.');
+    const voters = Object.values(this.players)
+      .filter((x) => x.id !== clientId && x.connected && !x.kicked)
+      .map((x) => x.id);
+    this.voteSeq = (this.voteSeq || 0) + 1;
+    if (!voters.length) { this.applyDealer(clientId); return null; }
+    this.vote = { id: this.voteSeq, candidate: clientId, voters, votes: {} };
+    this.addLog(`${p.name} asked to be the dealer. Everyone else votes.`);
+    return this.vote.id;
+  }
+
+  castVote(clientId, yes) {
+    const v = this.vote;
+    if (!v || !v.voters.includes(clientId) || clientId in v.votes) return;
+    v.votes[clientId] = !!yes;
+    const name = this.players[v.candidate].name;
+    if (!yes) {
+      this.vote = null;
+      this.addLog(`${this.players[clientId].name} voted no. ${name} stays where they are.`);
+      return;
+    }
+    if (v.voters.every((id) => v.votes[id] === true)) {
+      this.vote = null;
+      this.addLog(`Everyone said yes. ${name} moves to the dealer seat.`);
+      this.applyDealer(v.candidate);
+    }
+  }
+
+  expireVote(voteId) {
+    if (!this.vote || this.vote.id !== voteId) return;
+    this.addLog(`The vote for ${this.players[this.vote.candidate].name} ran out, so the answer is no.`);
+    this.vote = null;
+  }
+
+  // Move a player to the dealer seat now, or after the current round.
+  applyDealer(clientId) {
+    if (this.inRound()) { this.pendingBanker = clientId; return; }
+    const p = this.players[clientId];
+    if (!p) return;
+    if (p.seat !== null) { this.seats[p.seat] = null; p.seat = null; }
+    this.banker = clientId;
+    this.pendingBanker = null;
+    this.addLog(`${p.name} is now the dealer.`);
+  }
+
+  leaveDealer(clientId) {
+    if (this.banker !== clientId) return;
+    if (this.inRound()) throw new Error('Wait for the round to end.');
+    this.banker = null;
+    this.addLog(`${this.players[clientId].name} left the dealer seat.`);
   }
 
   standUp(clientId) {
@@ -319,6 +392,7 @@ export class Table {
         p.seat = null;
       }
     }
+    if (this.banker === clientId && !this.inRound()) this.banker = null;
     p.kicked = true;
     p.connected = false;
   }
@@ -641,7 +715,14 @@ export class Table {
       seat.net = seat.returned - seat.staked;
       seat.ready = false;
     }
+    // A player sitting as the dealer pays and collects everything.
+    if (this.banker && this.players[this.banker]) {
+      const tableNet = this.seats.reduce((sum, seat) => sum + (seat && seat.hands.length ? seat.net : 0), 0);
+      this.players[this.banker].chips -= tableNet;
+      this.bankerNet = -tableNet;
+    } else this.bankerNet = null;
     this.phase = 'settled';
+    if (this.pendingBanker) this.applyDealer(this.pendingBanker);
     this.turn = null;
     this.addLog(`Dealer ${dealerBJ ? 'blackjack' : dealerBust ? 'busts with ' + d : 'has ' + d}.`);
   }
@@ -668,6 +749,15 @@ export class Table {
         total: hide ? handTotal([this.dealer.cards[0]]).total : handTotal(this.dealer.cards).total,
         soft: hide ? false : handTotal(this.dealer.cards).soft,
       },
+      vote: this.vote ? {
+        id: this.vote.id,
+        candidate: this.vote.candidate,
+        name: this.players[this.vote.candidate].name,
+        voters: this.vote.voters.length,
+        yes: Object.values(this.vote.votes).filter(Boolean).length,
+        canVote: this.vote.voters.includes(forClientId) && !(forClientId in this.vote.votes),
+      } : null,
+      banker: this.banker && this.players[this.banker] ? { id: this.banker, name: this.players[this.banker].name, chips: this.players[this.banker].chips, connected: this.players[this.banker].connected, net: this.phase === 'settled' ? this.bankerNet : null } : null,
       seats: this.seats.map((s) => {
         if (!s) return null;
         const p = this.players[s.playerId];
@@ -695,8 +785,8 @@ export class Table {
 
   // Save and restore so the host can refresh the page without losing the table.
   toJSON() {
-    const { settings, seats, players, phase, dealer, turn, round, roundsSinceShuffle, log, shoe, shoeSize } = this;
-    return { settings, seats, players, phase, dealer, turn, round, roundsSinceShuffle, log, shoe, shoeSize };
+    const { settings, seats, players, phase, dealer, turn, round, roundsSinceShuffle, log, shoe, shoeSize, banker, bankerNet, pendingBanker } = this;
+    return { settings, seats, players, phase, dealer, turn, round, roundsSinceShuffle, log, shoe, shoeSize, banker, bankerNet, pendingBanker };
   }
   static fromJSON(obj) {
     const t = new Table(obj.settings);

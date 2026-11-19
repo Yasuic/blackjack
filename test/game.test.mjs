@@ -29,6 +29,7 @@ for (const decks of [1, 6, 'csm']) {
   const t = new G.Table({ decks, shuffleMode: 'rounds', shuffleEvery: 3 });
   const ids = ['a', 'b', 'c', 'd', 'e'];
   ids.forEach((id, i) => { t.join(id, id); t.sit(id, i); });
+  t.join('bank', 'Bank'); t.sitDealer('bank');
   for (let r = 0; r < 400; r++) {
     for (const id of ids) {
       const p = t.players[id];
@@ -38,6 +39,7 @@ for (const decks of [1, 6, 'csm']) {
       t.setBet(id, { main: 10, sides, ready: true });
     }
     const before = ids.reduce((s, id) => s + t.players[id].chips, 0);
+    const bankBefore = t.players.bank.chips;
     t.deal();
     if (t.phase === 'insurance') ids.forEach((id) => { try { t.insurance(id, Math.random() < 0.5); } catch {} });
     let guard = 0;
@@ -51,6 +53,7 @@ for (const decks of [1, 6, 'csm']) {
     const after = ids.reduce((s, id) => s + t.players[id].chips, 0);
     const net = t.seats.reduce((s, x) => s + x.net, 0);
     assert.equal(after - before, net, 'net matches chip change');
+    assert.equal(t.players.bank.chips - bankBefore + net, 0, 'dealer seat pays and collects');
     ids.forEach((id) => assert.ok(t.players[id].chips >= 0));
     t.startBetting();
   }
@@ -63,3 +66,22 @@ const t = new G.Table(); t.join('x', 'X'); t.sit('x', 0); t.setBet('x', { main: 
 const ps = t.publicState('x');
 if (t.phase === 'playing') assert.ok(ps.dealer.cards[1].hidden);
 console.log('all game tests passed');
+
+// dealer seat rules
+{
+  const t = new G.Table(); t.join('a', 'A'); t.join('b', 'B'); t.sit('a', 0); t.sitDealer('a');
+  assert.equal(t.players.a.seat, null);
+  assert.throws(() => t.sitDealer('b'));
+  assert.throws(() => t.sit('a', 1));
+  t.leaveDealer('a'); assert.equal(t.banker, null);
+}
+console.log('dealer seat tests passed');
+
+{
+  const t = new G.Table(); ['a','b','c'].forEach((x) => t.join(x, x));
+  const id = t.requestDealer('a'); t.castVote('b', true); assert.equal(t.banker, null);
+  t.castVote('c', true); assert.equal(t.banker, 'a');
+  t.requestDealer('b'); t.castVote('a', false); assert.equal(t.banker, 'a'); assert.equal(t.vote, null);
+  const v = t.requestDealer('c'); t.expireVote(v); assert.equal(t.vote, null); assert.equal(t.banker, 'a');
+}
+console.log('vote tests passed');
