@@ -220,11 +220,6 @@ body { background: radial-gradient(ellipse at 50% -10%, #1b2330 0%, var(--bg) 60
 /* Seats along the curved edge */
 .seats { grid-template-columns: 1fr 1fr 1.35fr 1fr 1fr; gap: 6px; align-items: start; margin-top: 8px; }
 .seat { background: transparent; border: none; min-height: 0; align-items: center; padding: 4px; gap: 4px; }
-.seat.pos0, .seat.pos4 { margin-top: 0; }
-.seat.pos1, .seat.pos3 { margin-top: 46px; }
-.seat.pos2 { margin-top: 70px; }
-.seat.pos0 { transform: rotate(7deg); } .seat.pos1 { transform: rotate(3deg); }
-.seat.pos3 { transform: rotate(-3deg); } .seat.pos4 { transform: rotate(-7deg); }
 .seat.me, .seat.turn { border: none; box-shadow: none; }
 .seat.empty { border: none; justify-content: flex-start; }
 .seat .who { flex-direction: column; align-items: center; background: rgba(0,0,0,.45); border-radius: 10px; padding: 4px 10px; gap: 0; border: 1px solid rgba(255,255,255,.08); max-width: 100%; }
@@ -239,18 +234,16 @@ body { background: radial-gradient(ellipse at 50% -10%, #1b2330 0%, var(--bg) 60
 .side-results { width: 100%; }
 @media (max-width: 700px) {
   .seats { grid-template-columns: 1fr 1fr 1.7fr 1fr 1fr; gap: 2px; }
-  .seat.pos1, .seat.pos3 { margin-top: 26px; } .seat.pos2 { margin-top: 40px; }
-  .seat:not(.pos2) .card { width: 26px; height: 38px; padding: 1px 2px; } .seat:not(.pos2) .card .rk, .seat:not(.pos2) .card .st { font-size: 12px; }
-  .seat:not(.pos2) .cards.fan .card + .card { margin-left: -14px; }
-  .seat:not(.pos2) .side-results, .seat:not(.pos2) .net { display: none; }
+  .seat:not(.focus) .card { width: 26px; height: 38px; padding: 1px 2px; } .seat:not(.focus) .card .rk, .seat:not(.focus) .card .st { font-size: 12px; }
+  .seat:not(.focus) .cards.fan .card + .card { margin-left: -14px; }
+  .seat:not(.focus) .side-results, .seat:not(.focus) .net { display: none; }
   .seat .name { font-size: 11px; } .seat .who { padding: 2px 5px; }
-  .seat.pos0, .seat.pos1, .seat.pos3, .seat.pos4 { transform: none; }
 }
 
 /* Betting circle with side bets around it */
 .spot-area { position: relative; width: 150px; height: 150px; flex: none; }
-.seat:not(.pos2) .spot-area { transform: scale(.72); margin: -21px; }
-@media (max-width: 700px) { .seat.pos2 .spot-area { transform: scale(.8); margin: -15px; } .seat:not(.pos2) .spot-area { transform: scale(.42); margin: -43px; } }
+.seat:not(.focus) .spot-area { transform: scale(.72); margin: -21px; }
+@media (max-width: 700px) { .seat.focus .spot-area { transform: scale(.8); margin: -15px; } .seat:not(.focus) .spot-area { transform: scale(.42); margin: -43px; } }
 .spot { position: absolute; left: 50%; top: 50%; width: 66px; height: 66px; transform: translate(-50%, -50%); border-radius: 50%; border: 2px solid rgba(232,196,106,.75); background: rgba(0,0,0,.18); display: grid; place-items: center; }
 .spot-amt { position: absolute; bottom: -8px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,.75); color: var(--gold); font-weight: 800; font-size: 12px; padding: 0 6px; border-radius: 8px; white-space: nowrap; }
 .spot-amt:empty { display: none; }
@@ -329,7 +322,7 @@ button.sb:hover { border-color: var(--gold); background: rgba(232,196,106,.25); 
 .seat { min-width: 0; }
 @media (max-width: 700px) {
   .seats { grid-template-columns: minmax(0,1fr) minmax(0,1fr) minmax(0,1.7fr) minmax(0,1fr) minmax(0,1fr); }
-  .seat:not(.pos2) .spot-area { transform: scale(.38); margin: -46px; }
+  .seat:not(.focus) .spot-area { transform: scale(.38); margin: -46px; }
   .topbar { flex-wrap: nowrap; padding: 8px 10px; gap: 8px; }
   .topbar .title { font-size: 13px; letter-spacing: 2px; }
   .topbar .pill { font-size: 11px; padding: 3px 8px; }
@@ -500,7 +493,7 @@ button.sb:hover { border-color: var(--gold); background: rgba(232,196,106,.25); 
 .hand-bet span { position: absolute; left: 50%; bottom: -12px; transform: translateX(-50%); font-size: 10px; font-weight: 800; color: var(--gold); background: rgba(0,0,0,.7); padding: 0 4px; border-radius: 4px; white-space: nowrap; }
 .sideways { display: inline-flex; align-items: center; justify-content: center; width: 64px; margin-left: -10px; }
 .sideways .card { transform: rotate(90deg); margin: 0 !important; }
-.seat:not(.pos2) .sideways { width: 38px; }
+.seat:not(.focus) .sideways { width: 38px; }
 .seat .hand { min-width: 0; }
 /* Fonts: Lato for reading, Cinzel for casino style lettering, Libre Baskerville for card faces */
 html, body, button, input, select { font-family: Lato, system-ui, sans-serif; }
@@ -519,7 +512,7 @@ html, body, button, input, select { font-family: Lato, system-ui, sans-serif; }
 .sb-amt { position: relative; z-index: 2; font-size: 12px; font-weight: 900; color: #fff; background: rgba(0,0,0,.82); border: 1px solid var(--gold); border-radius: 7px; padding: 0 4px; line-height: 15px; margin: 0; font-family: Cinzel, Georgia, serif; }
 .sb.on { border-color: var(--gold); background: transparent; }
 .spot-area { width: 160px; height: 160px; }
-@media (max-width: 700px) { .seat.pos2 .spot-area { transform: scale(.85); margin: -12px; } }
+@media (max-width: 700px) { .seat.focus .spot-area { transform: scale(.85); margin: -12px; } }
 /* Very clear active hand */
 .hand.active { position: relative; outline: 3px solid #ffe27a; outline-offset: 3px; border-radius: 10px; background: rgba(255,226,122,.16); box-shadow: 0 0 0 7px rgba(255,226,122,.18), 0 0 26px rgba(255,226,122,.55); }
 .hand.active .cards { filter: none; }
@@ -550,8 +543,8 @@ html, body, button, input, select { font-family: Lato, system-ui, sans-serif; }
 .felt > .dealer { flex: none; min-height: 150px; }
 .felt > .seats { margin-top: auto; flex: none; }
 .seat .hands { min-height: 112px; align-items: flex-end; }
-.seat:not(.pos2) .hands { min-height: 70px; }
-@media (max-width: 700px) { .felt { height: 520px; } .seat .hands { min-height: 80px; } .seat:not(.pos2) .hands { min-height: 46px; } }
+.seat:not(.focus) .hands { min-height: 70px; }
+@media (max-width: 700px) { .felt { height: 520px; } .seat .hands { min-height: 80px; } .seat:not(.focus) .hands { min-height: 46px; } }
 .mid-band { position: absolute !important; left: 0; right: 0; top: 232px; z-index: 4 !important; display: flex; flex-direction: column; align-items: center; gap: 10px; pointer-events: none; }
 .mid-band > * { pointer-events: auto; }
 .mid-band .status { margin: 0; }
@@ -572,16 +565,11 @@ html, body, button, input, select { font-family: Lato, system-ui, sans-serif; }
 .felt.flip > .seats { margin-top: 0; margin-bottom: auto; }
 .felt.flip > .arc-svg { transform: rotate(180deg); margin: 0 auto -8px; }
 .felt.flip .seat { flex-direction: column-reverse; }
-.felt.flip .seat.pos0, .felt.flip .seat.pos4 { margin-top: 70px; }
-.felt.flip .seat.pos1, .felt.flip .seat.pos3 { margin-top: 24px; }
-.felt.flip .seat.pos2 { margin-top: 0; }
-.felt.flip .seat.pos0 { transform: rotate(-7deg); } .felt.flip .seat.pos1 { transform: rotate(-3deg); }
-.felt.flip .seat.pos3 { transform: rotate(3deg); } .felt.flip .seat.pos4 { transform: rotate(7deg); }
 .felt.flip .seat .hands { align-items: flex-start; }
 .felt.flip .mid-band { top: auto; bottom: 250px; }
 .felt.flip > .shoe-box { top: auto; bottom: 22px; }
 .felt.flip > .dealer { padding: 12px 0 0; }
-@media (max-width: 700px) { .felt.flip .mid-band { bottom: 160px; } .felt.flip .seat.pos0, .felt.flip .seat.pos4 { margin-top: 40px; } .felt.flip .seat.pos1, .felt.flip .seat.pos3 { margin-top: 14px; } .felt.flip .seat { transform: none !important; } }
+@media (max-width: 700px) { .felt.flip .mid-band { bottom: 160px; } }
 
 /* Doubled card: laid sideways across the top of the first two cards. */
 .cards.fan { position: relative; }
@@ -648,7 +636,7 @@ html, body, button, input, select { font-family: Lato, system-ui, sans-serif; }
 .odds.fav b { color: #2a1d00; }
 .fav-tag { display: inline-block; font-size: 9px; font-weight: 900; text-transform: uppercase; letter-spacing: 1px; background: #2a1d00; color: #ffe27a; padding: 1px 6px; border-radius: 999px; margin-right: 2px; }
 .dealer-total .fav-tag { background: #ffe27a; color: #2a1d00; font-size: 11px; }
-.seat:not(.pos2) .odds small:not(:first-of-type), .seat:not(.pos2) .odds-sep { display: none; }
+.seat:not(.focus) .odds small:not(:first-of-type), .seat:not(.focus) .odds-sep { display: none; }
 .frozen-banner { max-width: 620px; text-align: center; background: rgba(10,30,60,.85); border: 2px solid #6fb8ff; color: #dff0ff; border-radius: 14px; padding: 8px 14px; font-size: 13px; box-shadow: 0 6px 20px rgba(0,0,0,.45); }
 .frozen-banner b { display: block; font-size: 15px; letter-spacing: 1.5px; text-transform: uppercase; color: #9fd3ff; }
 .frozen-banner.wait { background: rgba(40,20,0,.85); border-color: #ffb547; color: #ffe9c7; }
@@ -749,7 +737,7 @@ body.in-room .tray { position: relative; z-index: 20; }
 /* Doubled card: sideways just above the hand, covering only the top tenth of the first two cards. */
 .cards.fan .sideways { top: 0; transform: translate(-50%, -75%); }
 .cards.fan:has(.sideways) { margin-bottom: 0; margin-top: 52px; }
-.seat:not(.pos2) .cards.fan:has(.sideways) { margin-top: 30px; }
+.seat:not(.focus) .cards.fan:has(.sideways) { margin-top: 30px; }
 .peek-btn { background: rgba(40,30,70,.85) !important; border-color: #9b7cff !important; color: #e6dcff !important; }
 .decide .peek-btn { font-size: 12px; padding: 5px 12px; }
 .peek-pop { position: fixed; left: 50%; top: 40%; transform: translate(-50%, -50%); z-index: 96; background: rgba(12,10,24,.94); border: 2px solid #9b7cff; border-radius: 16px; padding: 14px 22px; text-align: center; box-shadow: 0 20px 50px rgba(0,0,0,.6); animation: pop .2s ease-out; transition: opacity .4s; }
@@ -790,11 +778,11 @@ body.in-room .tray { position: relative; z-index: 20; }
 .cards.fan > .card:nth-child(n+8) { top: calc(-7 * var(--step)); }
 .cards.fan.fan-left { flex-direction: row-reverse; }
 .cards.fan.fan-left .card + .card { margin-left: 0; margin-right: -22px; }
-.seat:not(.pos2) .cards.fan { --step: 5px; }
+.seat:not(.focus) .cards.fan { --step: 5px; }
 .cards.fan:has(.sideways) { margin-top: calc((var(--n, 2) - 1) * var(--step) + 52px); }
 .cards.fan .sideways { top: calc((var(--n, 2) - 1) * var(--step) * -1); }
-.seat:not(.pos2) .cards.fan:has(.sideways) { margin-top: calc((var(--n, 2) - 1) * var(--step) + 30px); }
-@media (max-width: 700px) { .seat:not(.pos2) .cards.fan.fan-left .card + .card { margin-right: -14px; } }
+.seat:not(.focus) .cards.fan:has(.sideways) { margin-top: calc((var(--n, 2) - 1) * var(--step) + 30px); }
+@media (max-width: 700px) { .seat:not(.focus) .cards.fan.fan-left .card + .card { margin-right: -14px; } }
 .move-btn.tile.broke .lbl { font-size: 9px; letter-spacing: 0; color: #ffb3b3; line-height: 1.1; }
 .move-btn.tile.broke { border-color: #ff6b6b; }
 /* Hit and Stand exactly in the middle; Surrender and Double on the left; Split on the right. */
@@ -828,3 +816,13 @@ body.aiming .seat[id^="seat-"]:not(.empty), body.aiming #dealer-zone { cursor: c
 .spot .stack { pointer-events: none; }
 .move-btn.tile::after { content: attr(data-key); position: absolute; top: 3px; right: 6px; font-size: 10px; opacity: .6; font-weight: 700; }
 .move-btn.tile { position: relative; }
+
+/* Seats. The host picks how many. Each seat is placed by the page script with --x and --y (where its
+   outer edge sits on the felt, in percent), --s (its size, smaller when the table is crowded) and
+   --r (a slight lean towards the middle). The big middle seat has the class "focus". */
+.felt > .seats { position: absolute; inset: 0; display: block; margin: 0; z-index: 1; pointer-events: none; }
+.felt .seat { position: absolute; left: var(--x, 50%); top: var(--y, 100%); width: 124px; margin: 0; box-sizing: border-box; pointer-events: auto;
+  transform: translate(-50%, -100%) scale(var(--s, 1)) rotate(var(--r, 0deg)); transform-origin: 50% 100%; }
+.felt .seat.focus { width: 180px; z-index: 2; }
+.felt.flip .seat { transform: translate(-50%, 0) scale(var(--s, 1)) rotate(var(--r, 0deg)); transform-origin: 50% 0; }
+@media (max-width: 700px) { .felt .seat { width: 62px; } .felt .seat.focus { width: 140px; } .seat:not(.focus) .odds .fav-tag { display: none; } }
