@@ -21,6 +21,7 @@ const S = {
   chip: 25,
   seen: new Set(),
   undo: [],          // my bet before each chip, for Undo
+  mainChips: [],     // chips I put on my main bet, in order
   cardAt: new Map(), // card key -> time it is dealt
   pendingNew: [],
   nextCardAt: 0,
@@ -363,7 +364,7 @@ function buildLayout() {
       <span class="title">Blackjack</span>
       <span id="conn-pill" class="pill">Connecting</span>
       <span class="spacer"></span>
-      <button class="btn small gold" data-act="copy">Invite friends</button>
+      <button class="btn small gold" data-act="copy">Invite</button>
       <div class="menu-wrap" id="menu-wrap">
         <button class="hamburger" data-act="menu" aria-label="Menu" aria-haspopup="true"><span></span><span></span><span></span></button>
         <div class="menu" id="menu">
@@ -402,7 +403,7 @@ function render(note) {
   const pill = $('#conn-pill');
   if (pill) {
     pill.className = 'pill ' + (S.online ? 'live' : 'off');
-    pill.textContent = S.role === 'host' ? (S.online ? `Table ${S.code} is open` : 'Opening table...') : (S.online ? `Table ${S.code}` : 'Reconnecting...');
+    pill.textContent = S.online ? `Table ${S.code}` : (S.role === 'host' ? 'Opening table...' : 'Reconnecting...');
   }
   const share = $('#share');
   if (share && share.value !== shareLink()) share.value = shareLink();
@@ -413,7 +414,7 @@ function render(note) {
     return;
   }
   const prev = S.prevView;
-  if (prev && st.round !== prev.round) S.undo = [];
+  if (prev && st.round !== prev.round) { S.undo = []; S.mainChips = []; }
   $('#felt').innerHTML = feltHTML(st);
   $('#tray').innerHTML = trayHTML(st);
   $('#controls').innerHTML = controlsHTML(st);
@@ -457,6 +458,7 @@ function betTotal(b) { return (b?.main || 0) + Object.values(b?.sides || {}).red
 // Chips move on the table when other players bet, and when a round is paid out.
 function animateChanges(prev, st) {
   if (!prev) return;
+  if (st.phase === 'settled' && prev.phase !== 'settled') showResult(st);
   const dealer = $('#dealer-zone .cards') || $('#dealer-zone');
   st.seats.forEach((s, i) => {
     if (!s) return;
@@ -476,6 +478,30 @@ function animateChanges(prev, st) {
       if (s.net > 0 && s.playerId === S.myId) setTimeout(() => chipSound(5), 300 + n * 90);
     }
   });
+}
+
+// Big "You win / You lose" message over the table that fades away.
+function showResult(st) {
+  const { seat, isBanker } = myInfo(st);
+  let net = null;
+  if (isBanker) net = st.banker.net;
+  else if (seat && seat.hands.length) net = seat.net;
+  if (net === null || net === undefined) return;
+  const el = document.createElement('div');
+  el.className = 'result-pop ' + (net > 0 ? 'win' : net < 0 ? 'lose' : 'push');
+  el.innerHTML = net > 0 ? `<small>You win</small><b>${money(net)}</b>` : net < 0 ? `<small>You lose</small><b>${money(-net)}</b>` : '<small>Push</small><b>Even</b>';
+  const felt = document.body;
+  // Wait for the last cards and chips to land first.
+  setTimeout(() => {
+    felt.appendChild(el);
+    if (net > 0) chipSound(6);
+    el.animate([
+      { opacity: 0, transform: 'translate(-50%, -50%) scale(.6)' },
+      { opacity: 1, transform: 'translate(-50%, -50%) scale(1.05)', offset: 0.12 },
+      { opacity: 1, transform: 'translate(-50%, -50%) scale(1)', offset: 0.75 },
+      { opacity: 0, transform: 'translate(-50%, -50%) scale(1)' },
+    ], { duration: 3200, easing: 'ease-out', fill: 'forwards' }).onfinish = () => el.remove();
+  }, Math.max(600, S.nextCardAt - performance.now() + 400));
 }
 
 function suitClass(s) { return { '♠': 's-s', '♥': 's-h', '♦': 's-d', '♣': 's-c' }[s] || ''; }
@@ -589,7 +615,16 @@ function feltHTML(st) {
     <div class="arc-text">${isStrip(st.settings) ? 'Las Vegas Strip rules' : 'House rules'} · Blackjack pays ${st.settings.blackjackPays === 1.5 ? '3 to 2' : st.settings.blackjackPays + ' to 1'}</div>
     <div class="arc-text small">Dealer must draw to 16 and ${st.settings.dealerHitsSoft17 ? 'hit soft 17' : 'stand on all 17s'} · Insurance pays 2 to 1</div>
     <div class="status">${esc(statusText(st))} <span id="timer" class="timer" hidden></span></div>
+    ${dealMeInHTML(st)}
     <div class="seats">${order.map((i, pos) => seatHTML(st, st.seats[i], i, pos)).join('')}</div>`;
+}
+
+// Big "Deal me in" button on the table once you have a bet down.
+function dealMeInHTML(st) {
+  const { seat, isBanker } = myInfo(st);
+  if (isBanker || !seat || !(st.phase === 'betting' || st.phase === 'settled') || !seat.bet.main) return '';
+  if (seat.ready) return `<div class="deal-me-in waiting"><span>Waiting for the others...</span><button class="btn small" data-act="ready">Not ready</button></div>`;
+  return `<div class="deal-me-in"><button class="deal-btn" data-act="ready">Deal me in</button></div>`;
 }
 
 function seatHTML(st, s, i, pos) {
@@ -637,7 +672,7 @@ function spotAreaHTML(st, s, i, isMe, mainAmt) {
   const ins = s?.insurance ? `<span class="ins-tag">Insurance ${money(s.insurance)}</span>` : '';
   return `<div class="spot-area ${canBet ? 'live' : ''}">
     ${sides}
-    <div class="spot" id="spot-${i}">${stackHTML(mainAmt)}<span class="spot-amt">${mainAmt ? money(mainAmt) : ''}</span></div>
+    <div class="spot" id="spot-${i}" ${canBet && mainAmt ? 'data-act="take-chip" title="Tap to take off your last chip"' : ''}>${stackHTML(mainAmt)}<span class="spot-amt">${mainAmt ? money(mainAmt) : ''}</span></div>
     ${ins}
   </div>`;
 }
@@ -659,17 +694,18 @@ function trayHTML(st) {
     return `
       <div class="tray-row">
         <div class="balance"><small>Balance</small><b>${money(me.chips - betTotal(b))}</b></div>
-        <div class="chip-rack">${CHIPS.map((v) => `<button class="chipv ${chipClass(v)} ${S.chip === v ? 'sel' : ''}" data-act="chip" data-v="${v}" title="Bet ${v}"><span>${v}</span></button>`).join('')}</div>
+        <div class="chip-rack">
+          <button class="icon-btn" data-act="undo" ${S.undo.length ? '' : 'disabled'} title="Undo your last chip"><span class="ico">↶</span>Undo</button>
+          ${CHIPS.map((v) => `<button class="chipv ${chipClass(v)} ${S.chip === v ? 'sel' : ''}" data-act="chip" data-v="${v}" title="Bet ${v}"><span>${v}</span></button>`).join('')}
+          <button class="icon-btn" data-act="double-bet" ${b.main ? '' : 'disabled'} title="Double all your bets"><span class="ico">×2</span>Double</button>
+        </div>
         <div class="balance"><small>Total bet</small><b>${money(betTotal(b))}</b></div>
       </div>
       <div class="actions">
-        <button class="btn" data-act="undo" ${S.undo.length ? '' : 'disabled'}>Undo</button>
-        <button class="btn" data-act="clear" ${betTotal(b) ? '' : 'disabled'}>Clear</button>
-        <button class="btn" data-act="double-bet" ${b.main ? '' : 'disabled'}>Double bet</button>
-        <button class="btn ${seat.ready ? '' : 'primary'}" data-act="ready" ${b.main > 0 ? '' : 'disabled'}>${seat.ready ? 'Not ready' : 'Ready, deal me in'}</button>
+        <button class="btn" data-act="clear" ${betTotal(b) ? '' : 'disabled'}>Clear all</button>
         <button class="btn danger" data-act="stand-up">Leave seat</button>
       </div>
-      <div class="hint tray-hint">Tap a chip to add it to your main bet (min ${st.settings.minBet}, max ${st.settings.maxBet}). Tap a small circle around your bet to add the last chip you picked as a side bet (at most ${st.settings.maxSideBet} each). Side bet payouts are under the button at the top.</div>`;
+      <div class="hint tray-hint">Tap a chip to add it to your main bet (min ${st.settings.minBet}, max ${st.settings.maxBet}). Tap the middle of your bet to take the last chip off. Tap a small circle around your bet to add the last chip you picked as a side bet (at most ${st.settings.maxSideBet} each). Side bet payouts are under the button at the top.</div>`;
   }
   if (ph === 'insurance') {
     if (!seat.hands.length) return '<div class="tray-msg">You are sitting out this round.</div>';
@@ -811,6 +847,7 @@ app.addEventListener('click', (e) => {
       if (!seat) { render(); break; }
       S.undo.push(structuredClone(seat.bet));
       bet.main += S.chip;
+      S.mainChips.push(S.chip);
       flyChip(el, $(`#spot-${me.seat}`), S.chip);
       sendBet();
       break;
@@ -823,9 +860,21 @@ app.addEventListener('click', (e) => {
       sendBet();
       break;
     }
-    case 'undo': if (S.undo.length) { const last = S.undo.pop(); send({ t: 'bet', main: last.main, sides: last.sides, ready: false }); chipSound(); } break;
+    case 'take-chip': {
+      // Take chips off in reverse order: the last one placed comes off first.
+      if (!bet.main) break;
+      let v = S.mainChips.pop();
+      if (!v || v > bet.main) v = [500, 100, 25, 5, 1].find((x) => x <= bet.main);
+      S.undo.push(structuredClone(seat.bet));
+      bet.main -= v;
+      flyChip(el, $(`.chip-rack [data-v="${v}"]`) || $('.chip-rack'), v);
+      sendBet();
+      break;
+    }
+    case 'undo': if (S.undo.length) { S.mainChips.pop(); const last = S.undo.pop(); send({ t: 'bet', main: last.main, sides: last.sides, ready: false }); chipSound(); } break;
     case 'double-bet': {
       S.undo.push(structuredClone(seat.bet));
+      S.mainChips = S.mainChips.concat(S.mainChips);
       bet.main *= 2;
       for (const k in bet.sides) bet.sides[k] *= 2;
       flyChip($(`.chip-rack [data-v="${S.chip}"]`), $(`#spot-${me.seat}`), S.chip);
@@ -837,7 +886,7 @@ app.addEventListener('click', (e) => {
     case 'sit-dealer': send({ t: 'sit-dealer' }); break;
     case 'leave-dealer': send({ t: 'leave-dealer' }); break;
     case 'side-clear': delete bet.sides[el.dataset.k]; sendBet(); break;
-    case 'clear': S.undo.push(structuredClone(seat.bet)); bet.main = 0; bet.sides = {}; sendBet(); chipSound(2); break;
+    case 'clear': S.mainChips = []; S.undo.push(structuredClone(seat.bet)); bet.main = 0; bet.sides = {}; sendBet(); chipSound(2); break;
     case 'ready': sendBet(!seat.ready); break;
     case 'ins': send({ t: 'insurance', take: el.dataset.take === '1' }); break;
     case 'play': send({ t: 'action', a: el.dataset.a }); break;

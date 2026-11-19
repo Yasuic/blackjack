@@ -343,3 +343,27 @@ button.sb:hover { border-color: var(--gold); background: rgba(232,196,106,.25); 
 .vote-card .actions .btn { min-width: 110px; }
 .vote-bar { height: 4px; border-radius: 2px; background: rgba(255,255,255,.1); margin-top: 14px; overflow: hidden; }
 .vote-bar span { display: block; height: 100%; background: var(--gold); transition: width .2s linear; }
+.spot[data-act] { cursor: pointer; }
+.spot[data-act]:hover { box-shadow: 0 0 0 4px rgba(232,196,106,.3); }
+.chip-rack { align-items: center; }
+.icon-btn { width: 64px; height: 64px; border-radius: 50%; border: 2px solid var(--gold); background: rgba(232,196,106,.08); color: var(--gold); font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; display: grid; place-items: center; align-content: center; gap: 0; }
+.icon-btn .ico { font-size: 22px; line-height: 1; }
+.icon-btn:hover:not(:disabled) { background: rgba(232,196,106,.2); }
+.icon-btn:disabled { opacity: .3; cursor: not-allowed; }
+@media (max-width: 560px) { .icon-btn { width: 50px; height: 50px; font-size: 10px; } .icon-btn .ico { font-size: 18px; } .chip-rack { gap: 4px; } .chipv { width: 44px; height: 44px; } }
+.result-pop { position: fixed; left: 50%; top: 42%; transform: translate(-50%, -50%); z-index: 70; pointer-events: none; text-align: center; padding: 18px 46px; border-radius: 18px; background: rgba(8,10,14,.82); border: 2px solid var(--gold); box-shadow: 0 20px 60px rgba(0,0,0,.6); }
+.result-pop small { display: block; font-size: 16px; letter-spacing: 4px; text-transform: uppercase; font-weight: 800; color: var(--muted); }
+.result-pop b { display: block; font-size: 64px; font-weight: 800; line-height: 1.05; }
+.result-pop.win b { color: var(--gold); text-shadow: 0 0 30px rgba(232,196,106,.6); } .result-pop.win small { color: #7ef0b6; }
+.result-pop.lose { border-color: var(--danger); } .result-pop.lose b { color: #ff8a8a; }
+.result-pop.push b { color: #fff; }
+@media (max-width: 560px) { .result-pop { padding: 12px 28px; } .result-pop b { font-size: 44px; } }
+@media (max-width: 700px) { .dealer-name { padding-right: 56px; padding-left: 4px; justify-content: flex-start; } .topbar .btn.small { padding: 5px 8px; } }
+.deal-me-in { display: flex; justify-content: center; align-items: center; gap: 10px; margin: -4px 0 6px; position: relative; z-index: 3; }
+.deal-btn { font: inherit; font-weight: 800; font-size: 20px; letter-spacing: 2px; text-transform: uppercase; color: #1b1300; background: linear-gradient(180deg, #f6dc8f, #d9a93e); border: none; border-radius: 999px; padding: 14px 38px; cursor: pointer; box-shadow: 0 8px 24px rgba(0,0,0,.5), 0 0 0 4px rgba(232,196,106,.25); animation: glow 1.6s ease-in-out infinite; }
+.deal-btn:hover { transform: translateY(-2px); }
+@keyframes glow { 50% { box-shadow: 0 8px 24px rgba(0,0,0,.5), 0 0 0 10px rgba(232,196,106,.12); } }
+.deal-me-in.waiting span { background: rgba(0,0,0,.5); padding: 8px 16px; border-radius: 999px; font-weight: 700; color: #7ef0b6; }
+@media (max-width: 560px) { .deal-btn { font-size: 16px; padding: 10px 26px; } }
+.result-pop { background: rgba(8,10,14,.96); }
+.pill, .topbar .btn { white-space: nowrap; }
