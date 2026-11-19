@@ -772,6 +772,34 @@ body.room3d.in-room .tray { position: fixed; left: 50%; right: auto; top: auto; 
 .pvp-x { padding-left: 10px; padding-right: 10px; }
 .pvp-chip { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 999px; background: rgba(120,30,40,.85); color: #ffd9dc; vertical-align: middle; }
 .g-item.pvp { border-top: 1px dashed rgba(255,140,150,.5); margin-top: 8px; padding-top: 8px; }
+/* ===== Interaction and round flow =====
+   Taps, the settle screen, Rebet, table limits, the timeout warning, the keys list and strategy hints.
+   Everything for those features lives in this one block. */
+.chip-rack button, .icon-btn, .move-btn, .deal-btn, .rebet-btn, .spot, .ring-slice { touch-action: manipulation; }
+.balance.limits span { font-size: 12px; line-height: 1.35; color: var(--muted); }
+/* The round result stays until the cards are cleared. It starts big, then shrinks and moves up out of the way of the hands. */
+.result-pop { transition: top .4s ease, transform .4s ease; }
+.result-pop.stay { top: 31%; transform: translate(-50%, -50%) scale(.6); }
+.result-pop em.warn { color: #ffb3b3; }
+.rebet-btn { font-weight: 800; }
+.rebet-btn.on { background: rgba(63,179,127,.3); border-color: #5ff0a8; color: #d9ffe9; }
+.round-result b { display: block; font-size: 18px; color: var(--text); }
+.round-result b.up { color: #7ef0b6; }
+.round-result b.down { color: #ff9b9b; }
+.rr-parts { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 8px; margin-top: 5px; font-size: 13px; }
+.rr-part { padding: 1px 9px; border-radius: 999px; background: rgba(255,255,255,.08); color: var(--text); white-space: nowrap; }
+.rr-part.up { background: rgba(63,179,127,.3); }
+.rr-part.down { background: rgba(200,60,60,.28); }
+.seat .meta .result { white-space: nowrap; }
+.decide-warn { margin-top: 6px; padding: 5px 14px; border-radius: 999px; background: #c62828; color: #fff; font-weight: 800; font-size: 14px; text-align: center; }
+.decide-warn[hidden] { display: none; }
+/* Strategy hint: the suggested move keeps its white frame and gets a star. Every other move you are
+   allowed to make looks fully enabled. Only moves you cannot make are greyed out. */
+.move-btn.dim, .move-btn.tile.dim, .move-btn.dim:hover, .move-btn.tile.dim:hover { opacity: 1; filter: none; }
+.move-btn.tile.best::before { content: '★'; position: absolute; top: 2px; left: 6px; font-size: 12px; line-height: 1; color: #fff; }
+.keys-help { border-collapse: collapse; margin: 6px 0 10px; }
+.keys-help td { padding: 4px 12px 4px 0; text-align: left; }
+.keys-help kbd { display: inline-block; min-width: 22px; padding: 2px 7px; border-radius: 6px; border: 1px solid rgba(255,255,255,.35); background: rgba(255,255,255,.08); font: inherit; font-weight: 700; text-align: center; }
 
 
 /* =====================================================================================================
@@ -1118,4 +1146,36 @@ body.aiming .seat.me[id^="seat-"] { outline: none; cursor: default; }
   .tray .side-res, .tray .side-results:has(.side-res:nth-child(6)) .side-res { font-size: 0; line-height: 11px; padding: 0 4px; gap: 2px; }
   .tray .side-res b { font-size: 10.5px; font-weight: 700; }
   .throw-pop.wide { width: min(300px, calc(100vw - 16px)); }
+}
+/* The result stays over the status line once it has shrunk, clear of the cards. */
+.result-pop.stay { top: var(--pop-y, 30%); transform: translate(-50%, -50%) scale(.82); }
+/* After the merge with the round-flow work: the tray already says what you won, so the pop-up is one
+   short line over the status pill, and each other seat's "Won 25" hangs under its name plate. */
+.result-pop { padding: 2px 22px; }
+.result-pop small { font-size: 13px; }
+.result-pop b { font-size: 26px; }
+.result-pop em:not(.warn) { display: none; }
+.felt .seat.std .who .net { top: 100%; transform: translate(-50%, -35%); }
+.felt.flip .seat.std .who .net { top: auto; bottom: 100%; transform: translate(-50%, 35%); }
+.seat.me .who .net { display: none; }
+/* Your chips are shown once, in the balance box by the tray. */
+.seat.me .who .chips { display: none; }
+@media (max-width: 700px) {
+  .result-pop { padding: 1px 12px; max-width: 200px; }
+  .result-pop small { font-size: 10px; letter-spacing: 1.5px; }
+  .result-pop b { font-size: 19px; }
+}
+/* Room for the longest tile label, "Surrender". */
+.tray .move-btn.tile { width: 88px; height: 70px; }
+.tray .move-btn.tile .lbl { letter-spacing: .5px; }
+@media (max-width: 700px) {
+  .tray .move-btn.tile { width: 15.8vw; height: 58px; }
+  .tray .move-btn.tile.big { width: 21.4vw; height: 70px; }
+  .tray .move-btn.tile .lbl { font-size: 8.5px; letter-spacing: 0; }
+  .tray .move-btn.tile.big .lbl { font-size: 14px; letter-spacing: 1px; }
+}
+@media (max-width: 700px) {
+  /* Dealer's view on a phone: the players sit in rows along the far edge, so that edge stays nearly square. */
+  body.in-room .table-stage .felt.flip { border-radius: 26px 26px 16px 16px; }
+  body.in-room .table-stage .felt.flip::before { border-radius: 20px 20px 12px 12px; }
 }
