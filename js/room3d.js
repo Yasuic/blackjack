@@ -580,7 +580,7 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
   let peopleRev = 0, flipped = false; // flipped: the felt is laid out for the dealer and turned to face them
   let peopleKey = '', figs = new Map(), stoolGroup = null, myFig = null, myStool = null, sidePts = [], seatEdge = new Map();
   let lastPeople = null, lastChips = null;
-  let beside = [];
+  let others = [];
   function setPeople(list = [], stools = null) {
     lastPeople = [list, stools];
     const n = list[0]?.seats || stools?.length || 0;
@@ -625,9 +625,9 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
         figs.set(p.id, f);
         if (p.isMe) myFig = f;
       }
-      // The people right beside you. From your chair they fill the bottom corners of the screen, so they
-      // are drawn only when you turn your head or stand up.
-      beside = myFig && mine && isFinite(gap) ? [...figs.values()].filter((f) => f !== myFig && Math.hypot(f.position.x - myFig.position.x, f.position.z - myFig.position.z) < gap * 1.45) : [];
+      // Everyone but you. From your own chair the nearest of them fill the bottom corners of the screen,
+      // so each one is hidden while it would be drawn down there (see the loop below).
+      others = myFig ? [...figs.values()].filter((f) => f !== myFig) : [];
       touch();
     }
     // A short reach towards the betting circle when someone's bet changes.
@@ -642,7 +642,7 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
   const chipGroup = new THREE.Group();
   scene.add(chipGroup);
   const chipGeo = new THREE.CylinderGeometry(1, 1, 1, 18);
-  let chipMat = {}, rackMat = {}, myRack = null;
+  let chipMat = {}, rackMat = {}, myRack = null, racks = [];
   const rackGeo = {};
   const matsFor = (v) => (chipMat[v] ||= (() => {
     const top = std({ map: canvasTexture(128, 128, chipTop(v)), roughness: 0.55 });
@@ -676,6 +676,7 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     chipKey = key;
     chipGroup.clear();
     myRack = new THREE.Group();
+    racks = [];
     chipGroup.add(myRack);
     const spots = feltPoints(list.map((c) => (c.main ? feltEl.querySelector('#spot-' + c.seat) : null)));
     // Side bets and bets between players: a small pile on the outer edge of each one's place on the felt.
@@ -723,6 +724,8 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
         let left = Math.round(c.balance);
         for (const pile of piles) { pile[1] = Math.floor(left / pile[0]); left -= pile[1] * pile[0]; }
         const shown = piles.filter((x) => x[1] > 0);
+        const pile = new THREE.Group();
+        if (!c.mine) { racks.push(pile); chipGroup.add(pile); }
         shown.forEach(([v, n], i) => {
           const cnt = Math.min(12, n), along = (i - (shown.length - 1) / 2) * r * 2.12;
           const m = new THREE.Mesh(rackGeoFor(cnt), rackMatsFor(v));
@@ -731,7 +734,7 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
           m.position.set(e.x + e.nx * RAIL * 0.5 - e.nz * along, 20.5 + (t * cnt) / 2, e.z + e.nz * RAIL * 0.5 + e.nx * along);
           m.rotation.y = i * 1.3;
           m.castShadow = true;
-          (c.mine ? myRack : chipGroup).add(m);
+          (c.mine ? myRack : pile).add(m);
         });
       }
     });
@@ -997,9 +1000,15 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     camera.rotation.set(Math.max(-1.5, Math.min(0.6, pitch0 + cur.pitch)), yaw0 + cur.yaw, 0, 'YXZ');
     // In your own chair you see your body, arms and stool when you look down, but no head in front of your eyes.
     if (myFig) for (const part of myFig.userData.headParts) part.visible = !seated;
-    const ahead = seated && Math.abs(cur.yaw) < 0.1;
-    for (const f of beside) f.visible = !ahead;
-    // Your own rack of chips is under the buttons from your chair, and your balance is written there.
+    // From your chair, anything that would be drawn in the bottom quarter of the screen is in your way:
+    // a neighbour's arms, their chips, or your own rack under the buttons. It comes back as soon as you
+    // turn your head or stand up.
+    // Anything drawn low down or far out to the side is beside your own chair, not across the table.
+    const low = (o, pad = 0) => { tmp.setFromMatrixPosition(o.matrixWorld).project(camera); return tmp.y < -0.95 + pad; };
+    camera.updateMatrixWorld();
+    // A seated figure stands on the floor: its base is well below the screen when it is next to you.
+    for (const f of others) { f.updateMatrixWorld(); f.visible = !seated || !low(f, 0.35); }
+    for (const r of racks) { r.updateMatrixWorld(); r.visible = !seated || !low(r, 0.95); }
     if (myRack) myRack.visible = !seated;
     gl.render(scene, camera);
     css.render(scene, camera);
