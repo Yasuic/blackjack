@@ -617,6 +617,7 @@ export class Table {
     if (this.frozen) this.setFrozen(false); // a player deals now: the practice stretch is over
     this.banker = clientId;
     this.pendingBanker = null;
+    this.dealerAutoBuy();
     this.addLog(`${p.name} is now the dealer.`);
   }
 
@@ -785,6 +786,9 @@ export class Table {
 
   // ---- Betting ----
   setBet(clientId, bet) {
+    try { return this.setBetInner(clientId, bet); } finally { this.dealerAutoBuy(); }
+  }
+  setBetInner(clientId, bet) {
     if (this.phase !== 'betting' && this.phase !== 'settled') throw new Error('Bets are closed.');
     if (this.phase === 'settled') this.startBetting();
     const { p, seat, idx } = this.mustSeat(clientId, bet.seat);
@@ -874,6 +878,25 @@ export class Table {
     for (const p of Object.values(this.players)) if (p.leaving) { p.leaving = false; this.ev('leave seat (agreed to sit out)', p.id); }
   }
 
+  // The dealer buys in by itself, with no request to the host: whenever the dealer owes chips or holds
+  // fewer chips than the bets on the table, the dealer gets enough to cover them, in steps of the
+  // table's starting chips. It is written to the ledger and the hand history like any other buy-in.
+  dealerAutoBuy() {
+    const p = this.banker && this.players[this.banker];
+    if (!p) return 0;
+    const onTable = this.seats.reduce((a, s) => a + (s && s.bet.main >= this.settings.minBet ? s.bet.main + sumValues(s.bet.sides) : 0), 0);
+    const need = onTable - p.chips;
+    if (!(need > 0)) return 0;
+    const step = Math.max(1, Math.round(this.settings.startChips) || 1000);
+    const amount = Math.ceil(need / step) * step;
+    p.chips += amount;
+    p.boughtIn = (p.boughtIn || 0) + amount;
+    p.totalIn = (p.totalIn ?? this.settings.startChips) + amount;
+    this.buyIns = (this.buyIns || []).filter((b) => b.playerId !== p.id);
+    this.addLog(`${p.name} (dealer) bought in ${amount.toLocaleString()} more chips automatically.`);
+    this.ev('buy-in', p.id, `${amount} (automatic, dealer), balance ${p.chips}`);
+    return amount;
+  }
   // A player who is the dealer must hold at least as many chips as the bets on the table.
   bankShort() {
     if (!this.banker || !this.players[this.banker]) return false;
@@ -901,6 +924,7 @@ export class Table {
   deal() {
     if (this.phase === 'settled') this.startBetting();
     if (!this.banker && !this.frozen) throw new Error('Nobody is the dealer. Someone has to sit as the dealer, or the host can deal with frozen balances.');
+    this.dealerAutoBuy();
     if (!this.canDeal()) throw new Error('Nobody has placed a bet.');
     const playing = this.seats.filter((x) => x && x.bet.main >= this.settings.minBet).length;
     // An untouched shoe is shuffled again when a player's code is not in it yet, so the first shoe
@@ -1205,6 +1229,7 @@ export class Table {
       const tableNet = this.seats.reduce((sum, seat) => sum + (seat && seat.hands.length ? seat.net : 0), 0);
       this.players[this.banker].chips -= tableNet;
       this.bankerNet = -tableNet;
+      this.dealerAutoBuy();
     } else {
       // With the automatic house dealer, wins and losses are practice money: they are not counted between players.
       // The chips still move against the house, but that part is kept out of the ledger.

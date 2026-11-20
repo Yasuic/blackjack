@@ -259,10 +259,22 @@ const da = t.players.a.chips, dd = t.players.d.chips;
   console.log('seat count tests passed');
 }
 {
-  // A player dealer with too few chips cannot deal, and cannot leave while owing chips.
+  // A player dealer with too few chips buys in automatically, in steps of the starting chips, with no request to the host.
   const t = new G.Table(); t.join('a', 'A', 1000); t.join('d', 'D', 20); t.sit('a', 0); t.sitDealer('d');
   t.setBet('a', { main: 500, sides: {} });
-  assert.equal(t.bankShort(), true); assert.equal(t.canDeal(), false);
+  assert.equal(t.bankShort(), false); assert.equal(t.canDeal(), true);
+  assert.equal(t.players.d.chips, 20 + t.settings.startChips); assert.equal(t.players.d.boughtIn, t.settings.startChips);
+  assert.equal(t.players.d.totalIn, 20 + t.settings.startChips); assert.equal((t.buyIns || []).length, 0);
+  { // a dealer who loses more than they hold is topped up at the end of the round, and never owes
+    const u = new G.Table(); u.join('a', 'A', 5000); u.join('d', 'D', 100); u.sit('a', 0); u.sitDealer('d');
+    for (let r = 0; r < 30; r++) {
+      if (u.phase === 'settled') u.startBetting();
+      u.setBet('a', { main: 100, sides: {} }); u.deal();
+      for (let i = 0; i < 40 && u.phase !== 'settled'; i++) { if (u.phase === 'insurance') { u.insurance('a', false); continue; } if (u.phase === 'playing') { u.action('a', 'stand'); continue; } if (u.dealerStep) u.dealerStep(); else break; }
+      assert.ok(u.players.d.chips >= 0, 'dealer never owes');
+    }
+    assert.equal(u.players.a.chips + u.players.d.chips, 5000 + 100 + u.players.d.boughtIn);
+  }
   t.setBet('a', { main: 20, sides: {} });
   assert.equal(t.canDeal(), true);
   // The next card can only be shown between rounds. (A hand that settles at once, on a blackjack,
