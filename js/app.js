@@ -1,12 +1,13 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120s';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120s';
-import { tickSound, winSound } from './fx.js?v=20261120s';
-import * as HX from './history.js?v=20261120s';
-import { webglOK, initRoom } from './room3d.js?v=20261120s';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120s';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120t';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261120t';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120t';
+import { tickSound, winSound } from './fx.js?v=20261120t';
+import * as HX from './history.js?v=20261120t';
+import { webglOK, initRoom } from './room3d.js?v=20261120t';
+import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120t';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -212,9 +213,22 @@ function startHost(resume, taken = null) {
   stayAwake();
   if (matchMedia('(pointer: coarse)').matches) setTimeout(() => toast('You are the host: keep this tab open and in front. Friends lose the table when you switch apps.'), 1500);
   if (taken) { S.peer = taken.peer; S.online = true; wireHostPeer(taken.peer, 99); } else openHostPeer(0);
+  openHostRelay();
   hostChanged();
 }
 
+// The host also listens on the second path, so a player whose network blocks the usual link can still come in.
+function openHostRelay() {
+  try { S.relay?.close(); } catch {}
+  S.relay = null;
+  if (!relayWorks() || params.get('relay') === '0') return;
+  const code = S.code;
+  S.relay = hostRelay(code, relayUrl(), {
+    onLink: (link) => { if (S.role !== 'host' || S.code !== code) { link.close(); return; } link.on('data', (msg) => onHostMessage(link, msg)); link.on('close', () => connLost(link)); },
+    onOpen: () => { if (S.role === 'host' && !S.online) { S.online = true; render(); } },
+    onClose: () => { if (S.role === 'host' && (!S.peer || S.peer.disconnected || S.peer.destroyed)) { S.online = false; render(); } },
+  });
+}
 function openHostPeer(attempt) {
   const peer = new Peer(ROOM_PREFIX + S.code, peerOptions());
   S.peer = peer;
@@ -226,7 +240,7 @@ function wireHostPeer(peer, attempt) {
     conn.on('data', (msg) => onHostMessage(conn, msg));
     conn.on('close', () => connLost(conn));
   });
-  peer.on('disconnected', () => { S.online = false; render(); setTimeout(keepAlive, 1500); });
+  peer.on('disconnected', () => { S.online = !!S.relay?.open; render(); setTimeout(keepAlive, 1500); });
   peer.on('error', (e) => {
     if (e.type === 'unavailable-id' && S.role === 'host' && (attempt >= 6 || attempt === 99)) {
       // The table's name is held by someone else for good: while this browser was away, another
@@ -243,6 +257,8 @@ function wireHostPeer(peer, attempt) {
       return;
     }
     if (e.type === 'peer-unavailable') return;
+    // The meeting point cannot be reached. With the second path open the table still works, so say that once instead.
+    if (['network', 'server-error', 'socket-error', 'socket-closed'].includes(e.type) && S.relay?.open) { if (!S.saidRelay) { S.saidRelay = true; toast('The usual meeting point is not reachable. Your table stays open on the backup path.'); } return; }
     toast('Connection problem: ' + (e.type || e.message));
   });
 }
@@ -319,6 +335,7 @@ function maybeTakeOver() {
 // This browser was the host, came back, and found the table running in someone else's browser.
 function demoteToPlayer() {
   const code = S.code;
+  try { S.relay?.close(); } catch {} S.relay = null;
   clearInterval(S.pinger);
   if (S.timer) { clearTimeout(S.timer.handle); S.timer = null; }
   Object.values(S.goneTimers || {}).forEach(clearTimeout);
@@ -698,6 +715,7 @@ setInterval(updateTimer, 250);
 function keepAlive() {
   const peer = S.peer;
   if (!peer || S.kicked || !S.role) return;
+  if (S.role === 'player' && !S.online && (peer.destroyed || peer.disconnected)) { S.downAt ||= Date.now(); if (Date.now() - S.downAt > 8000) tryRelay(); }
   if (peer.destroyed) { if (S.role === 'host') openHostPeer(0); else openGuestPeer(); return; }
   if (peer.disconnected) { try { peer.reconnect(); } catch {} return; }
   if (S.role === 'player') {
@@ -706,6 +724,8 @@ function keepAlive() {
     // A link that was started but never opened (the host's browser did not answer) is thrown away and started again.
     if (S.conn && !S.conn.open && !S.online && Date.now() - (S.lastTry || 0) > 12000) { const c = S.conn; S.conn = null; S.linkTries = (S.linkTries || 0) + 1; try { c.close(); } catch {} }
     if (!S.conn && Date.now() - (S.lastTry || 0) > 4000) connectToHost();
+    // Still no table after 8 seconds: try the second path as well.
+    if (S.online) S.downAt = 0; else { S.downAt ||= Date.now(); if (Date.now() - S.downAt > 8000 || params.get('relay') === 'only') tryRelay(); }
   }
 }
 setInterval(keepAlive, 5000);
@@ -750,10 +770,28 @@ function openGuestPeer() {
   });
 }
 
+// The usual link does not open: come in through the second path (see relay.js). The host listens there all the time.
+const relayUrl = () => params.get('relayurl') || '';
+async function tryRelay() {
+  if (S.relayBusy || S.online || S.role !== 'player' || S.kicked || !relayWorks() || params.get('relay') === '0') return;
+  S.relayBusy = true;
+  try {
+    const link = await guestRelay(S.code, relayUrl(), S.myId, 15000);
+    if (!link) return;
+    if (S.online || S.role !== 'player') { link.close(); return; }
+    const old = S.conn; S.conn = null;
+    try { old?.close(); } catch {}
+    wireGuestConn(link);
+    link.emit('open');
+  } finally { S.relayBusy = false; }
+}
 function connectToHost() {
-  if (S.peer.disconnected || S.peer.destroyed) return;
+  if (params.get('relay') === 'only') return; // for testing the second path on its own
+  if (!S.peer || S.peer.disconnected || S.peer.destroyed) return;
   S.lastTry = Date.now();
-  const conn = S.peer.connect(ROOM_PREFIX + S.code, { reliable: true });
+  wireGuestConn(S.peer.connect(ROOM_PREFIX + S.code, { reliable: true }));
+}
+function wireGuestConn(conn) {
   S.conn = conn;
   // Notes for the "cannot reach the host" box: which kinds of path this browser found, and how far the link got.
   S.link = { kinds: new Set(), state: 'starting' };
@@ -766,7 +804,7 @@ function connectToHost() {
   conn.on('open', () => {
     S.online = true;
     S.why = '';
-    S.retry = 0; S.noHostAt = null; S.linkTries = 0;
+    S.retry = 0; S.noHostAt = null; S.linkTries = 0; S.viaRelay = !!conn.relay;
     conn.send({ t: 'join', clientId: S.myId, name: S.name, buyIn: S.buyIn, look: S.look });
   });
   conn.on('data', (msg) => {
@@ -792,7 +830,8 @@ function connectToHost() {
     S.online = false;
     render();
     S.retry++;
-    setTimeout(connectToHost, Math.min(10000, 1500 * S.retry));
+    S.viaRelay = false;
+    setTimeout(() => { if (!S.conn) connectToHost(); }, Math.min(10000, 1500 * S.retry));
   };
   conn.on('close', lost);
   conn.on('error', lost);
@@ -1260,7 +1299,7 @@ function render(note) {
   const pill = $('#conn-pill');
   if (pill) {
     pill.className = 'pill ' + (S.online ? 'live' : 'off');
-    pill.textContent = S.online ? `Table ${S.code}` : (S.role === 'host' ? 'Opening table...' : 'Reconnecting...');
+    pill.textContent = S.online ? `Table ${S.code}${S.role === 'player' && S.viaRelay ? ' · backup path' : ''}` : (S.role === 'host' ? 'Opening table...' : 'Reconnecting...');
   }
   const share = $('#share');
   if (share && share.value !== shareLink()) share.value = shareLink();

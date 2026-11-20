@@ -4,8 +4,8 @@
 // is also sent to an online backup; that copy can only be read back with the table's secret id,
 // which never leaves the host's browser.
 const DB = 'bj-history', KEEP = 5;
-const BACKUP_URL = 'https://vhelbcidtatbqjojuizg.supabase.co';
-const BACKUP_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZoZWxiY2lkdGF0YnFqb2p1aXpnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTUxODEyNDAsImV4cCI6MjExMDc1NzI0MH0.WyJwWIvWwOBmKeFFXz4SKb59Bsk0TDkvvDqdyLAK2AY';
+export const BACKUP_URL = 'https://vhelbcidtatbqjojuizg.supabase.co';
+export const BACKUP_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZoZWxiY2lkdGF0YnFqb2p1aXpnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTUxODEyNDAsImV4cCI6MjExMDc1NzI0MH0.WyJwWIvWwOBmKeFFXz4SKb59Bsk0TDkvvDqdyLAK2AY';
 
 let dbp = null;
 function db() {
