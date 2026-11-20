@@ -1,13 +1,13 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120x';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261120x';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120x';
-import { tickSound, winSound } from './fx.js?v=20261120x';
-import * as HX from './history.js?v=20261120x';
-import { webglOK, initRoom } from './room3d.js?v=20261120x';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120x';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120y';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261120y';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120y';
+import { tickSound, winSound } from './fx.js?v=20261120y';
+import * as HX from './history.js?v=20261120y';
+import { webglOK, initRoom } from './room3d.js?v=20261120y';
+import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120y';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -715,7 +715,7 @@ setInterval(updateTimer, 250);
 function keepAlive() {
   const peer = S.peer;
   if (!peer || S.kicked || !S.role) return;
-  if (S.role === 'player' && !S.online && (peer.destroyed || peer.disconnected)) { S.downAt ||= Date.now(); if (Date.now() - S.downAt > 8000) tryRelay(); }
+  if (S.role === 'player' && !S.online && (peer.destroyed || peer.disconnected)) { S.downAt ||= Date.now(); if (Date.now() - S.downAt > 2500) tryRelay(); }
   if (peer.destroyed) { if (S.role === 'host') openHostPeer(0); else openGuestPeer(); return; }
   if (peer.disconnected) { try { peer.reconnect(); } catch {} return; }
   if (S.role === 'player') {
@@ -724,8 +724,8 @@ function keepAlive() {
     // A link that was started but never opened (the host's browser did not answer) is thrown away and started again.
     if (S.conn && !S.conn.open && !S.online && Date.now() - (S.lastTry || 0) > 12000) { const c = S.conn; S.conn = null; S.linkTries = (S.linkTries || 0) + 1; try { c.close(); } catch {} }
     if (!S.conn && Date.now() - (S.lastTry || 0) > 4000) connectToHost();
-    // Still no table after 8 seconds: try the second path as well.
-    if (S.online) S.downAt = 0; else { S.downAt ||= Date.now(); if (Date.now() - S.downAt > 8000 || params.get('relay') === 'only') tryRelay(); }
+    // Still no table after a few seconds: try the second path as well.
+    if (S.online) S.downAt = 0; else { S.downAt ||= Date.now(); if (Date.now() - S.downAt > 2500 || params.get('relay') === 'only') tryRelay(); }
   }
 }
 setInterval(keepAlive, 5000);
@@ -750,6 +750,8 @@ function startPlayer(code, saved) {
   render();
   stayAwake();
   openGuestPeer();
+  // Both paths from the start: if the usual one has no table after 2.5 seconds, the second path is used.
+  S.downAt = Date.now(); setTimeout(keepAlive, 2600);
 }
 
 function openGuestPeer() {
@@ -832,6 +834,7 @@ function wireGuestConn(conn) {
     S.retry++;
     S.viaRelay = false;
     setTimeout(() => { if (!S.conn) connectToHost(); }, Math.min(10000, 1500 * S.retry));
+    S.downAt = Date.now(); setTimeout(keepAlive, 2600);
   };
   conn.on('close', lost);
   conn.on('error', lost);
