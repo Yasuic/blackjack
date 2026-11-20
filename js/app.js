@@ -1,12 +1,12 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120q';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120q';
-import { tickSound, winSound } from './fx.js?v=20261120q';
-import * as HX from './history.js?v=20261120q';
-import { webglOK, initRoom } from './room3d.js?v=20261120q';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120q';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120r';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120r';
+import { tickSound, winSound } from './fx.js?v=20261120r';
+import * as HX from './history.js?v=20261120r';
+import { webglOK, initRoom } from './room3d.js?v=20261120r';
+import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120r';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -808,7 +808,10 @@ function aimSeat(st) {
   S.seatAim = a;
   me.seat = a;
   // The seat the table is drawn around. It stays put while the turn moves between my seats, so nothing on the table jumps.
-  S.home = mine.includes(S.home) ? S.home : mine.length ? mine[0] : null;
+  // While bets go down it is the seat in hand, so that seat has the large circle with its side bets.
+  // From the deal to the end of the round it does not change.
+  const betting = st.phase === 'betting' || st.phase === 'settled';
+  S.home = betting && a !== null ? a : mine.includes(S.home) ? S.home : mine.length ? mine[0] : null;
   me.home = S.home;
   if (st.rebets) st.rebet = a !== null ? st.rebets[a] || null : null;
 }
@@ -2639,6 +2642,12 @@ function runAct(el) {
   const act = el.dataset.act;
   const st = S.state;
   const me = st?.players.find((p) => p.id === S.myId);
+  // A tap on the circle or a side bet of another of my seats: that seat becomes the seat in hand first, so the chip goes where I tapped.
+  if (me && st.phase === 'betting' && (act === 'main-spot' || act === 'side-spot')) {
+    const m = /^(?:spot|sb)-(\d+)/.exec(el.id || '');
+    const i = m ? Number(m[1]) : null;
+    if (i !== null && i !== me.seat && (me.seats || []).includes(i) && st.seats[i] && !st.seats[i].out) { S.seatAim = i; S.undo = []; aimSeat(st); }
+  }
   const seat = me && me.seat !== null ? st.seats[me.seat] : null;
   // Bets are only taken while betting is open.
   if (BET_ACTS.has(act) && seat && st.phase !== 'betting') return;
