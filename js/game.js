@@ -430,6 +430,16 @@ export class Table {
     if (this.log.length > 40) this.log.shift();
   }
 
+  // ---- Record for the hand history: who did what and when. Kept until the round it belongs to is stored. ----
+  ev(k, clientId, d) {
+    this.evts = this.evts || [];
+    const p = clientId ? this.players[clientId] : null;
+    const e = { t: Date.now(), k, who: p ? p.name : '' };
+    if (d !== undefined && d !== '') e.d = d;
+    this.evts.push(e);
+    if (this.evts.length > 600) this.evts.splice(0, this.evts.length - 600);
+  }
+
   // ---- Players ----
   join(clientId, name, buyIn, look) {
     name = String(name || 'Player').trim().slice(0, 16) || 'Player';
@@ -437,6 +447,7 @@ export class Table {
     const lk = { skin: clamp(Math.round(Number(look?.skin ?? 2)) || 0, 0, 5), hair: clamp(Math.round(Number(look?.hair ?? 0)) || 0, 0, 4), flag: /^[\u{1F1E6}-\u{1F1FF}]{2}$/u.test(String(look?.flag || '')) ? String(look.flag) : '' };
     let p = this.players[clientId];
     if (p) {
+      if (!p.connected) this.ev('reconnect', clientId);
       p.connected = true;
       p.gone = false;
       p.name = name;
@@ -448,6 +459,7 @@ export class Table {
     p = { id: clientId, name, chips: start, seat: null, connected: true, lastBet: null, totalIn: start, look: lk };
     this.players[clientId] = p;
     this.addLog(`${name} joined.`);
+    this.ev('join', clientId, `buy-in ${start}`);
     return p;
   }
 
@@ -462,6 +474,7 @@ export class Table {
     }
     this.seats[seatIdx] = emptySeat(clientId);
     p.seat = seatIdx;
+    this.ev('sit', clientId, `seat ${seatIdx + 1}`);
   }
 
   // A player can sit as the dealer. The dealer still follows the fixed rules,
@@ -562,6 +575,7 @@ export class Table {
     if (p.seat === null) return;
     const seat = this.seats[p.seat];
     if (this.inRound() && seat.hands.length) throw new Error('Finish this round first.');
+    this.ev('leave seat', clientId, `seat ${p.seat + 1}`);
     this.seats[p.seat] = null;
     p.seat = null;
   }
@@ -569,6 +583,7 @@ export class Table {
   disconnect(clientId) {
     const p = this.players[clientId];
     if (!p) return;
+    if (p.connected) this.ev('disconnect', clientId);
     p.connected = false;
   }
 
@@ -594,6 +609,7 @@ export class Table {
   kick(clientId) {
     const p = this.players[clientId];
     if (!p) return;
+    this.ev('removed by the host', clientId);
     if (p.seat !== null) {
       const seat = this.seats[p.seat];
       if (this.inRound() && seat.hands.length) {
@@ -638,6 +654,7 @@ export class Table {
       p.boughtIn = (p.boughtIn || 0) + req.amount;
       p.totalIn = (p.totalIn ?? this.settings.startChips) + req.amount;
       this.addLog(`${p.name} bought in ${req.amount.toLocaleString()} more chips.`);
+      this.ev('buy-in', req.playerId, `${req.amount}, balance ${p.chips}`);
     } else {
       this.addLog(`The host said no to ${p.name}'s buy-in.`);
     }
@@ -845,6 +862,7 @@ export class Table {
       if (sides.under13) this.settleSide(seat, 'under13', evalOverUnder(pc, false));
     }
     this.addLog(`Round ${this.round} dealt.`);
+    this.ev('deal', null, `round ${this.round}`);
     if (up.r === 'A') {
       this.phase = 'insurance';
       for (const i of active) {
@@ -867,6 +885,7 @@ export class Table {
     if (this.phase !== 'insurance') throw new Error('Insurance is not offered now.');
     const { p, seat } = this.mustSeat(clientId);
     if (!seat.hands.length || seat.insuranceDecided) return;
+    this.ev(take ? 'insurance: yes' : 'insurance: no', clientId);
     if (take) {
       const cost = Math.ceil(seat.bet.main / 2);
       if (cost > p.chips) throw new Error('Not enough chips.');
@@ -943,6 +962,12 @@ export class Table {
     const p = this.players[clientId];
     const seat = this.seats[this.turn.seat];
     const h = seat.hands[this.turn.hand];
+    const before = h.cards.map((c) => c.r + c.s).join(' '), handNo = this.turn.hand + 1, splitHands = seat.hands;
+    // After the move: the hand as it stands, so the record shows the card each hit or double drew.
+    const note = () => this.ev(a, clientId, `hand ${handNo}: ${before} -> ${a === 'split' ? splitHands.slice(handNo - 1, handNo + 1).map((x) => x.cards.map((c) => c.r + c.s).join(' ')).join(' | ') : h.cards.map((c) => c.r + c.s).join(' ')}${a === 'double' ? `, bet ${h.bet}` : ''}`);
+    try { return this.actionInner(clientId, a, p, seat, h); } finally { note(); }
+  }
+  actionInner(clientId, a, p, seat, h) {
     if (a === 'hit') {
       h.cards.push(this.draw());
       const t = handTotal(h.cards).total;
@@ -983,6 +1008,7 @@ export class Table {
   // Host can stand a slow or disconnected player's current hand.
   skipTurn() {
     if (this.phase !== 'playing' || !this.turn) return;
+    this.ev('stand (by the table: time ran out or the host skipped)', this.seats[this.turn.seat].playerId, `hand ${this.turn.hand + 1}`);
     this.seats[this.turn.seat].hands[this.turn.hand].done = true;
     this.advance();
   }
@@ -997,7 +1023,7 @@ export class Table {
           // A player who is gone gets an automatic stand. One who only just dropped out still has
           // a little time to come back (see markGone), so the turn waits for them.
           const p = this.players[seat.playerId];
-          if (!p.connected && (p.gone || p.kicked)) { seat.hands[j].done = true; continue; }
+          if (!p.connected && (p.gone || p.kicked)) { seat.hands[j].done = true; this.ev('stand (by the table: player is away)', seat.playerId, `hand ${j + 1}`); continue; }
           return;
         }
       }
@@ -1114,6 +1140,7 @@ export class Table {
       if (!s || !s.hands.length) return;
       seats.push({
         seat: i + 1, name: this.players[s.playerId]?.name || 'Player', net: s.net ?? (s.returned - s.staked),
+        bet: { main: s.bet.main, sides: { ...s.bet.sides }, ...(s.insurance ? { insurance: s.insurance } : {}) }, chipsAfter: this.players[s.playerId]?.chips,
         hands: s.hands.map((h) => ({ cards: cs(h.cards), total: handTotal(h.cards).total, bet: h.bet, result: h.result, net: (h.paid || 0) - h.bet, doubled: !!h.doubled })),
         sides: s.sideResults.map((r) => ({ name: r.name, net: r.win ? r.pay - r.stake : r.push ? 0 : -r.stake })),
       });
@@ -1121,7 +1148,7 @@ export class Table {
     if (!seats.length) return;
     this.hist = this.hist || [];
     this.hist.push({
-      round: this.round, shoe: this.fair?.n || 0, midShuffle: !!this.shuffledMidRound,
+      round: this.round, shoe: this.fair?.n || 0, midShuffle: !!this.shuffledMidRound, time: Date.now(), events: (this.evts || []).splice(0),
       dealerName: this.banker && this.players[this.banker] ? this.players[this.banker].name : 'House',
       dealer: cs(this.dealer.cards), dealerTotal: handTotal(this.dealer.cards).total, counted: !!this.banker, seats,
     });
@@ -1210,8 +1237,8 @@ export class Table {
 
   // Save and restore so the host can refresh the page without losing the table.
   toJSON() {
-    const { settings, seats, players, phase, dealer, turn, round, roundsSinceShuffle, log, shoe, shoeSize, banker, bankerNet, pendingBanker, buyIns, runCount, hostId, pendingSettings, frozen, fair, hist } = this;
-    return { settings, seats, players, phase, dealer, turn, round, roundsSinceShuffle, log, shoe, shoeSize, banker, bankerNet, pendingBanker, buyIns, runCount, hostId, pendingSettings, frozen, fair, hist };
+    const { settings, seats, players, phase, dealer, turn, round, roundsSinceShuffle, log, shoe, shoeSize, banker, bankerNet, pendingBanker, buyIns, runCount, hostId, pendingSettings, frozen, fair, hist, evts, created } = this;
+    return { settings, seats, players, phase, dealer, turn, round, roundsSinceShuffle, log, shoe, shoeSize, banker, bankerNet, pendingBanker, buyIns, runCount, hostId, pendingSettings, frozen, fair, hist, evts, created };
   }
   static fromJSON(obj) {
     const t = new Table(obj.settings);
