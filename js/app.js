@@ -1,13 +1,13 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120zv';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261120zv';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120zv';
-import { tickSound, winSound } from './fx.js?v=20261120zv';
-import * as HX from './history.js?v=20261120zv';
-import { webglOK, initRoom } from './room3d.js?v=20261120zv';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120zv';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120zw';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261120zw';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120zw';
+import { tickSound, winSound } from './fx.js?v=20261120zw';
+import * as HX from './history.js?v=20261120zw';
+import { webglOK, initRoom } from './room3d.js?v=20261120zw';
+import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120zw';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -2632,6 +2632,7 @@ function renderHostPanel(st) {
       <button class="btn full" data-act="h-strip" ${dis}>Reset to Las Vegas Strip rules</button>
     </div>`, true)}
     ${fold('set-sides', '🎲 Side bets offered', `<div class="settings-grid">
+      <label class="check full sb-all"><input type="checkbox" id="sb-all" ${SIDE_KEYS.every((k) => sideKeys(st).includes(k)) ? 'checked' : ''} ${dis} /> <b>All side bets</b></label>
       ${SIDE_KEYS.map((k) => `<label class="check full"><input type="checkbox" data-sidebet="${k}" ${sideKeys(st).includes(k) ? 'checked' : ''} ${dis} /> ${SIDE_BETS[k].icon || ''} ${SIDE_BETS[k].name}</label>`).join('')}
     </div>`, true)}
     ${fold('set-auto', '⏱️ Automatic dealer and timers', `<div class="settings-grid">
@@ -3452,4 +3453,11 @@ function banner(title, sub, kind, ms = 2700) {
 document.addEventListener('change', (e) => {
   if (e.target.id !== 'look-flag') return;
   const l = readLook(); l.flag = e.target.value; safeSet('bj-look', JSON.stringify(l));
+});
+
+// "All side bets" in the host settings ticks or clears every side bet; ticking them one by one keeps it in step.
+document.addEventListener('change', (e) => {
+  const boxes = [...document.querySelectorAll('[data-sidebet]')];
+  if (e.target.id === 'sb-all') for (const b of boxes) b.checked = e.target.checked;
+  else if (e.target.dataset?.sidebet && $('#sb-all')) $('#sb-all').checked = boxes.every((b) => b.checked);
 });
