@@ -1,13 +1,13 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120zzb';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261120zzb';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120zzb';
-import { tickSound, winSound } from './fx.js?v=20261120zzb';
-import * as HX from './history.js?v=20261120zzb';
-import { webglOK, initRoom } from './room3d.js?v=20261120zzb';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120zzb';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120zzc';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261120zzc';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120zzc';
+import { tickSound, winSound } from './fx.js?v=20261120zzc';
+import * as HX from './history.js?v=20261120zzc';
+import { webglOK, initRoom } from './room3d.js?v=20261120zzc';
+import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120zzc';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -1580,8 +1580,7 @@ function showResult(st) {
   const el = document.createElement('div');
   el.id = 'result-pop';
   el.className = 'result-pop ' + (net > 0 ? 'win' : net < 0 ? 'lose' : 'push');
-  el.innerHTML = (net > 0 ? `<small>You win</small><b>${money(net)}</b>` : net < 0 ? `<small>You lose</small><b>${money(-net)}</b>` : '<small>Push</small><b>Even</b>') +
-    allLine +
+  el.innerHTML = (net > 0 ? `<small>Net profit</small><b>${money(net)}</b>` : net < 0 ? `<small>Net loss</small><b>${money(-net)}</b>` : '<small>Net</small><b>Even</b>') +
     (S.timedOutRound === st.round ? '<em class="warn">Time ran out. Your hand was stood.</em>' : '') +
     (st.frozen ? '<em>House dealer: not counted in the ledger</em>' : '');
   const felt = document.body;
