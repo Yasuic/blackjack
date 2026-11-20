@@ -1582,3 +1582,6 @@ body.room3d:has(.room.walking) .hud3d .tray:has(.chip-rack), body.room3d:has(.ro
 /* The round in play, at the top of the hand history panel. */
 #hist-panel .hp-live { border-left: 2px solid var(--gold); padding-left: 5px; }
 #hist-panel .hp-live i { font-style: normal; color: var(--gold); font-size: 9px; text-transform: uppercase; letter-spacing: 1px; }
+
+/* View buttons are hidden unless switched on in the menu. Drag, wheel and pinch still move the view. */
+body.view-hidden .zoom-ctl { display: none !important; }

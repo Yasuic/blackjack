@@ -1,13 +1,13 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120zw';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261120zw';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120zw';
-import { tickSound, winSound } from './fx.js?v=20261120zw';
-import * as HX from './history.js?v=20261120zw';
-import { webglOK, initRoom } from './room3d.js?v=20261120zw';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120zw';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120zx';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261120zx';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120zx';
+import { tickSound, winSound } from './fx.js?v=20261120zx';
+import * as HX from './history.js?v=20261120zx';
+import { webglOK, initRoom } from './room3d.js?v=20261120zx';
+import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120zx';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -61,6 +61,9 @@ if (safeGet('bj-four') === '1') document.body.classList.add('four-colour');
 // ---------- Small helpers ----------
 function safeGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
 function safeSet(k, v) { try { localStorage.setItem(k, v); } catch {} }
+// The view buttons (Look left, Look right, Reset view, Walk around, zoom) are hidden unless switched on in the menu.
+function viewPadOn() { return safeGet('bj-view-pad') === '1'; }
+document.body.classList.toggle('view-hidden', !viewPadOn());
 function safeDel(k) { try { localStorage.removeItem(k); } catch {} }
 // What a guest typed to join a table, kept for this browser tab so a reload goes straight back in.
 function sessGet(k) { try { return sessionStorage.getItem(k); } catch { return null; } }
@@ -997,6 +1000,7 @@ function buildLayout() {
             <div class="menu-title">🔗 Invite link</div>
             <div class="share"><input id="share" readonly /><button class="btn small" data-act="copy">Copy</button></div>
           </div>
+          <button class="menu-item" data-act="view-pad" title="Look left, Look right, Reset view, Walk around and zoom buttons">🎥 View buttons: ${viewPadOn() ? 'on' : 'off'}</button>
           ${fold('m-table', '📜 Table rules and payouts', `
             <button class="menu-item" data-act="rules">💰 Side bet payouts</button>`)}
           ${fold('m-cheat', '🛡️ Game Cheating Detection', `
@@ -2932,6 +2936,7 @@ function runAct(el) {
     case 'rebet': doRebet(); break;
     case 'keys': $('#modal-body').innerHTML = keysHTML(); $('#modal').showModal(); break;
     case 'history': showHistory(); break;
+    case 'view-pad': safeSet('bj-view-pad', viewPadOn() ? '0' : '1'); if (!viewPadOn() && S.room?.walking?.()) S.room.walk(false); document.body.classList.toggle('view-hidden', !viewPadOn()); for (const b of document.querySelectorAll('.menu-item[data-act=view-pad]')) b.textContent = '🎥 View buttons: ' + (viewPadOn() ? 'on' : 'off'); break;
     case 'hist-panel': safeSet('bj-hist-panel', histOn() ? '0' : '1'); drawHistPanel(true); for (const b of document.querySelectorAll('.menu-item[data-act=hist-panel]')) b.textContent = '🕘 Hand history: ' + (histOn() ? 'on' : 'off'); break;
     case 'export': showExport(); break;
     case 'double-bet': {
