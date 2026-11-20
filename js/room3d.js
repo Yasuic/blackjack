@@ -110,20 +110,25 @@ function hashHue(id) { let h = 2166136261; for (const ch of String(id)) { h ^= c
 
 // ---------- The office ----------
 // The room around the table is the owner's office, from their own measured 3D model: walls, glass,
-// windows, doors, pillars, cabinets, sofas, desks, chairs and screens, all in metres. The desks that
-// stood in the middle of the open floor are left out: the blackjack table stands there instead.
+// windows, doors, pillars, cabinets, sofas, desks, chairs and screens, all in metres. The block of
+// eight desks in the middle of the open floor (marked mid) is moved a little toward the far glass wall,
+// and the blackjack table stands at its near end: flat side to the desks, players' backs to the sofa.
 // Plan x runs along the front wall and plan y from the front wall to the windows.
-const OFFICE = {"sidePanes":[{"a":2.526,"b":2.7292},{"a":3.7274,"b":3.9306}],"cab2":{"x":6.5666,"y":6.7455,"width":1.9764,"depth":0.4572},"bump":{"x":-1.01,"y":0,"w":1.01,"d":5.067},"sofa":{"depth":0.433,"a":{"x":0,"y":5.067,"len":1.714},"b":{"x":0,"y":5.067,"len":2.959},"c":{"x":2.526,"y":1.497,"len":3.57}},"width":14.36,"depth":8.267,"divider":0.103,"pillars":[{"id":"p1","shape":"rect","x":0.182,"y":6.7808,"width":0.908,"depth":1.2002},{"id":"p2","shape":"square","x":7.593,"y":7.2027,"width":0.95,"depth":0.95},{"id":"p3","shape":"rect","x":13.398,"y":6.8218,"width":0.908,"depth":1.2002}],"cabinet":{"x":3.9306,"y":0,"width":3.4737,"depth":0.381},"walls":[{"id":"w6","type":"wall","x1":-1.01,"y1":0,"x2":1.4338,"y2":0},{"id":"g2","type":"glass","x1":2.399,"y1":0,"x2":11.419,"y2":0},{"id":"w7","type":"wall","x1":11.419,"y1":0,"x2":14.36,"y2":0},{"id":"n1","type":"window","x1":0,"y1":8.267,"x2":14.36,"y2":8.267,"thick":0.127},{"id":"n2","type":"window","x1":0,"y1":5.067,"x2":0,"y2":8.267},{"id":"n3","type":"window","x1":14.36,"y1":0,"x2":14.36,"y2":8.267},{"id":"g3","type":"glass","x1":2.399,"y1":0,"x2":2.399,"y2":5.067,"thick":0.127},{"id":"g4","type":"glass","x1":0,"y1":5.067,"x2":2.399,"y2":5.067},{"id":"g5","type":"glass","x1":11.419,"y1":0,"x2":11.419,"y2":3.272},{"id":"g7","type":"glass","x1":11.419,"y1":4.327,"x2":11.419,"y2":8.267},{"id":"w9","type":"wall","x1":11.419,"y1":4.224,"x2":14.36,"y2":4.224},{"id":"n2b","type":"window","x1":-1.01,"y1":0,"x2":-1.01,"y2":5.067,"thick":0.127},{"id":"w6b","type":"wall","x1":-1.01,"y1":5.067,"x2":0,"y2":5.067}],"doors":[{"id":"d1","x1":1.4338,"y1":0,"x2":2.399,"y2":0,"hinge":{"x":2.399,"y":0}},{"id":"d2","x1":2.7292,"y1":0,"x2":3.7274,"y2":0,"hinge":{"x":2.7292,"y":0}},{"id":"d3","x1":11.419,"y1":3.2906,"x2":11.419,"y2":4.224,"hinge":{"x":11.419,"y":4.224}},{"id":"d4","x1":11.419,"y1":4.327,"x2":11.419,"y2":5.2617,"hinge":{"x":11.419,"y":4.327}}],"rooms":[{"id":"bigBoard","x":-1.01,"y":0,"width":3.409,"depth":5.067},{"id":"eating","x":0,"y":5.067,"width":2.399,"depth":3.2},{"id":"openPlan","x":2.399,"y":0,"width":9.02,"depth":8.267},{"id":"printIT","x":6.168,"y":6.259,"width":2.294,"depth":2.008},{"id":"smallBoard","x":11.419,"y":0,"width":2.942,"depth":4.224},{"id":"securities","x":11.419,"y":4.327,"width":2.942,"depth":3.94}],"furniture":[{"id":"t1","room":"bigBoard","kind":"rrect","cx":0.737,"cy":2.234,"w":1.0,"d":2.243},{"id":"tv1","room":"bigBoard","kind":"tvh","cx":0.666,"cy":4.851,"w":0.639,"d":0.0},{"id":"et1","room":"eating","kind":"marble","cx":1.15,"cy":6.217,"w":0.65,"d":0.7},{"id":"et2","room":"eating","kind":"marble","cx":1.9,"cy":6.217,"w":0.65,"d":0.7},{"id":"dS","room":"openPlan","kind":"rect","cx":5.276,"cy":1.079,"w":0.6985,"d":1.397},{"id":"dT","room":"openPlan","kind":"rect","cx":5.974,"cy":1.079,"w":0.6985,"d":1.397},{"id":"dC","room":"openPlan","kind":"rect","cx":9.526,"cy":0.878,"w":0.8001,"d":1.6002,"top":"yellow"},{"id":"dF","room":"openPlan","kind":"rect","cx":10.326,"cy":0.878,"w":0.8001,"d":1.6002,"top":"yellow"},{"id":"dTh","room":"openPlan","kind":"rect","cx":3.845,"cy":7.392,"w":0.8001,"d":1.6002,"top":"yellow"},{"id":"dA","room":"openPlan","kind":"rect","cx":4.645,"cy":7.392,"w":0.8001,"d":1.6002,"top":"yellow"},{"id":"dG","room":"openPlan","kind":"rect","cx":9.343,"cy":7.146,"w":1.6002,"d":0.8001,"top":"yellow"},{"id":"sv","room":"printIT","kind":"rect","cx":7.08,"cy":7.514,"w":0.67,"d":0.562},{"id":"t2","room":"smallBoard","kind":"rrect","cx":12.957,"cy":2.061,"w":0.891,"d":2.196},{"id":"tv3","room":"smallBoard","kind":"tvh","cx":12.949,"cy":4.106,"w":0.639,"d":0.0},{"id":"t3","room":"securities","kind":"round","cx":13.235,"cy":5.642,"w":1.028,"d":1.028},{"id":"dN","room":"securities","kind":"rect","cx":11.849,"cy":7.417,"w":0.8001,"d":1.6002,"top":"yellow"},{"id":"tv4","room":"securities","kind":"tvh","cx":12.949,"cy":4.361,"w":0.639,"d":0.0}],"chairs":[{"room":"bigBoard","cx":-0.113,"cy":1.259},{"room":"bigBoard","cx":1.587,"cy":1.486},{"room":"bigBoard","cx":-0.113,"cy":1.909},{"room":"bigBoard","cx":1.587,"cy":2.234},{"room":"bigBoard","cx":-0.113,"cy":2.559},{"room":"bigBoard","cx":1.587,"cy":2.982},{"room":"bigBoard","cx":-0.113,"cy":3.209},{"room":"openPlan","cx":4.577,"cy":1.079},{"room":"openPlan","cx":6.673,"cy":1.079},{"room":"openPlan","cx":8.776,"cy":0.878},{"room":"openPlan","cx":11.076,"cy":0.878},{"room":"openPlan","cx":3.095,"cy":7.392},{"room":"openPlan","cx":5.395,"cy":7.392},{"room":"smallBoard","cx":12.162,"cy":1.329},{"room":"smallBoard","cx":13.753,"cy":1.512},{"room":"smallBoard","cx":12.162,"cy":2.061},{"room":"smallBoard","cx":13.753,"cy":2.61},{"room":"smallBoard","cx":12.162,"cy":2.793},{"room":"securities","cx":13.712,"cy":6.302},{"room":"securities","cx":12.758,"cy":6.301},{"room":"securities","cx":12.758,"cy":4.982},{"room":"securities","cx":13.711,"cy":4.982},{"room":"openPlan","cx":9.343,"cy":7.896},{"room":"eating","cx":1.29,"cy":6.847,"stool":true},{"room":"eating","cx":1.65,"cy":6.847,"stool":true},{"room":"eating","cx":2.01,"cy":6.847,"stool":true},{"room":"eating","cx":2.37,"cy":6.847,"stool":true},{"room":"securities","cx":12.599,"cy":7.417}]};
+const OFFICE = {"sidePanes":[{"a":2.526,"b":2.7292},{"a":3.7274,"b":3.9306}],"cab2":{"x":6.5666,"y":6.7455,"width":1.9764,"depth":0.4572},"bump":{"x":-1.01,"y":0,"w":1.01,"d":5.067},"sofa":{"depth":0.433,"a":{"x":0,"y":5.067,"len":1.714},"b":{"x":0,"y":5.067,"len":2.959},"c":{"x":2.526,"y":1.497,"len":3.57}},"width":14.36,"depth":8.267,"divider":0.103,"pillars":[{"id":"p1","shape":"rect","x":0.182,"y":6.7808,"width":0.908,"depth":1.2002},{"id":"p2","shape":"square","x":7.593,"y":7.2027,"width":0.95,"depth":0.95},{"id":"p3","shape":"rect","x":13.398,"y":6.8218,"width":0.908,"depth":1.2002}],"cabinet":{"x":3.9306,"y":0,"width":3.4737,"depth":0.381},"walls":[{"id":"w6","type":"wall","x1":-1.01,"y1":0,"x2":1.4338,"y2":0},{"id":"g2","type":"glass","x1":2.399,"y1":0,"x2":11.419,"y2":0},{"id":"w7","type":"wall","x1":11.419,"y1":0,"x2":14.36,"y2":0},{"id":"n1","type":"window","x1":0,"y1":8.267,"x2":14.36,"y2":8.267,"thick":0.127},{"id":"n2","type":"window","x1":0,"y1":5.067,"x2":0,"y2":8.267},{"id":"n3","type":"window","x1":14.36,"y1":0,"x2":14.36,"y2":8.267},{"id":"g3","type":"glass","x1":2.399,"y1":0,"x2":2.399,"y2":5.067,"thick":0.127},{"id":"g4","type":"glass","x1":0,"y1":5.067,"x2":2.399,"y2":5.067},{"id":"g5","type":"glass","x1":11.419,"y1":0,"x2":11.419,"y2":3.272},{"id":"g7","type":"glass","x1":11.419,"y1":4.327,"x2":11.419,"y2":8.267},{"id":"w9","type":"wall","x1":11.419,"y1":4.224,"x2":14.36,"y2":4.224},{"id":"n2b","type":"window","x1":-1.01,"y1":0,"x2":-1.01,"y2":5.067,"thick":0.127},{"id":"w6b","type":"wall","x1":-1.01,"y1":5.067,"x2":0,"y2":5.067}],"doors":[{"id":"d1","x1":1.4338,"y1":0,"x2":2.399,"y2":0,"hinge":{"x":2.399,"y":0}},{"id":"d2","x1":2.7292,"y1":0,"x2":3.7274,"y2":0,"hinge":{"x":2.7292,"y":0}},{"id":"d3","x1":11.419,"y1":3.2906,"x2":11.419,"y2":4.224,"hinge":{"x":11.419,"y":4.224}},{"id":"d4","x1":11.419,"y1":4.327,"x2":11.419,"y2":5.2617,"hinge":{"x":11.419,"y":4.327}}],"rooms":[{"id":"bigBoard","x":-1.01,"y":0,"width":3.409,"depth":5.067},{"id":"eating","x":0,"y":5.067,"width":2.399,"depth":3.2},{"id":"openPlan","x":2.399,"y":0,"width":9.02,"depth":8.267},{"id":"printIT","x":6.168,"y":6.259,"width":2.294,"depth":2.008},{"id":"smallBoard","x":11.419,"y":0,"width":2.942,"depth":4.224},{"id":"securities","x":11.419,"y":4.327,"width":2.942,"depth":3.94}],"furniture":[{"id":"t1","room":"bigBoard","kind":"rrect","cx":0.737,"cy":2.234,"w":1.0,"d":2.243},{"id":"tv1","room":"bigBoard","kind":"tvh","cx":0.666,"cy":4.851,"w":0.639,"d":0.0},{"id":"et1","room":"eating","kind":"marble","cx":1.15,"cy":6.217,"w":0.65,"d":0.7},{"id":"et2","room":"eating","kind":"marble","cx":1.9,"cy":6.217,"w":0.65,"d":0.7},{"id":"dS","room":"openPlan","kind":"rect","cx":5.276,"cy":1.079,"w":0.6985,"d":1.397},{"id":"dT","room":"openPlan","kind":"rect","cx":5.974,"cy":1.079,"w":0.6985,"d":1.397},{"id":"dC","room":"openPlan","kind":"rect","cx":9.526,"cy":0.878,"w":0.8001,"d":1.6002,"top":"yellow"},{"id":"dF","room":"openPlan","kind":"rect","cx":10.326,"cy":0.878,"w":0.8001,"d":1.6002,"top":"yellow"},{"id":"dTh","room":"openPlan","kind":"rect","cx":3.845,"cy":7.392,"w":0.8001,"d":1.6002,"top":"yellow"},{"id":"dA","room":"openPlan","kind":"rect","cx":4.645,"cy":7.392,"w":0.8001,"d":1.6002,"top":"yellow"},{"id":"dG","room":"openPlan","kind":"rect","cx":9.343,"cy":7.146,"w":1.6002,"d":0.8001,"top":"yellow"},{"id":"sv","room":"printIT","kind":"rect","cx":7.08,"cy":7.514,"w":0.67,"d":0.562},{"id":"t2","room":"smallBoard","kind":"rrect","cx":12.957,"cy":2.061,"w":0.891,"d":2.196},{"id":"tv3","room":"smallBoard","kind":"tvh","cx":12.949,"cy":4.106,"w":0.639,"d":0.0},{"id":"t3","room":"securities","kind":"round","cx":13.235,"cy":5.642,"w":1.028,"d":1.028},{"id":"dN","room":"securities","kind":"rect","cx":11.849,"cy":7.417,"w":0.8001,"d":1.6002,"top":"yellow","hh":1.1},{"id":"tv4","room":"securities","kind":"tvh","cx":12.949,"cy":4.361,"w":0.639,"d":0.0},{"id":"c1","room":"openPlan","kind":"rect","cx":4.974,"cy":3.853,"w":1.397,"d":0.6985,"mid":true},{"id":"c2","room":"openPlan","kind":"rect","cx":6.371,"cy":3.853,"w":1.397,"d":0.6985,"mid":true},{"id":"c3","room":"openPlan","kind":"rect","cx":7.768,"cy":3.853,"w":1.397,"d":0.6985,"mid":true},{"id":"c4","room":"openPlan","kind":"rect","cx":9.165,"cy":3.853,"w":1.397,"d":0.6985,"mid":true},{"id":"c5","room":"openPlan","kind":"rect","cx":4.974,"cy":4.551,"w":1.397,"d":0.6985,"mid":true},{"id":"c6","room":"openPlan","kind":"rect","cx":6.371,"cy":4.551,"w":1.397,"d":0.6985,"mid":true},{"id":"c7","room":"openPlan","kind":"rect","cx":7.768,"cy":4.551,"w":1.397,"d":0.6985,"mid":true},{"id":"c8","room":"openPlan","kind":"rect","cx":9.165,"cy":4.551,"w":1.397,"d":0.6985,"mid":true}],"chairs":[{"room":"bigBoard","cx":-0.113,"cy":1.259},{"room":"bigBoard","cx":1.587,"cy":1.486},{"room":"bigBoard","cx":-0.113,"cy":1.909},{"room":"bigBoard","cx":1.587,"cy":2.234},{"room":"bigBoard","cx":-0.113,"cy":2.559},{"room":"bigBoard","cx":1.587,"cy":2.982},{"room":"bigBoard","cx":-0.113,"cy":3.209},{"room":"openPlan","cx":4.577,"cy":1.079},{"room":"openPlan","cx":6.673,"cy":1.079},{"room":"openPlan","cx":8.776,"cy":0.878},{"room":"openPlan","cx":11.076,"cy":0.878},{"room":"openPlan","cx":3.095,"cy":7.392},{"room":"openPlan","cx":5.395,"cy":7.392},{"room":"smallBoard","cx":12.162,"cy":1.329},{"room":"smallBoard","cx":13.753,"cy":1.512},{"room":"smallBoard","cx":12.162,"cy":2.061},{"room":"smallBoard","cx":13.753,"cy":2.61},{"room":"smallBoard","cx":12.162,"cy":2.793},{"room":"securities","cx":13.712,"cy":6.302},{"room":"securities","cx":12.758,"cy":6.301},{"room":"securities","cx":12.758,"cy":4.982},{"room":"securities","cx":13.711,"cy":4.982},{"room":"openPlan","cx":9.343,"cy":7.896},{"room":"eating","cx":1.29,"cy":6.847,"stool":true},{"room":"eating","cx":1.65,"cy":6.847,"stool":true},{"room":"eating","cx":2.01,"cy":6.847,"stool":true},{"room":"eating","cx":2.37,"cy":6.847,"stool":true},{"room":"securities","cx":12.599,"cy":7.417,"stand":true},{"room":"openPlan","cx":4.974,"cy":3.154,"mid":true},{"room":"openPlan","cx":6.371,"cy":3.154,"mid":true},{"room":"openPlan","cx":7.768,"cy":3.154,"mid":true},{"room":"openPlan","cx":9.165,"cy":3.154,"mid":true},{"room":"openPlan","cx":4.974,"cy":5.25,"mid":true},{"room":"openPlan","cx":6.371,"cy":5.25,"mid":true},{"room":"openPlan","cx":7.768,"cy":5.25,"mid":true},{"room":"openPlan","cx":9.165,"cy":5.25,"mid":true}]};
 // Plan position of the middle of the blackjack table.
-const OFFICE_AT = { x: 7.07, y: 4.2 };
+const OFFICE_AT = { x: 4.16, y: 4.2 }; // x is set again from the table's real depth when the room is built
 // The one name plate in the room. Set it to '' to leave the plate out.
 const OFFICE_SIGN = 'WELCOME TO ARC GROUP!';
 const OFFICE_SIGN_LINES = ['Hours: 8AM to infinity AM', 'Compensation: negative infinity'];
 
 // Builds the whole office as a handful of merged meshes (one per material). Units are metres with the
 // floor at y = 0; the caller scales and places the group. Scene X = -plan x, Z = -plan y.
-function buildOffice(signText) {
-  const D = OFFICE, Hh = { ceil: 2.7, door: 2.1, sill: 0.85, winTop: 2.55, cab: 2.7, desk: 0.749 };
+function buildOffice(signText, midShift = 0, midClear = 0) {
+  // The middle desks and their chairs move along x by midShift; a desk that would still reach into the table's space is left out.
+  const D0 = OFFICE;
+  const midGone = new Set(D0.furniture.filter((f) => f.mid && f.cx + midShift - f.w / 2 < midClear).map((f) => f.cx));
+  const D = { ...D0, furniture: D0.furniture.filter((f) => !(f.mid && midGone.has(f.cx))).map((f) => (f.mid ? { ...f, cx: f.cx + midShift } : f)), chairs: D0.chairs.filter((c) => !(c.mid && midGone.has(c.cx))).map((c) => (c.mid ? { ...c, cx: c.cx + midShift } : c)) };
+  const Hh = { ceil: 2.7, door: 2.1, sill: 0.85, winTop: 2.55, cab: 2.7, desk: 0.749 };
   const TILE = { L: 1.2176, S: 0.6064 };
   const mk = (o) => new THREE.MeshStandardMaterial(o);
   const rnd = rng(5);
@@ -147,15 +152,17 @@ function buildOffice(signText) {
     chrome: mk({ color: '#b9bec4', roughness: 0.25, metalness: 0.9 }),
     screen: mk({ color: '#0d0f12', roughness: 0.25, metalness: 0.2 }),
     // What the office screens show: the ARC Group logo, from the photo of it, lit like a screen that is on.
-    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261120zzf'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
+    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261120zzk'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
     dark: mk({ color: '#30353c', roughness: 0.6 }),
   };
   const group = new THREE.Group();
   // Everything that does not move is gathered by material and merged, so the office costs few draw calls.
+  let sink = null; // while set, pieces are collected here (one person's body) and kept out of the room's merged geometry
   const buckets = new Map();
   const put = (geo, mat, matrix, shadow = true) => {
     const g = geo.index ? geo.toNonIndexed() : geo.clone();
     g.applyMatrix4(matrix);
+    if (sink) { sink.push([g, mat.color]); return; }
     const key = mat.uuid + (shadow ? 's' : 'n');
     let b = buckets.get(key);
     if (!b) buckets.set(key, (b = { mat, shadow, pos: [], nor: [], uv: [], n: 0 }));
@@ -311,10 +318,11 @@ function buildOffice(signText) {
       [-1, 1].forEach((s) => box(0.1, Hh.desk - 0.04, 0.5, M.leg, X, (Hh.desk - 0.04) / 2, Z + s * f.d * 0.28));
       return;
     }
-    // Desks and plain tables: a top and two panel legs on the short sides.
-    box(f.w, 0.03, f.d, f.room === 'eating' ? M.wood : f.top === 'yellow' ? M.deskYellow : M.deskTop, X, Hh.desk - 0.015, Z);
+    // Desks and plain tables: a top and two panel legs on the short sides. A standing desk is higher.
+    const dkh = f.hh || Hh.desk;
+    box(f.w, 0.03, f.d, f.room === 'eating' ? M.wood : f.top === 'yellow' ? M.deskYellow : M.deskTop, X, dkh - 0.015, Z);
     const long = f.w >= f.d;
-    [-1, 1].forEach((s) => { if (long) box(0.04, Hh.desk - 0.03, f.d * 0.85, M.leg, X + s * (f.w / 2 - 0.05), (Hh.desk - 0.03) / 2, Z); else box(f.w * 0.85, Hh.desk - 0.03, 0.04, M.leg, X, (Hh.desk - 0.03) / 2, Z + s * (f.d / 2 - 0.05)); });
+    [-1, 1].forEach((s) => { if (long) box(0.04, dkh - 0.03, f.d * 0.85, M.leg, X + s * (f.w / 2 - 0.05), (dkh - 0.03) / 2, Z); else box(f.w * 0.85, dkh - 0.03, 0.04, M.leg, X, (dkh - 0.03) / 2, Z + s * (f.d / 2 - 0.05)); });
     if (f.room === 'openPlan' || f.room === 'securities') desks.push(f);
   });
   // Office chairs, each turned to face the nearest desk or table in its room.
@@ -335,15 +343,331 @@ function buildOffice(signText) {
     const C = So.c;
     seat(C.x, C.y, dpt, C.len); box(0.18, backH, C.len, M.sofa, -(C.x + 0.09), backH / 2, -(C.y + C.len / 2)); box(dpt, 0.6, 0.18, M.sofa, -(C.x + dpt / 2), 0.3, -(C.y + 0.09)); box(dpt, 0.6, 0.18, M.sofa, -(dpt / 2), 0.3, -(So.a.y + So.a.len - 0.09));
   }
+  // People at the desks. Each one is a few boxes in the chair's own frame (the chair faces -z), with
+  // the two hands as separate small pieces that tap up and down on the keyboard.
+  const typing = [];
+  const tone = {};
+  const col = (c, r = 0.85) => (tone[c + r] ||= mk({ color: c, roughness: r }));
+  const handGeo = new THREE.BoxGeometry(0.085, 0.035, 0.11);
+  const limb = (a, b, t, mat) => { // a box from point a to point b
+    const dx = b[0] - a[0], dy = b[1] - a[1], dz = b[2] - a[2], L = Math.hypot(dx, dy, dz);
+    box(t, L, t, mat, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2, true, Math.atan2(dx, dz), Math.atan2(Math.hypot(dx, dz), dy));
+  };
+  const LOOKS = [
+    { skin: '#e8b98f', hair: '#2a1d14', top: '#3b6ea5', legs: '#2b2f38' },
+    { skin: '#c98f62', hair: '#15110e', top: '#e9e6df', legs: '#3a3f47' },
+    { skin: '#f0c9a4', hair: '#6b4a2b', top: '#4f7d5c', legs: '#22262d' },
+    { skin: '#a8703f', hair: '#0f0d0c', top: '#8a4b4b', legs: '#2f3340' },
+    { skin: '#e2ad82', hair: '#3a2a1c', top: '#c9a23b', legs: '#262a30' },
+  ];
+  // Three people the office asked for by place: the woman at the yellow desk by the wooden slats who
+  // faces the small meeting room, the person across from her, and the man at the desk behind her.
+  const SPECIAL = {
+    9: { name: 'Charlene', skin: '#f0c9a4', hair: '#17110d', top: '#111214', legs: '#111214', longHair: true, dress: true },
+    10: { name: 'Felix', skin: '#e2ad82', hair: '#1d1712', top: '#e9e6df', legs: '#2b2f38', vest: '#131416' },
+    8: { name: 'Tony', skin: '#e8b98f', hair: '#2a1d14', top: '#4a6fa0', legs: '#2b2f38', wide: 1.5 },
+    27: { name: 'Nigel', skin: '#e8b98f', hair: '#1d1712', top: '#f6f5f1', legs: '#3a3f47', tattoo: true, golf: true },
+    // The middle block, seen from above with the sign cupboard at the top. Bottom row, left to right: 31, 30, 29, 28. Top row: 35, 34, 33, 32.
+    31: { name: 'Henry', skin: '#e2ad82', hair: '#0f0d0c', top: '#5b6470', legs: '#2b2f38', postits: true },
+    34: { name: 'David', skin: '#e8b98f', hair: '#2a1d14', top: '#2f3640', legs: '#22262d', glowKeys: true, goose: true },
+    32: { name: 'Jeff', skin: '#e2ad82', hair: '#15110e', top: '#141518', legs: '#e9dfc8', shoes: '#f7f6f2', collar: true, glasses: true, nap: true, whiteKeys: true, says: 'f*** this shit', cars: true, flask: true },
+    30: { name: 'Victor', skin: '#e8b98f', hair: '#1d1712', top: '#dfe8f2', legs: '#30343c' },
+    29: { name: 'Allie', skin: '#f0c9a4', hair: '#2a1d14', top: '#c0262d', legs: '#c0262d', longHair: true, dress: true, wide: 1.5, mess: true },
+    22: { name: 'Gordon', skin: '#e2ad82', hair: '#1d1712', top: '#5c6b7a', legs: '#2b2f38', wide: 1.55, eat: true },
+    12: { name: 'Alan', skin: '#e8b98f', hair: '#1d1712', top: '#f6f5f1', legs: '#3a3f47', wide: 0.82 },
+    11: { name: 'Thibaud', skin: '#f6dccb', hair: '#f2f2ee', top: '#a9cdea', legs: '#f1efea', shoes: '#f7f6f2', spiky: true },
+    7: { name: 'Yuya', skin: '#f0c9a4', hair: '#0f0d0c', top: '#d9cfbd', legs: '#3a3f47', bowl: true, word: 'MUJI' },
+  };
+  const bodyMat = mk({ vertexColors: true, roughness: 0.85 });
+  // Joins captured pieces into one geometry; each piece keeps the colour of the material it was drawn with.
+  const joinColored = (items) => {
+    const n = items.reduce((q, [g]) => q + g.attributes.position.count, 0);
+    const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), colr = new Float32Array(n * 3);
+    let o = 0;
+    for (const [g, c] of items) { pos.set(g.attributes.position.array, o * 3); nor.set(g.attributes.normal.array, o * 3); for (let q = 0; q < g.attributes.position.count; q++) { colr[(o + q) * 3] = c.r; colr[(o + q) * 3 + 1] = c.g; colr[(o + q) * 3 + 2] = c.b; } o += g.attributes.position.count; }
+    const out = new THREE.BufferGeometry();
+    out.setAttribute('position', new THREE.BufferAttribute(pos, 3)); out.setAttribute('normal', new THREE.BufferAttribute(nor, 3)); out.setAttribute('color', new THREE.BufferAttribute(colr, 3));
+    return out;
+  };
+  // The coffee run: from the chair to the nearest aisle, along the aisles to the main door, and out to the street side.
+  const walkers = [];
+  const A1 = 2.35, A2 = 6.05, XR = Math.min(11.1, 9.8635 + midShift + 0.32);
+  const toAisle = (c) => { // from a chair to the aisle on the door side
+    const pts = [[c.cx, c.cy]];
+    if (c.room === 'securities') pts.push([12.25, c.cy], [12.25, 4.8], [XR, 4.8], [XR, A1]);
+    else if (c.cy < 4.2) pts.push([c.cx, A1]);
+    else { if (c.cy > 7.6 && c.cx > 8) pts.push([10.5, c.cy], [10.5, A2]); else pts.push([c.cx, A2]); pts.push([XR, A2], [XR, A1]); }
+    return pts;
+  };
+  const toV = (pts) => pts.map(([x, y]) => V(-x, 0, -y));
+  const routeFor = (c) => toV([...toAisle(c), [3.23, A1], [3.23, 0.2], [3.23, -1.8]]);
+  // A small comic speech bubble; it always turns to the viewer.
+  const bubble = (text) => {
+    const t = canvasTexture(384, 160, (g, cw, ch) => {
+      g.clearRect(0, 0, cw, ch); g.fillStyle = '#fff'; g.strokeStyle = '#111'; g.lineWidth = 6;
+      g.beginPath(); g.roundRect(8, 8, cw - 16, ch - 56, 34); g.fill(); g.stroke();
+      g.beginPath(); g.moveTo(96, ch - 51); g.lineTo(78, ch - 8); g.lineTo(150, ch - 51); g.fill(); g.stroke(); g.fillRect(92, ch - 58, 62, 10);
+      g.fillStyle = '#111'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = 'italic 700 44px "Comic Sans MS", "Comic Neue", "Chalkboard SE", cursive';
+      const words = text.split(' '), half = text.length > 18 ? Math.ceil(words.length / 2) : words.length, lines = [words.slice(0, half).join(' '), words.slice(half).join(' ')].filter(Boolean);
+      if (lines.length > 1) g.font = g.font.replace('44px', '34px');
+      lines.forEach((ln, n) => g.fillText(ln, cw / 2, (ch - 48) / 2 + 6 + (n - (lines.length - 1) / 2) * 38, cw - 44));
+    });
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthWrite: false }));
+    sp.scale.set(0.62, 0.26, 1);
+    return sp;
+  };
+  // Visits: who walks over to whom, what they say, and where they stand (plan x and y from the other person's chair).
+  const VISITS = { Nigel: { to: 'Allie', say: 'Allie, clean your f***ing table up!', off: [0.62, -0.62] }, Gordon: { to: 'Yuya', say: 'bla bla bla...', off: [-0.1, 0.95] }, Henry: { to: 'Felix', say: 'so anyway...', off: [-0.15, 1.1] } };
+  const tags = [];
+  const EMPTY = new Set([28, 33, 35]); // desks nobody is at
+  const worker = (idx, gap, ry, deskH, stand, deskDepth, chair) => {
+    if (EMPTY.has(idx)) return;
+    const L = SPECIAL[idx] || LOOKS[idx % LOOKS.length], w = L.wide || 1;
+    const skin = col(L.skin), hair = col(L.hair, 0.95), top = col(L.top), legs = col(L.legs), shoe = col(L.shoes || '#15161a', 0.6);
+    const reach = gap + 0.15, dy = deskH, up = stand ? 0.29 : 0;
+    // The body is drawn in the chair's own frame and joined into one piece, so a person is a single
+    // object that can be hidden while they are away. pose 'desk' is at the desk; 'walkA' and 'walkB' are two steps of a walk.
+    const body = (pose) => {
+      const walk = pose !== 'desk', lie = pose === 'lie', up2 = walk ? 0.29 : up, st = lie ? 0 : walk ? (pose === 'walkA' ? 1 : -1) : 0;
+      if (walk) [-1, 1].forEach((k) => { const fz = 0.05 - k * st * 0.2; limb([k * 0.1, 0.93, 0.05], [k * 0.1, 0.07, fz], 0.13, L.dress ? skin : legs); box(0.11, 0.07, 0.24, shoe, k * 0.1, 0.035, fz - 0.05); if (L.dress) box(0.34, 0.3, 0.2, top, 0, 0.8, 0.05); })
+      else if (stand) [-1, 1].forEach((k) => { box(0.13, 0.86, 0.14, legs, k * 0.1, 0.5, 0.05); box(0.11, 0.07, 0.24, shoe, k * 0.1, 0.035, 0.0); });
+      else [-1, 1].forEach((k) => {
+        const x = k * 0.1 * w;
+        if (!L.dress) box(0.14 * w, 0.12, 0.42, legs, x, 0.57, -0.14);
+        box(0.105, 0.45, 0.105, L.dress ? skin : legs, x, 0.29, -0.33);
+        box(0.105, 0.07, 0.22, shoe, x, 0.035, -0.38);
+      });
+      if (L.dress && !walk) box(0.38, 0.14, 0.46, top, 0, 0.575, -0.13);
+      // Body, neck and head.
+      box(0.36 * w, 0.5, 0.2 * (w > 1 ? 1.55 : 1), top, 0, 0.86 + up2, w > 1 ? 0.01 : 0.06);
+      if (w > 1) box(0.4 * w, 0.26, 0.36, top, 0, 0.76 + up2, -0.04); // belly
+      if (L.vest) { [-1, 1].forEach((k) => box(0.125, 0.44, 0.215, col(L.vest), k * 0.118, 0.87 + up2, 0.06)); box(0.36, 0.44, 0.03, col(L.vest), 0, 0.87 + up2, 0.155); }
+      box(0.1, 0.07, 0.1, skin, 0, 1.14 + up2, 0.05);
+      if (L.collar) { box(0.17, 0.1, 0.03, top, 0, 1.16 + up2, 0.125); [-1, 1].forEach((k) => box(0.03, 0.1, 0.13, top, k * 0.075, 1.16 + up2, 0.06)); box(0.012, 0.3, 0.012, col('#3a3d44', 0.5), 0, 0.96 + up2, -0.042); } // collar turned up, and a zip
+      const hw = w > 1 ? 1.12 : 1;
+      box(0.2 * hw, 0.22, 0.21, skin, 0, 1.28 + up2, 0.03);
+      if (L.glasses && !lie) { const blk = col('#0c0d0f', 0.4); box(0.21 * hw, 0.012, 0.012, blk, 0, 1.31 + up2, -0.08); [-1, 1].forEach((k) => { box(0.075, 0.05, 0.012, blk, k * 0.05, 1.3 + up2, -0.08); box(0.01, 0.012, 0.12, blk, k * 0.103 * hw, 1.31 + up2, -0.02); }); }
+      box(0.215 * hw, 0.07, 0.225, hair, 0, 1.4 + up2, 0.035);
+      box(0.215 * hw, 0.16, 0.05, hair, 0, 1.33 + up2, 0.14);
+      if (L.spiky) for (let q = 0; q < 9; q++) { const x = ((q % 3) - 1) * 0.07, z = (Math.floor(q / 3) - 1) * 0.07 + 0.035; box(0.035, 0.09, 0.035, hair, x, 1.46 + up2, z, true, q * 0.7, ((q % 3) - 1) * 0.25); }
+      if (L.bowl) { box(0.235, 0.1, 0.245, hair, 0, 1.385 + up2, 0.03); box(0.235, 0.05, 0.03, hair, 0, 1.345 + up2, -0.085); [-1, 1].forEach((k) => box(0.025, 0.11, 0.2, hair, k * 0.108, 1.33 + up2, 0.045)); box(0.235, 0.12, 0.03, hair, 0, 1.32 + up2, 0.15); }
+      if (L.longHair) { box(0.25, 0.52, 0.06, hair, 0, 1.12 + up2, 0.165); [-1, 1].forEach((k) => box(0.04, 0.34, 0.16, hair, k * 0.115, 1.2 + up2, 0.07)); }
+      // Arms. At the desk both reach the keyboard. On a walk one hangs and swings, the other holds a coffee.
+      const sleeve = L.dress ? skin : top, fore = L.dress || L.vest || L.tattoo ? skin : top;
+      const ink = (el, hd) => { if (L.tattoo) [[0.12, 0.3], [0.38, 0.52], [0.62, 0.86]].forEach(([f0, f1], n) => { const pt = (f) => el.map((v, q) => v + (hd[q] - v) * f); limb(pt(f0), pt(f1), 0.079, col(n === 1 ? '#27445a' : '#1c2a33', 0.9)); }); };
+      [-1, 1].forEach((k) => {
+        const sh = [k * 0.215 * w, 1.05 + up2, 0.05];
+        if (!walk) { const el = [k * 0.235 * w, 0.82 + up2, -0.07], hd = [k * 0.11, dy + 0.045, -reach + 0.05]; limb(sh, el, 0.09, sleeve); limb(el, hd, 0.075, fore); ink(el, hd); return; }
+        if (k < 0 || lie) { const el = [k * 0.25 * w, 1.07, 0.05 + st * 0.06], hd = [k * 0.25 * w, 0.84, 0.05 + st * 0.14]; limb(sh, el, 0.09, sleeve); limb(el, hd, 0.075, fore); ink(el, hd); box(0.08, 0.09, 0.08, skin, hd[0], hd[1] - 0.04, hd[2]); return; }
+        const el = [k * 0.25 * w, 1.1, 0.0], hd = [0.2 * w, 1.18, -0.26];
+        limb(sh, el, 0.09, sleeve); limb(el, hd, 0.075, fore); ink(el, hd); box(0.085, 0.08, 0.085, skin, hd[0], hd[1], hd[2] - 0.03);
+        cyl(0.04, 0.03, 0.12, 10, col('#f4f2ee', 0.6), hd[0], hd[1] + 0.06, hd[2] - 0.08); cyl(0.041, 0.035, 0.045, 10, col('#8a5a2b', 0.8), hd[0], hd[1] + 0.06, hd[2] - 0.08); cyl(0.043, 0.043, 0.012, 10, col('#ffffff', 0.4), hd[0], hd[1] + 0.126, hd[2] - 0.08);
+      });
+    };
+    const frame = parent;
+    const joined = (pose) => { parent = null; sink = []; body(pose); const items = sink; sink = null; parent = frame; const m = new THREE.Mesh(joinColored(items), bodyMat); m.castShadow = true; m.receiveShadow = true; return m; };
+    const seatMesh = joined('desk');
+    seatMesh.applyMatrix4(frame);
+    group.add(seatMesh);
+    if (L.word) { // the word on the back and the chest of the shirt
+      const t = canvasTexture(256, 96, (g, cw, ch) => { g.fillStyle = L.top; g.fillRect(0, 0, cw, ch); g.fillStyle = '#7a1f1f'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = `700 64px ${FONT}`; g.fillText(L.word, cw / 2, ch / 2 + 4); });
+      const wm = mk({ map: t, roughness: 0.85 });
+      [[0.1615, 0], [-0.0415, Math.PI]].forEach(([z, r]) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(0.24, 0.09), wm); m.applyMatrix4(at(0, 0.95 + up, z, r)); seatMesh.add(m); });
+    }
+    [-1, 1].forEach((k) => { // the hands tap on the keys
+      const m = new THREE.Mesh(handGeo, skin);
+      m.position.set(k * 0.11, dy + 0.035, -reach); m.castShadow = false;
+      seatMesh.add(m);
+      typing.push({ m, y: m.position.y + (L.eat ? 0.07 : 0), sp: L.eat ? 0.004 : 0.016 + ((idx * 7 + (k > 0 ? 3 : 0)) % 5) * 0.003, ph: idx * 1.7 + (k > 0 ? 2.1 : 0), amp: L.eat ? 0.09 : 0.014 });
+    });
+    // The same person on their feet, in two steps of a walk, for the coffee run.
+    const wa = joined('walkA'), wb = joined('walkB'), wg = new THREE.Group();
+    wg.add(wa, wb); wg.visible = false; group.add(wg);
+    const me = { seat: seatMesh, wg, wa, wb, route: routeFor(chair), state: 'sit', name: L.name, chair };
+    walkers.push(me);
+    if (L.nap) { // sometimes he leaves his glasses on the kitchen table and sleeps on the sofa beside it
+      const lying = joined('lie'); lying.rotation.order = 'YXZ'; lying.rotation.set(Math.PI / 2, Math.PI / 2, 0); lying.position.set(-2.38, 0.6, -5.39); lying.visible = false; group.add(lying);
+      const zz = bubble('zzz...'); zz.position.set(0.3, 1.5, -0.5); lying.add(zz);
+      const gl = new THREE.Group(), blk = col('#0c0d0f', 0.4), bit = (bw, bh, bd, x, y, z) => { const m = new THREE.Mesh(unitBox, blk); m.scale.set(bw, bh, bd); m.position.set(x, y, z); gl.add(m); };
+      bit(0.21, 0.012, 0.012, 0, 0.03, 0); [-1, 1].forEach((k) => { bit(0.075, 0.05, 0.012, k * 0.05, 0.027, 0); bit(0.01, 0.012, 0.12, k * 0.103, 0.006, 0.06); });
+      gl.position.set(-2.08, Hh.desk, -6.12); gl.rotation.y = 0.5; gl.visible = false; group.add(gl);
+      me.nap = { lying, gl, path: toV([[chair.cx, chair.cy], [chair.cx, A2], [2.5, A2], [2.5, 6.12]]) };
+    }
+    if (L.golf) { // a golf bag with clubs, standing behind him
+      const bag = col('#1f3b2c', 0.8), steel = M.chrome, bx = 0, bz = 0.6;
+      cyl(0.12, 0.1, 0.86, 14, bag, bx, 0.43, bz); cyl(0.125, 0.125, 0.04, 14, col('#111316', 0.6), bx, 0.88, bz); box(0.05, 0.3, 0.1, col('#111316', 0.6), bx, 0.5, bz - 0.12);
+      [[-0.05, -0.04, 0.34, 0], [0.05, -0.03, 0.42, 1], [0, 0.05, 0.38, 2], [-0.04, 0.04, 0.3, 3], [0.06, 0.05, 0.26, 4]].forEach(([dx, dz, h, n]) => {
+        cyl(0.008, 0.008, h, 6, steel, bx + dx, 0.88 + h / 2, bz + dz);
+        box(n < 2 ? 0.09 : 0.06, n < 2 ? 0.045 : 0.035, n < 2 ? 0.06 : 0.02, n < 2 ? col('#22252b', 0.4) : steel, bx + dx + 0.02, 0.88 + h + 0.015, bz + dz, true, n * 1.1);
+      });
+    }
+    if (L.eat) {
+      // Lunch at the desk: a glass container heaped over the brim, and takeaway coffee cups everywhere.
+      const z0 = -reach - 0.02;
+      box(0.26, 0.09, 0.18, M.glass, 0, dy + 0.045, z0, false);
+      box(0.24, 0.075, 0.16, col('#d8a24a'), 0, dy + 0.045, z0, false);
+      [[0, 0.11, 0, 0.2, 0.05, 0.13, '#c9772e'], [-0.05, 0.14, 0.01, 0.1, 0.04, 0.08, '#6f9a3c'], [0.06, 0.135, -0.02, 0.09, 0.04, 0.07, '#b5432f'], [0, 0.165, 0, 0.07, 0.03, 0.06, '#e8d9a8']].forEach(([x, y, z, bw, bh, bd, c]) => box(bw, bh, bd, col(c), x, dy + y, z0 + z, false));
+      const cup = col('#f4f2ee', 0.6), band = col('#1f6b45', 0.7), lid = col('#ffffff', 0.4), r2 = rng(22);
+      const spots = [];
+      for (let n = 0; n < 400 && spots.length < 26; n++) {
+        const x = (r2() - 0.5) * 1.44, z = -gap - 0.07 - r2() * 0.52;
+        if (Math.abs(x) < 0.3 && z > z0 - 0.2) continue; // keep the lunch and his hands clear
+        if (spots.some((q) => Math.hypot(q[0] - x, q[1] - z) < 0.088)) continue;
+        spots.push([x, z]);
+      }
+      spots.forEach(([x, z], n) => {
+        const h = n % 3 ? 0.13 : 0.16;
+        cyl(0.04, 0.03, h, 12, cup, x, dy + h / 2, z, false);
+        cyl(0.039, 0.034, 0.05, 12, band, x, dy + h * 0.5, z, false);
+        cyl(0.043, 0.043, 0.012, 12, lid, x, dy + h + 0.006, z, false);
+      });
+      return;
+    }
+    const far = -(gap + deskDepth - 0.15); // where the screens stand
+    if (L.postits) { const blue = col('#4aa3e8', 0.9); [0.47, 0.39].forEach((x, n) => box(0.07, 0.07, 0.004, blue, x, dy + 0.215 + n * 0.012, far + 0.03 + n * 0.004, false, 0, n ? 0.06 : -0.04)); }
+    if (L.goose) { // a goose on the desk
+      const white = col('#f7f6f2', 0.7), orange = col('#f08a1c', 0.6);
+      [[-0.45, 0.3], [-0.6, 0.1], [0.5, 0.3]].forEach(([gx, gb]) => { const gz = -gap - gb;
+      box(0.13, 0.12, 0.22, white, gx, dy + 0.13, gz); box(0.1, 0.07, 0.08, white, gx, dy + 0.17, gz + 0.13, true, 0, 0.5);
+      limb([gx, dy + 0.16, gz - 0.09], [gx, dy + 0.33, gz - 0.13], 0.045, white); box(0.06, 0.055, 0.075, white, gx, dy + 0.35, gz - 0.15);
+      box(0.035, 0.022, 0.06, orange, gx, dy + 0.34, gz - 0.21); box(0.012, 0.012, 0.012, col('#111316'), gx + 0.031, dy + 0.362, gz - 0.165, false); box(0.012, 0.012, 0.012, col('#111316'), gx - 0.031, dy + 0.362, gz - 0.165, false);
+      [-1, 1].forEach((k) => { box(0.015, 0.07, 0.015, orange, gx + k * 0.035, dy + 0.035, gz); box(0.04, 0.008, 0.06, orange, gx + k * 0.035, dy + 0.004, gz - 0.015, false); });
+    });
+    }
+    if (L.mess) { // food, crumpled tissues, pill boxes and an apple around the keyboard
+      const r3 = rng(29), white = col('#f7f6f2', 0.95), zN = -gap - 0.06;
+      [[-0.52, 0.2, 0.16, 0.06, 0.12, '#e9dcc0'], [-0.5, 0.42, 0.12, 0.1, 0.12, '#d84a3a'], [0.52, 0.36, 0.14, 0.05, 0.14, '#f2c14e'], [-0.3, 0.5, 0.1, 0.12, 0.07, '#7b4a2a'], [0.56, 0.12, 0.11, 0.035, 0.11, '#e8e2d6']].forEach(([x, z, bw, bh, bd, c2]) => box(bw, bh, bd, col(c2), x, dy + bh / 2, zN - z, true, r3() * 1.5));
+      cyl(0.07, 0.05, 0.05, 12, col('#e8e2d6'), 0.56, dy + 0.06, zN - 0.12, false); cyl(0.06, 0.06, 0.012, 12, col('#c9772e'), 0.56, dy + 0.09, zN - 0.12, false);
+      for (let n = 0; n < 16; n++) { const x = (r3() - 0.5) * 1.3, z = zN - r3() * 0.5; if (Math.abs(x) < 0.26 && z > zN - 0.26) continue; const q = 0.035 + r3() * 0.03; box(q, q * 0.7, q, white, x, dy + q * 0.35, z, false, r3() * 3, r3() * 0.6); }
+      [[0.34, 0.3, '#2f7fd1'], [0.4, 0.4, '#d13b3b'], [-0.36, 0.3, '#2aa66a'], [0.3, 0.46, '#e0a11b']].forEach(([x, z, c2], n) => { box(0.09, 0.03, 0.05, white, x, dy + 0.015, zN - z, false, n * 0.8); box(0.03, 0.031, 0.051, col(c2), x, dy + 0.0155, zN - z, false, n * 0.8); });
+      cyl(0.036, 0.03, 0.06, 12, col('#c8202a', 0.4), -0.34, dy + 0.03, zN - 0.12, false); box(0.006, 0.02, 0.006, col('#4b3621'), -0.34, dy + 0.068, zN - 0.12, false);
+    }
+    if (L.cars) { // tiny toy cars, parked in two tidy rows either side of the keyboard
+      const tyre = col('#15171a', 0.9), glass = col('#cfe3ee', 0.3);
+      ['#d6312b', '#f2c21a', '#2f6fd0', '#2aa66a', '#f07f1c', '#f4f3ef', '#7a3fb8', '#1b1d21'].forEach((c2, n) => {
+        const x = (n < 4 ? -1 : 1) * 0.5, z = -gap - 0.12 - (n % 4) * 0.075, m = col(c2, 0.4);
+        box(0.085, 0.016, 0.036, m, x, dy + 0.02, z, false); box(0.042, 0.014, 0.032, n % 2 ? m : glass, x - 0.004, dy + 0.035, z, false);
+        [-1, 1].forEach((a) => [-1, 1].forEach((b) => box(0.018, 0.018, 0.008, tyre, x + a * 0.026, dy + 0.009, z + b * 0.018, false)));
+      });
+    }
+    if (L.flask) { // a thin metal water flask, narrower at the top, with a steel lid
+      const fx = 0.34, fz = -gap - 0.36, steel = mk({ color: '#c9ced3', roughness: 0.25, metalness: 0.85 }), blue = mk({ color: '#3d9fd0', roughness: 0.3, metalness: 0.6 });
+      cyl(0.03, 0.034, 0.15, 16, blue, fx, dy + 0.075, fz); cyl(0.017, 0.03, 0.06, 16, blue, fx, dy + 0.18, fz, false); cyl(0.019, 0.019, 0.032, 16, steel, fx, dy + 0.226, fz, false);
+    }
+    if (L.says) { const sp = bubble(L.says); sp.position.set(0.22, L.name ? 1.9 : 1.72, 0); seatMesh.add(sp); } // mutters over the head
+    if (L.name) { // a small name tag over the head, also while walking
+      const t = canvasTexture(256, 72, (g, cw, ch) => {
+        g.clearRect(0, 0, cw, ch); g.fillStyle = 'rgba(12,14,18,0.78)'; g.beginPath(); g.roundRect(4, 6, cw - 8, ch - 12, 28); g.fill();
+        g.fillStyle = '#f3e3b0'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = `700 40px ${FONT}`; g.fillText(L.name, cw / 2, ch / 2 + 3, cw - 30);
+      });
+      const nm = new THREE.SpriteMaterial({ map: t, transparent: true, depthWrite: false });
+      [[seatMesh, 1.62 + up], [wg, 1.92]].forEach(([holder, y]) => { const sp = new THREE.Sprite(nm); sp.position.set(0, y, 0.03); sp.scale.set(0.36, 0.1, 1); holder.add(sp); tags.push({ sp, y, ph: idx }); });
+    }
+    // Keyboard and mouse on the desk in front of them.
+    if (L.glowKeys) { // a keyboard that glows in bands of colour
+      box(0.46, 0.022, 0.16, col('#0c0d10', 0.4), 0, dy + 0.011, -reach - 0.01, false);
+      ['#ff2bd6', '#7a5cff', '#19d3ff', '#2bff9a', '#ffe14a'].forEach((c2, n) => box(0.084, 0.006, 0.14, (tone['glow' + c2] ||= mk({ color: c2, emissive: c2, emissiveIntensity: 0.7, roughness: 0.4 })), -0.176 + n * 0.088, dy + 0.025, -reach - 0.01, false));
+      typing.push({ glow: Object.keys(tone).filter((q) => q.startsWith('glow')).map((q) => tone[q]) });
+      box(0.06, 0.025, 0.1, M.leg, 0.31, dy + 0.0125, -reach, false);
+      return;
+    }
+    box(0.42, 0.018, 0.14, L.whiteKeys ? col('#f4f3ef', 0.5) : M.leg, 0, dy + 0.009, -reach - 0.01, false);
+    box(0.06, 0.025, 0.1, M.leg, 0.31, dy + 0.0125, -reach, false);
+  };
   D.chairs.filter((c) => !c.stool).forEach((c) => {
     let best = null, bd = 1e9;
     surfaces.filter((s) => s.room === c.room).forEach((s) => { const dx = Math.max(Math.abs(c.cx - s.cx) - s.w / 2, 0), dy = Math.max(Math.abs(c.cy - s.cy) - s.d / 2, 0); const dd = dx * dx + dy * dy; if (dd < bd) { bd = dd; best = s; } });
     let ry = 0;
     if (best) { const tx = Math.min(Math.max(c.cx, best.cx - best.w / 2), best.cx + best.w / 2), ty = Math.min(Math.max(c.cy, best.cy - best.d / 2), best.cy + best.d / 2); ry = Math.atan2(tx - c.cx, ty - c.cy); }
     parent = at(-c.cx, 0, -c.cy, ry);
-    officeChair();
+    if (!c.stand) officeChair();
+    // Desk chairs (yellow and white desks) have someone working at the keyboard. Meeting and boardroom chairs stay empty.
+    if (best && desks.includes(best)) worker(D0.chairs.findIndex((q) => q.cy === c.cy && (q.cx === c.cx || (q.mid && c.mid && Math.abs(q.cx + midShift - c.cx) < 1e-6))), Math.sqrt(bd), ry, best.hh || Hh.desk, c.stand, Math.abs(Math.sin(ry)) > 0.7 ? best.w : best.d, c);
     parent = null;
   });
+  let nextTrip = 0, dbgTrip = null;
+  group.userData.trip = (who, kind) => { dbgTrip = [who, kind]; };
+  const startVisit = (q, v, o) => {
+    const spot = [o.chair.cx + v.off[0], o.chair.cy + v.off[1]], lane = Math.abs(spot[1] - A1) < Math.abs(spot[1] - A2) ? A1 : A2;
+    q.path = toV([...toAisle(q.chair), ...(lane === A2 ? [[XR, A2]] : []), [spot[0], lane], spot]);
+    q.talk = { at: V(-o.chair.cx, 0, -o.chair.cy) };
+    if (!q.say) { q.say = bubble(v.say); q.say.position.set(0.25, 2.2, 0); q.wg.add(q.say); }
+    q.say.visible = false;
+  };
+  group.userData.tick = (now) => {
+    for (const h of typing) { if (h.glow) { h.glow.forEach((m, n) => { m.emissiveIntensity = 0.55 + 0.35 * Math.sin(now * 0.004 + n * 1.2); }); continue; } h.m.position.y = h.y + Math.max(0, Math.sin(now * h.sp + h.ph)) * h.amp; }
+    for (const t of tags) t.sp.position.y = t.y + Math.sin(now * 0.002 + t.ph) * 0.02; // name tags hover
+    // Now and then somebody gets up, walks out of the main door with a coffee, and comes back to their desk.
+    if (dbgTrip) { const [who, kind] = dbgTrip; dbgTrip = null; const q = walkers.find((w) => w.name === who && w.state === 'sit'); if (q) { const v = VISITS[who], o = v && walkers.find((w) => w.name === v.to); q.sleep = kind === 'nap'; if (q.sleep) { q.path = q.nap.path; q.talk = null; } else if (kind === 'visit' && o) startVisit(q, v, o); else { q.path = q.route; q.talk = null; } q.state = 'go'; q.i = 0; q.d = 0; q.last = now; q.seat.visible = false; q.wg.visible = true; } }
+    if (!nextTrip) nextTrip = now + 6000 + Math.random() * 8000;
+    if (now > nextTrip && walkers.filter((q) => q.state !== 'sit').length < 2) {
+      const free = walkers.filter((q) => q.state === 'sit');
+      // Half of the trips are a visit to a colleague's desk; the rest are coffee runs out of the door.
+      const callers = free.filter((q) => VISITS[q.name] && walkers.some((o) => o.name === VISITS[q.name].to && o.state === 'sit'));
+      const q = callers.length && Math.random() < 0.5 ? callers[Math.floor(Math.random() * callers.length)] : free[Math.floor(Math.random() * free.length)];
+      const jeff = free.find((w) => w.nap);
+      if (jeff && Math.random() < 0.18) { jeff.path = jeff.nap.path; jeff.talk = null; jeff.sleep = true; jeff.state = 'go'; jeff.i = 0; jeff.d = 0; jeff.last = now; jeff.seat.visible = false; jeff.wg.visible = true; }
+      else if (q) {
+        q.sleep = false;
+        const v = callers.includes(q) && VISITS[q.name], o = v && walkers.find((w) => w.name === v.to);
+        if (v) startVisit(q, v, o);
+        else { q.path = q.route; q.talk = null; if (q.say) q.say.visible = false; }
+        q.state = 'go'; q.i = 0; q.d = 0; q.last = now; q.seat.visible = false; q.wg.visible = true;
+      }
+      nextTrip = now + 12000 + Math.random() * 16000;
+    }
+    for (const q of walkers) {
+      if (q.state === 'sit') continue;
+      const dt = Math.min(0.1, (now - q.last) / 1000); q.last = now;
+      if (q.state === 'away') { if (now > q.until) { if (q.sleep) { q.nap.lying.visible = false; q.nap.gl.visible = false; } q.state = 'back'; q.i = q.path.length - 1; q.d = 0; q.wg.visible = true; if (q.say) q.say.visible = false; } continue; }
+      const dir = q.state === 'go' ? 1 : -1, from = q.path[q.i], to = q.path[q.i + dir];
+      if (!to) {
+        if (q.state === 'go' && q.sleep) { q.state = 'away'; q.until = now + 14000 + Math.random() * 10000; q.wg.visible = false; q.nap.lying.visible = true; q.nap.gl.visible = true; }
+        else if (q.state === 'go' && q.talk) { // stands by the desk, turned to the colleague, and talks for a while
+          q.state = 'away'; q.until = now + 7000 + Math.random() * 5000; q.wg.position.set(from.x, 0, from.z);
+          q.wg.rotation.y = Math.atan2(-(q.talk.at.x - from.x), -(q.talk.at.z - from.z)); q.wa.visible = true; q.wb.visible = false; q.say.visible = true;
+        } else if (q.state === 'go') { q.state = 'away'; q.until = now + 5000 + Math.random() * 6000; q.wg.visible = false; }
+        else { q.state = 'sit'; q.wg.visible = false; q.seat.visible = true; }
+        continue;
+      }
+      const len = from.distanceTo(to); q.d += dt * 1.3;
+      if (q.d >= len) { q.i += dir; q.d = 0; continue; }
+      const f = q.d / len;
+      q.wg.position.set(from.x + (to.x - from.x) * f, Math.abs(Math.sin(now * 0.011)) * 0.025, from.z + (to.z - from.z) * f);
+      q.wg.rotation.y = Math.atan2(-(to.x - from.x), -(to.z - from.z));
+      const stepA = Math.floor(now / 300) % 2 === 0; q.wa.visible = stepA; q.wb.visible = !stepA;
+    }
+  };
+  { // A dark bottle of hand sanitizer with a pump, on the round table.
+    const t = D.furniture.find((f) => f.id === 't3');
+    if (t) { const x = -(t.cx - 0.12), z = -(t.cy + 0.08), y = Hh.desk; cyl(0.032, 0.034, 0.13, 14, col('#2a1a12', 0.35), x, y + 0.065, z); cyl(0.014, 0.02, 0.025, 10, col('#111316', 0.5), x, y + 0.1425, z, false); cyl(0.005, 0.005, 0.04, 6, col('#111316', 0.5), x, y + 0.175, z, false); box(0.045, 0.012, 0.016, col('#111316', 0.5), x + 0.015, y + 0.198, z, false); box(0.04, 0.05, 0.002, col('#e9e6df', 0.8), x, y + 0.06, z + 0.034, false); }
+  }
+  { // A roll of kitchen paper, standing upright on the eating table.
+    const t = D.furniture.find((f) => f.id === 'et1');
+    if (t) { const x = -(t.cx - 0.12), z = -(t.cy - 0.12), y = Hh.desk; cyl(0.07, 0.07, 0.012, 14, col('#8a8d90', 0.4), x, y + 0.006, z, false); cyl(0.057, 0.057, 0.23, 18, col('#f6f5f1', 0.95), x, y + 0.127, z); cyl(0.012, 0.012, 0.27, 8, col('#8a8d90', 0.4), x, y + 0.135, z, false); }
+  }
+  { // A huge dying plant, grey and withering, in the empty corner between the yellow desk and the dining area.
+    const px = -2.5, pz = -7.78, grey = col('#8d8f8c', 0.95), pale = col('#b3b4ae', 0.95), dark = col('#5f615e', 0.95), r4 = rng(77);
+    cyl(0.3, 0.22, 0.46, 16, col('#6f7170', 0.8), px, 0.23, pz); cyl(0.27, 0.27, 0.02, 16, col('#3b3a37', 1), px, 0.462, pz, false);
+    const tip = [px + 0.1, 1.72, pz + 0.06];
+    limb([px, 0.46, pz], [px - 0.05, 1.05, pz - 0.03], 0.07, dark); limb([px - 0.05, 1.05, pz - 0.03], tip, 0.055, dark);
+    for (let n = 0; n < 11; n++) { // long leaves that leave the trunk, then hang down
+      const a = n * 2.4 + r4(), h = 0.85 + (n / 11) * 0.85, out = 0.32 + r4() * 0.3, dx = Math.cos(a), dz = Math.sin(a) * 0.55;
+      const b0 = [px + (h - 0.46) * 0.04, h, pz], b1 = [b0[0] + dx * out * 0.6, h + 0.12, b0[2] + dz * out * 0.6], b2 = [b0[0] + dx * out, h - 0.28 - r4() * 0.3, b0[2] + dz * out];
+      limb(b0, b1, 0.022, dark); limb(b1, b2, 0.09, n % 3 ? grey : pale); limb(b2, [b2[0] + dx * 0.04, b2[1] - 0.2, b2[2] + dz * 0.04], 0.04, n % 2 ? grey : dark);
+    }
+    for (let n = 0; n < 9; n++) box(0.1, 0.006, 0.05, n % 2 ? grey : pale, px + (r4() - 0.5) * 1.1, 0.004, pz + (r4() - 0.3) * 0.7, false, r4() * 3); // fallen leaves
+  }
+  // One desk has card games on its two screens: poker on one, blackjack on the other.
+  const gameScreen = (k) => (M['game' + k] ||= new THREE.MeshBasicMaterial({ map: canvasTexture(512, 300, (g, cw, ch) => {
+    g.fillStyle = '#0f5a3c'; g.fillRect(0, 0, cw, ch);
+    g.fillStyle = '#0b4630'; g.beginPath(); g.ellipse(cw / 2, ch / 2 + 16, 220, 104, 0, 0, Math.PI * 2); g.fill(); g.strokeStyle = '#d9b45a'; g.lineWidth = 5; g.stroke();
+    const card = (x, y, t, red) => { g.fillStyle = '#fff'; g.beginPath(); g.roundRect(x, y, 46, 64, 6); g.fill(); g.fillStyle = red ? '#c8202a' : '#111'; g.font = `700 26px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(t, x + 23, y + 34); };
+    const chip = (x, y, c) => { g.fillStyle = c; g.beginPath(); g.arc(x, y, 13, 0, Math.PI * 2); g.fill(); g.strokeStyle = '#fff'; g.lineWidth = 3; g.setLineDash([5, 4]); g.stroke(); g.setLineDash([]); };
+    g.fillStyle = '#f2e3b0'; g.font = `700 30px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(k < 0 ? 'POKER' : 'BLACKJACK', cw / 2, 30);
+    if (k < 0) { ['A♠', 'K♥', '7♦', '7♣', '2♠'].forEach((t, n) => card(126 + n * 54, 118, t, /[♥♦]/.test(t))); card(196, 216, 'Q♥', true); card(250, 216, 'Q♠', false); [[90, 150, '#c8202a'], [420, 160, '#2f7fd1'], [402, 190, '#111']].forEach(([x, y, c]) => chip(x, y, c)); }
+    else { card(206, 70, '10♣', false); card(260, 70, '6♦', true); card(180, 190, 'A♠', false); card(234, 190, 'K♥', true); card(330, 190, '9♠', false); card(384, 190, '9♦', true); [[130, 230, '#c8202a'], [150, 246, '#1f6b45'], [450, 236, '#2f7fd1']].forEach(([x, y, c]) => chip(x, y, c)); }
+  }) }));
   // Two screens on every desk, at the edge away from the nearest chair and facing it.
   desks.forEach((f) => {
     let best = null, bd = 1e9;
@@ -355,8 +679,8 @@ function buildOffice(signText) {
       let px = f.cx, py = f.cy;
       if (alongX) { px += back; py += k * gap; } else { py += back; px += k * gap; }
       const fx = -(alongX ? sgn : 0), fz = -(alongX ? 0 : sgn);
-      parent = at(-px, Hh.desk, -py, Math.atan2(fx, fz) + Math.PI + k * 0.12 * (alongX ? 1 : -1) * sgn);
-      box(0.54, 0.33, 0.025, M.screen, 0, 0.33, 0); box(0.51, 0.3, 0.003, M.logo, 0, 0.33, -0.0125, false); box(0.04, 0.2, 0.03, M.leg, 0, 0.1, 0.03); box(0.22, 0.012, 0.18, M.leg, 0, 0, 0.03, false);
+      parent = at(-px, f.hh || Hh.desk, -py, Math.atan2(fx, fz) + Math.PI + k * 0.12 * (alongX ? 1 : -1) * sgn);
+      box(0.54, 0.33, 0.025, M.screen, 0, 0.33, 0); box(0.51, 0.3, 0.003, f.id === 'c3' ? gameScreen(k) : f.id === 'c1' ? (M.pitch ||= new THREE.MeshBasicMaterial({ map: canvasTexture(512, 300, (g, cw, ch) => { g.fillStyle = '#0d0f12'; g.fillRect(0, 0, cw, ch); g.fillStyle = '#ffffff'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = `700 78px ${FONT}`; g.fillText('PITCHBOOK', cw / 2, ch / 2 + 4, cw - 40); }) })) : M.logo, 0, 0.33, -0.0125, false); box(0.04, 0.2, 0.03, M.leg, 0, 0.1, 0.03); box(0.22, 0.012, 0.18, M.leg, 0, 0, 0.03, false);
       parent = null;
     });
   });
@@ -389,7 +713,7 @@ function buildStorefront() {
     lamp: lam('#c8161d', 0.6), bulb: lit('#ffe9a8'), red: lit('#c8161d'), gold: lit('#f4c542'), wood: lam('#7a5234', 0.35),
     glass: new THREE.MeshBasicMaterial({ color: '#dff3f7', transparent: true, opacity: 0.13, depthWrite: false }),
     awning: new THREE.MeshBasicMaterial({ map: canvasTexture(512, 64, (g, w, h) => { for (let i = 0; i < 16; i++) { g.fillStyle = i % 2 ? '#fff6e6' : '#f08a1c'; g.fillRect((i * w) / 16, 0, w / 16 + 1, h); } }), side: THREE.DoubleSide }),
-    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261120zzf') }),
+    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261120zzk') }),
     menu: new THREE.MeshBasicMaterial({ map: canvasTexture(256, 384, (g, w, h) => {
       g.fillStyle = '#c8161d'; g.fillRect(0, 0, w, h); g.fillStyle = '#f4c542'; g.fillRect(14, 14, w - 28, 44);
       const r = rng(11); g.fillStyle = '#fff3d6';
@@ -564,12 +888,20 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
 
   // The office around the table, with its own light: a bright sky light, one sun that casts the
   // soft shadows, and a cool fill from the other side.
-  const office = buildOffice(OFFICE_SIGN);
+  // Where the table stands in the office plan. The players' stools stay just clear of the sofa behind
+  // them; a deeper table (a phone's tall felt) reaches further toward the desks, which move away from it.
+  const halfDepth = (H / 2 + RAIL) / S;
+  OFFICE_AT.x = 3.11 + 0.45 + halfDepth;
+  const dealerEnd = OFFICE_AT.x + halfDepth + 0.42;
+  const midShift = Math.max(0, Math.min(1.19, dealerEnd - 4.276));
+  const office = buildOffice(OFFICE_SIGN, midShift, dealerEnd - 0.02);
   office.scale.setScalar(S);
-  office.position.set(OFFICE_AT.x * S, FLOOR, OFFICE_AT.y * S);
+  // Turned a quarter: plan x runs away from the players (toward the dealer and the desks), plan y to their right.
+  office.rotation.y = -Math.PI / 2;
+  office.position.set(-OFFICE_AT.y * S, FLOOR, OFFICE_AT.x * S);
   scene.add(office);
   const shop = buildStorefront(); // added on its own, so the walking limits stay those of the office
-  shop.scale.copy(office.scale); shop.position.copy(office.position);
+  shop.scale.copy(office.scale); shop.position.copy(office.position); shop.rotation.copy(office.rotation);
   scene.add(shop);
   scene.background = new THREE.Color(0xd5dade);
   scene.add(new THREE.HemisphereLight(0xf4f1ea, 0x3a4048, 0.9));
@@ -876,20 +1208,20 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
   const PHI_MAX = 1.36, YAW_MAX = 2.25;
   const EYE = 340 * U; // lowest the camera goes when walking around: standing eye height, above the table top
   // The open floor of the office, inside the glass walls, the cupboard and the cabinets. The camera stays in it.
-  const BOUND = { x0: -(11.419 - OFFICE_AT.x - 0.35) * S, x1: (OFFICE_AT.x - 2.96 - 0.3) * S, z0: -(6.7455 - OFFICE_AT.y - 0.3) * S, z1: (OFFICE_AT.y - 0.381 - 0.3) * S };
+  const BOUND = { x0: (0.381 + 0.3 - OFFICE_AT.y) * S, x1: (6.7455 - 0.3 - OFFICE_AT.y) * S, z0: (OFFICE_AT.x - 11.419 + 0.35) * S, z1: (OFFICE_AT.x - 2.96 - 0.08) * S };
   // Walking around: the whole office, every room, straight through the glass walls and doors.
   // The limits are the outer walls of the office: nobody walks out to the street.
-  const ALL = (() => { const m = 0.35; return { x0: (OFFICE_AT.x - OFFICE.width + m) * S, x1: (OFFICE_AT.x - OFFICE.bump.x - m) * S, z0: (OFFICE_AT.y - OFFICE.depth + m) * S, z1: (OFFICE_AT.y - m) * S }; })();
+  const ALL = (() => { const m = 0.35; return { x0: (m - OFFICE_AT.y) * S, x1: (OFFICE.depth - m - OFFICE_AT.y) * S, z0: (OFFICE_AT.x - OFFICE.width + m) * S, z1: (OFFICE_AT.x - OFFICE.bump.x - m) * S }; })();
   let walking = false;
   // The tour on joining: one fast walk round the whole office that ends in your own chair.
   let tour = null, tourW = 1;
   const OFFC = new THREE.Vector3((ALL.x0 + ALL.x1) / 2, 150 * U, (ALL.z0 + ALL.z1) / 2);
   const ease = (x) => { x = Math.max(0, Math.min(1, x)); return x * x * (3 - 2 * x); };
   // The office is not a plain rectangle: beside the big board room, past the wall, is outdoors. Keep out of that corner too.
-  const CORNER = { x: (OFFICE_AT.x - 0.35) * S, z: (OFFICE_AT.y - OFFICE.bump.d + 0.35) * S };
+  const CORNER = { x: (OFFICE.bump.d - 0.35 - OFFICE_AT.y) * S, z: (OFFICE_AT.x - 0.35) * S };
   const keepIn = (p) => {
     p.x = Math.max(ALL.x0, Math.min(ALL.x1, p.x)); p.z = Math.max(ALL.z0, Math.min(ALL.z1, p.z));
-    if (p.x > CORNER.x && p.z < CORNER.z) { if (p.x - CORNER.x < CORNER.z - p.z) p.x = CORNER.x; else p.z = CORNER.z; }
+    if (p.x > CORNER.x && p.z > CORNER.z) { if (p.x - CORNER.x < p.z - CORNER.z) p.x = CORNER.x; else p.z = CORNER.z; }
   };
   const outline = tableShape(W, H, RAIL + 26).getPoints(10).map((p) => new THREE.Vector3(p.x, 24, -p.y));
   // Your own cards must clear the buttons at the bottom; the padded rail in front of them may slip behind.
@@ -1141,11 +1473,13 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
 
   let running = true, last = performance.now(), frames = 0, fpsAt = last, fps = 0;
   const near = (a, b, eps) => Math.abs(a - b) < eps;
+  let dbgCam = null;
   const loop = (now) => {
     if (!running) return;
     requestAnimationFrame(loop);
     const dt = Math.min(0.05, (now - last) / 1000); last = now;
     frames++;
+    office.userData.tick?.(now);
     if (now - fpsAt >= 1000) { fps = Math.round((frames * 1000) / (now - fpsAt)); frames = 0; fpsAt = now; }
     const k = 1 - Math.exp(-dt * rate);
     const settled = near(cur.theta, goal.theta, 2e-4) && near(cur.phi, goal.phi, 2e-4) && near(cur.r, goal.r, 0.05) && near(cur.yaw, goal.yaw, 2e-4) && near(cur.pitch, goal.pitch, 2e-4) && cur.t.distanceToSquared(goal.t) < 0.01;
@@ -1210,6 +1544,7 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     for (const f of others) { f.updateMatrixWorld(); f.visible = !seated || !!tour || !(low(f, 0.35) || edge(f)); }
     for (const r of racks) r.visible = true;
     if (myRack) myRack.visible = true;
+    if (dbgCam) { camera.position.copy(office.localToWorld(dbgCam.p.clone())); camera.lookAt(office.localToWorld(dbgCam.t.clone())); }
     gl.render(scene, camera);
     // Names, totals and amounts stand up off the felt and face you, so text at the far side of the
     // table reads as easily as text near you. The felt gets the turn that undoes its own tilt.
@@ -1252,6 +1587,9 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
       return true;
     },
     touring: () => !!tour,
+    // For tests: put the camera at a point of the office plan (x, height, y in metres) looking at another.
+    debugTrip(who, kind) { office.userData.trip?.(who, kind); touch(); },
+    debugLook(a, b) { dbgCam = a ? { p: new THREE.Vector3(-a[0], a[1], -a[2]), t: new THREE.Vector3(-b[0], b[1], -b[2]) } : null; touch(); },
     zoomBy(d) { zoom(d > 0 ? 0.86 : 1.16); },
     look,
     setPeople,

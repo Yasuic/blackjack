@@ -1,13 +1,13 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120zzf';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261120zzf';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120zzf';
-import { tickSound, winSound } from './fx.js?v=20261120zzf';
-import * as HX from './history.js?v=20261120zzf';
-import { webglOK, initRoom } from './room3d.js?v=20261120zzf';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120zzf';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120zzk';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261120zzk';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120zzk';
+import { tickSound, winSound } from './fx.js?v=20261120zzk';
+import * as HX from './history.js?v=20261120zzk';
+import { webglOK, initRoom } from './room3d.js?v=20261120zzk';
+import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120zzk';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -1050,12 +1050,14 @@ function buildLayout() {
             <div class="hint" style="margin-bottom:8px">Chips for Give / Take: <input id="give-amt" type="number" value="500" min="1" style="width:90px" /></div>
             <div id="host-players" class="player-list"></div>`)}
           ${fold('m-settings', '⚙️ Game settings', '<div id="host-settings"></div>')}
-          ${fold('m-log', '📝 Table log', '<div id="host-log" class="log"></div>')}` : `
+          ${fold('m-log', '📝 Table log', `<div id="host-log" class="log"></div>
+            ${fold('m-logs', 'Logs', `<button class="menu-item" data-act="hist-panel" title="A small list of the hands at the left of the screen.">🕘 Hand history: ${histOn() ? 'on' : 'off'}</button>`, true)}`)}` : `
           ${fold('m-players', '👥 Players', '<div id="guest-players" class="player-list"></div>')}
-          <div class="menu-note hint">Only the host can propose new settings, and everyone votes on them.</div>`}
+          <div class="menu-note hint">Only the host can propose new settings, and everyone votes on them.</div>
+          ${fold('m-log', '📝 Table log', `<div id="host-log" class="log"></div>
+            ${fold('m-logs', 'Logs', `<button class="menu-item" data-act="hist-panel" title="A small list of the hands at the left of the screen.">🕘 Hand history: ${histOn() ? 'on' : 'off'}</button>`, true)}`)}`}
           ${fold('m-cheat', '✅ Game Cheating Detection', `
-            <button class="menu-item" data-act="fair">🔐 Provably fair</button>
-            <button class="menu-item" data-act="hist-panel" title="A small list of the hands at the left of the screen.">🕘 Hand history: ${histOn() ? 'on' : 'off'}</button>`)}
+            <button class="menu-item" data-act="fair">🔐 Provably fair</button>`)}
         </div>
       </div>
     </div>
@@ -1352,6 +1354,7 @@ document.addEventListener('click', (e) => {
 
 // Running tally of buy-ins and results for everyone at the table.
 function renderGuestPlayers(st) {
+  { const lg = $('#host-log'); if (lg && S.role !== 'host' && S.state?.log) lg.innerHTML = S.state.log.slice().reverse().map((l) => `<div>${esc(l)}</div>`).join(''); }
   const box = $('#guest-players');
   if (!box) return;
   box.innerHTML = st.players.map((p) => `<div class="player-row"><div><b>${p.id === st.hostId ? '<span class="crown">♛</span> ' : ''}${esc(p.name)}</b>${p.id === S.myId ? ' (you)' : ''}
