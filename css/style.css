@@ -1505,3 +1505,17 @@ body.room3d:has(.room.walking) .hud3d .tray:has(.chip-rack), body.room3d:has(.ro
 #sitout-bar .mic-btn.live { background: #1f7a45; border-color: #4fd18a; color: #fff; }
 @media (max-width: 700px) { #voice-panel { left: 8px; right: 8px; width: auto; bottom: 8px; } }
 .link-note { display: block; margin-top: 6px; opacity: .65; font-size: 11.5px; }
+
+/* Small hand history panel for the host, at the left of the screen. */
+#hist-panel { position: fixed; left: 14px; top: 70px; width: 190px; max-height: min(230px, 30vh); z-index: 39; display: flex; flex-direction: column; background: rgba(12,15,20,.9); border: 1px solid var(--line); border-radius: 10px; font-size: 10.5px; line-height: 1.35; color: var(--text); overflow: hidden; }
+#hist-panel .hp-head { display: flex; align-items: center; gap: 4px; padding: 3px 4px 3px 8px; border-bottom: 1px solid var(--line); color: var(--gold); font-weight: 700; }
+#hist-panel .hp-head span { flex: 1; }
+#hist-panel .hp-head button { font: inherit; font-size: 10px; padding: 1px 6px; border-radius: 6px; border: 1px solid var(--line); background: none; color: var(--text); cursor: pointer; }
+#hist-panel .hp-list { overflow-y: auto; padding: 2px 8px 5px; }
+#hist-panel .hp-list p { margin: 4px 0; opacity: .7; }
+#hist-panel .hp-round { padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,.08); }
+#hist-panel .hp-top { opacity: .8; }
+#hist-panel .hp-seat { display: flex; justify-content: space-between; gap: 6px; }
+#hist-panel .hp-seat span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#hist-panel .up { color: #4fd18a; } #hist-panel .down { color: #ff7b7b; }
+@media (max-width: 700px) { #hist-panel { left: 8px; top: 122px; width: 150px; max-height: 22vh; font-size: 9.5px; } }

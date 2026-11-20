@@ -1,13 +1,13 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120u';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261120u';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120u';
-import { tickSound, winSound } from './fx.js?v=20261120u';
-import * as HX from './history.js?v=20261120u';
-import { webglOK, initRoom } from './room3d.js?v=20261120u';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120u';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120v';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261120v';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120v';
+import { tickSound, winSound } from './fx.js?v=20261120v';
+import * as HX from './history.js?v=20261120v';
+import { webglOK, initRoom } from './room3d.js?v=20261120v';
+import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120v';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -975,7 +975,7 @@ function buildLayout() {
             <button class="menu-item" data-act="rules">💰 Side bet payouts</button>`)}
           ${fold('m-cheat', '🛡️ Game Cheating Detection', `
             <button class="menu-item" data-act="fair">🔐 Provably fair</button>
-            ${host ? '<button class="menu-item" data-act="history">🕘 Hand history</button><button class="menu-item" data-act="export">📤 Export hand history</button>' : ''}`)}
+            ${host ? `<button class="menu-item" data-act="hist-panel" title="A small list of the hands at the left of the screen. Only you see it.">🕘 Hand history: ${histOn() ? 'on' : 'off'}</button>` : ''}${host ? '<button class="menu-item" data-act="export">📤 Export hand history</button>' : ''}`)}
           ${fold('m-view', '🎛️ My view and sound', `
             <button class="menu-item" data-act="four">🎨 Four colour cards</button>
             <button class="menu-item" data-act="hints" id="hints-btn">${hintsOn() ? '💡 Strategy hints: on' : '💡 Strategy hints: off'}</button>
@@ -1204,6 +1204,22 @@ async function hostRounds(id = S.table.created?.id) {
   return list;
 }
 const scopeHTML = () => `<div class="hx-scope"><button class="seat-tab ${S.histScope !== 'shoe' ? 'on' : ''}" data-hx="scope" data-v="all">All hands</button><button class="seat-tab ${S.histScope === 'shoe' ? 'on' : ''}" data-hx="scope" data-v="shoe">Since last shuffle</button></div>`;
+// The small hand history panel at the left of the screen. Off until the host turns it on in the menu.
+// It only shows; rounds are saved and backed up whether it is on or off.
+const histOn = () => safeGet('bj-hist-panel') === '1';
+async function drawHistPanel(force) {
+  let el = $('#hist-panel');
+  if (S.role !== 'host' || !histOn() || !S.state) { el?.remove(); S.histPanelN = null; return; }
+  if (el && el.isConnected && !force && S.histPanelN === S.state.histN) return;
+  S.histPanelN = S.state.histN;
+  const all = await hostRounds();
+  if (S.role !== 'host' || !histOn()) return;
+  el = $('#hist-panel');
+  if (!el || !el.isConnected) { el = document.createElement('div'); el.id = 'hist-panel'; app.appendChild(el); }
+  const net = (n) => `<b class="${n > 0 ? 'up' : n < 0 ? 'down' : ''}">${n > 0 ? '+' : n < 0 ? '-' : ''}${money(Math.abs(n))}</b>`;
+  const rows = all.slice(-30).reverse().map((h) => `<div class="hp-round"><div class="hp-top"><b>#${h.round}</b> ${esc(h.dealerName)} ${esc(h.dealer)} = ${h.dealerTotal > 21 ? 'bust' : h.dealerTotal}</div>${h.seats.map((x) => `<div class="hp-seat"><span>${esc(x.name)}: ${x.hands.map((y) => `${esc(y.cards)} = ${y.total}`).join(' | ')}</span>${net(x.net)}</div>`).join('')}</div>`).join('');
+  el.innerHTML = `<div class="hp-head"><span>Hand history</span><button data-act="history" title="Open the full list">Full</button><button data-act="hist-panel" title="Turn this panel off" aria-label="Turn the hand history panel off">×</button></div><div class="hp-list">${rows || '<p>No round has been played yet.</p>'}</div>`;
+}
 async function showHistory() {
   if (S.role !== 'host') return;
   S.histShown = S.state?.histN;
@@ -1295,6 +1311,7 @@ function setHTML(el, html) {
 }
 
 function render(note) {
+  drawHistPanel();
   if (S.role === 'host' && $('#modal')?.open && $('#hist-list') && S.state && S.state.histN !== S.histShown) showHistory();
   if (!S.role) return;
   const st = S.state;
@@ -2851,6 +2868,7 @@ function runAct(el) {
     case 'rebet': doRebet(); break;
     case 'keys': $('#modal-body').innerHTML = keysHTML(); $('#modal').showModal(); break;
     case 'history': showHistory(); break;
+    case 'hist-panel': safeSet('bj-hist-panel', histOn() ? '0' : '1'); drawHistPanel(true); for (const b of document.querySelectorAll('.menu-item[data-act=hist-panel]')) b.textContent = '🕘 Hand history: ' + (histOn() ? 'on' : 'off'); break;
     case 'export': showExport(); break;
     case 'double-bet': {
       S.undo.push(structuredClone(seat.bet));
