@@ -397,3 +397,20 @@ const da = t.players.a.chips, dd = t.players.d.chips;
   assert.deepEqual(t.turn, { seat: 1, hand: 0 });
   console.log('away player tests passed');
 }
+
+// Hand history: one entry per round, tagged with the shuffle it came from.
+{
+  const t = Object.assign(new G.Table({ decks: 1, shuffleMode: 'rounds', shuffleEvery: 2 }), { frozen: true });
+  t.join('a', 'Ann', 1000); t.sit('a', 0);
+  for (let r = 0; r < 5; r++) {
+    t.setBet('a', { main: 10, sides: {} }); t.deal();
+    let g = 0;
+    while (t.phase !== 'settled' && g++ < 50) { if (t.phase === 'insurance') t.insurance('a', false); else if (t.phase === 'playing') t.action('a', 'stand'); else if (t.phase === 'dealer') t.dealerStep(); }
+    assert.equal(t.phase, 'settled');
+  }
+  assert.equal(t.hist.length, 5, 'five rounds recorded');
+  assert.ok(new Set(t.hist.map((h) => h.shoe)).size >= 2, 'more than one shuffle is marked');
+  assert.ok(t.hist[0].seats[0].hands[0].cards.split(' ').length >= 2, 'cards are stored');
+  assert.equal(G.Table.fromJSON(JSON.parse(JSON.stringify(t))).hist.length, 5, 'history is saved with the table');
+  console.log('ok hand history');
+}

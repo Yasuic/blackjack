@@ -370,6 +370,7 @@ export class Table {
     if (this.shoe.length === 0) {
       this.fairShuffle();
       this.addLog('Shoe ran out mid round and was reshuffled.');
+      this.shuffledMidRound = true;
     }
     const c = this.pendingCard || this.pick();
     this.pendingCard = null;
@@ -1101,6 +1102,31 @@ export class Table {
     if (this.pendingSettings) this.applySettings(this.pendingSettings);
     this.turn = null;
     this.addLog(`Dealer ${dealerBJ ? 'blackjack' : dealerBust ? 'busts with ' + d : 'has ' + d}.`);
+    this.recordHand();
+  }
+
+  // Hand history: one entry per round, with the number of the shuffle its cards came from, so the
+  // list can show where each shoe starts. `midShuffle` marks a round in which the shoe ran out.
+  recordHand() {
+    const cs = (cards) => cards.map((c) => c.r + c.s).join(' ');
+    const seats = [];
+    this.seats.forEach((s, i) => {
+      if (!s || !s.hands.length) return;
+      seats.push({
+        seat: i + 1, name: this.players[s.playerId]?.name || 'Player', net: s.net ?? (s.returned - s.staked),
+        hands: s.hands.map((h) => ({ cards: cs(h.cards), total: handTotal(h.cards).total, bet: h.bet, result: h.result, net: (h.paid || 0) - h.bet, doubled: !!h.doubled })),
+        sides: s.sideResults.map((r) => ({ name: r.name, net: r.win ? r.pay - r.stake : r.push ? 0 : -r.stake })),
+      });
+    });
+    if (!seats.length) return;
+    this.hist = this.hist || [];
+    this.hist.push({
+      round: this.round, shoe: this.fair?.n || 0, midShuffle: !!this.shuffledMidRound,
+      dealerName: this.banker && this.players[this.banker] ? this.players[this.banker].name : 'House',
+      dealer: cs(this.dealer.cards), dealerTotal: handTotal(this.dealer.cards).total, counted: !!this.banker, seats,
+    });
+    this.shuffledMidRound = false;
+    if (this.hist.length > 300) this.hist.splice(0, this.hist.length - 300);
   }
 
   settleSide(seat, key, r, amount) {
@@ -1140,6 +1166,7 @@ export class Table {
       noDealer: !this.banker && !this.frozen,
       bankShort: this.bankShort(),
       canPeek: !!this.rabbit && !this.inRound(),
+      histN: (this.hist || []).length,
       banker: this.banker && this.players[this.banker] ? { id: this.banker, name: this.players[this.banker].name, chips: this.players[this.banker].chips, connected: this.players[this.banker].connected, net: this.phase === 'settled' ? this.bankerNet : null } : null,
       seats: this.seats.map((s) => {
         if (!s) return null;
@@ -1183,8 +1210,8 @@ export class Table {
 
   // Save and restore so the host can refresh the page without losing the table.
   toJSON() {
-    const { settings, seats, players, phase, dealer, turn, round, roundsSinceShuffle, log, shoe, shoeSize, banker, bankerNet, pendingBanker, buyIns, runCount, hostId, pendingSettings, frozen, fair } = this;
-    return { settings, seats, players, phase, dealer, turn, round, roundsSinceShuffle, log, shoe, shoeSize, banker, bankerNet, pendingBanker, buyIns, runCount, hostId, pendingSettings, frozen, fair };
+    const { settings, seats, players, phase, dealer, turn, round, roundsSinceShuffle, log, shoe, shoeSize, banker, bankerNet, pendingBanker, buyIns, runCount, hostId, pendingSettings, frozen, fair, hist } = this;
+    return { settings, seats, players, phase, dealer, turn, round, roundsSinceShuffle, log, shoe, shoeSize, banker, bankerNet, pendingBanker, buyIns, runCount, hostId, pendingSettings, frozen, fair, hist };
   }
   static fromJSON(obj) {
     const t = new Table(obj.settings);

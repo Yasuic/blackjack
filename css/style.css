@@ -1348,3 +1348,25 @@ body.room3d .felt .spot-amt { pointer-events: none; }
 .felt.in3d .seat.focus .hand .meta { transform: none; }
 /* Small phone seats are packed tight: a line that stood up would cover the line behind it, so they stay flat. */
 .felt.in3d .seat.mini .who, .felt.in3d .seat.mini .mini-bet, .felt.in3d .seat.mini .hand .meta, .felt.in3d .seat.mini .hands.totals-only .hand { transform: none; }
+
+/* A double or split that only the balance is in the way of: the button stays live and opens the buy-in. */
+.move-btn.tile.buy { border-color: var(--gold, #f1c76a); box-shadow: 0 0 0 2px rgba(241,199,106,.35); }
+.move-btn.tile.buy .lbl { color: #ffe9a8; }
+/* Hand history */
+.hist-list { display: flex; flex-direction: column; gap: 6px; max-height: 62vh; overflow-y: auto; -webkit-overflow-scrolling: touch; padding-right: 4px; }
+.hist-shoe { display: flex; align-items: baseline; gap: 10px; margin-top: 10px; padding: 6px 10px; border-top: 2px solid var(--gold, #f1c76a); background: rgba(241,199,106,.12); border-radius: 0 0 8px 8px; color: var(--gold, #f1c76a); font-weight: 800; text-transform: uppercase; letter-spacing: 1px; font-size: 13px; }
+.hist-shoe:first-child { margin-top: 0; }
+.hist-shoe small { color: var(--muted); font-weight: 600; text-transform: none; letter-spacing: 0; }
+.hist-round { border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; background: rgba(255,255,255,.03); font-size: 13px; }
+.hist-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin-bottom: 4px; }
+.hist-head small { color: var(--muted); }
+.hist-seat { display: grid; grid-template-columns: 84px 1fr auto; gap: 8px; align-items: baseline; padding: 3px 0; border-top: 1px dashed rgba(255,255,255,.08); }
+.hs-name { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hs-hands { display: flex; flex-wrap: wrap; gap: 2px 12px; }
+.hs-side { color: var(--muted); }
+.hs-net { font-weight: 800; }
+.hist-list em { font-style: normal; font-weight: 800; }
+.hist-list .hc { display: inline-block; background: #fff; color: #111; border-radius: 4px; padding: 0 3px; margin-right: 2px; font-weight: 700; font-size: 12px; line-height: 1.45; }
+.hist-list .hc.red { color: #c0182b; }
+.hist-list .up { color: #7ef0b6; } .hist-list .down { color: #ff9b9b; }
+@media (max-width: 560px) { .hist-seat { grid-template-columns: 62px 1fr auto; } .hist-round { font-size: 12px; padding: 5px 7px; } }

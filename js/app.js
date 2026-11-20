@@ -1,11 +1,11 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120e';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120e';
-import { tickSound, winSound } from './fx.js?v=20261120e';
-import { webglOK, initRoom } from './room3d.js?v=20261120e';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120e';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120f';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120f';
+import { tickSound, winSound } from './fx.js?v=20261120f';
+import { webglOK, initRoom } from './room3d.js?v=20261120f';
+import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120f';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -246,6 +246,7 @@ function onHostMessage(conn, msg) {
   if (!conn.clientId) return;
   if (msg.t === 'throw') { relayThrow(conn.clientId, msg); return; }
   if (msg.t === 'keys') { gotNonce(msg, conn.clientId); return; }
+  if (msg.t === 'hist-get') { conn.send({ t: 'hist', list: S.table.hist || [] }); return; }
   fresh(moveCount(msg), () => runAction(conn.clientId, msg, (err) => conn.open && conn.send({ t: 'error', msg: err, bet: msg.t === 'bet' })));
 }
 
@@ -294,6 +295,8 @@ function runAction(id, msg, onError) {
       case 'buyin': {
         const req = t.requestBuyIn(id, msg.amount);
         t.answerBuyIn(req.id, true); // buy-ins go straight through; the ledger shows everyone's total
+        // Bought in to pay for a double or a split: that move is played in the same step.
+        if (msg.then === 'double' || msg.then === 'split') t.action(id, msg.then);
         break;
       }
       case 'leave-dealer': t.leaveDealer(id); break;
@@ -358,7 +361,7 @@ function fresh(countFn, fn) {
   })).catch(() => {});
 }
 function gotNonce(msg, from) { S.nonceWait?.[msg.rid]?.(msg.keys, from); }
-const moveCount = (msg) => (t) => (msg.t === 'action' ? { hit: 1, double: 1, split: 2 }[msg.a] || 0 : msg.t === 'peek' ? 1 : 0);
+const moveCount = (msg) => (t) => (msg.t === 'action' ? { hit: 1, double: 1, split: 2 }[msg.a] || 0 : msg.t === 'buyin' ? { double: 1, split: 2 }[msg.then] || 0 : msg.t === 'peek' ? 1 : 0);
 // The guest's side of the guard. Keys go out strictly in order and only as many as the step on the
 // table can use: a deal needs two cards per seat plus two for the dealer, a move needs one or two.
 // A host that asks for a key twice, skips ahead, or asks for too many gets nothing, and the badge turns red.
@@ -589,6 +592,7 @@ function connectToHost() {
     if (msg.t === 'ping') { try { conn.send({ t: 'pong' }); } catch {} return; }
     if (msg.t === 'state') { setState(msg.state); render(); setTimerFromState(msg.state); }
     else if (msg.t === 'error') { toast(msg.msg); if (msg.bet) dropPend(); }
+    else if (msg.t === 'hist') { S.hist = msg.list || []; S.histN = S.hist.length; if ($('#hist-list')) showHistory(false); }
     else if (msg.t === 'note') showNote(msg);
     else if (msg.t === 'fx') showThrow(msg);
     else if (msg.t === 'peek') showPeek(msg.card, msg.by);
@@ -698,7 +702,8 @@ function buildLayout() {
             <div class="share"><input id="share" readonly /><button class="btn small" data-act="copy">Copy</button></div>
           </div>
           ${fold('m-table', '📜 Table rules and payouts', `
-            <button class="menu-item" data-act="rules">💰 Side bet payouts</button>`)}
+            <button class="menu-item" data-act="rules">💰 Side bet payouts</button>
+            <button class="menu-item" data-act="history">🕘 Hand history</button>`)}
           ${fold('m-view', '🎛️ My view and sound', `
             <button class="menu-item" data-act="four">🎨 Four colour cards</button>
             <button class="menu-item" data-act="chart">📊 Basic strategy chart</button>
@@ -854,28 +859,75 @@ function renderBalance(st) {
   el.innerHTML = `<span class="lbl">Balance</span><b>${money(me.chips - onTable)}</b>${waiting}`;
 }
 
-function openBuyIn(broke = false) {
+// `then` is the move ('double' or 'split') the buy-in is for, and `need` the chips missing for it.
+function openBuyIn(broke = false, then = null, need = 0) {
   const pop = $('#buyin-pop');
   const me = S.state?.players.find((p) => p.id === S.myId);
+  const word = then === 'split' ? 'split' : 'double';
+  const amounts = then ? [need, ...[500, 1000, 2500, 5000].filter((v) => v > need)].slice(0, 4) : [500, 1000, 2500, 5000];
   pop.innerHTML = `<div class="vote-card">
-    <div class="vote-title">${broke ? 'You are out of chips' : 'Buy in more chips'}</div>
-    <p>Chips are added right away and everyone sees it in the ledger. Play money only.${me?.boughtIn ? ` You have bought in ${money(me.boughtIn)} extra so far.` : ''}</p>
-    <div class="actions">${[500, 1000, 2500, 5000].map((v) => `<button class="btn" data-buy="${v}">${money(v)}</button>`).join('')}</div>
-    <div class="share" style="margin-top:10px;justify-content:center"><input id="buy-amt" type="number" min="1" placeholder="Other amount" style="width:150px" /><button class="btn primary" data-buy="custom">Buy in</button></div>
+    <div class="vote-title">${then ? `Buy in to ${word}` : broke ? 'You are out of chips' : 'Buy in more chips'}</div>
+    <p>${then ? `You are ${money(need)} short for this ${word}. Pick an amount and the ${word} is played right away. ` : ''}Chips are added right away and everyone sees it in the ledger. Play money only.${me?.boughtIn ? ` You have bought in ${money(me.boughtIn)} extra so far.` : ''}</p>
+    <div class="actions">${amounts.map((v, i) => `<button class="btn ${then && !i ? 'primary' : ''}" data-buy="${v}">${money(v)}${then && !i ? ' (just enough)' : ''}</button>`).join('')}</div>
+    <div class="share" style="margin-top:10px;justify-content:center"><input id="buy-amt" type="number" min="${then ? need : 1}" placeholder="Other amount" style="width:150px" /><button class="btn primary" data-buy="custom">${then ? `Buy in and ${word}` : 'Buy in'}</button></div>
     <div class="actions" style="margin-top:10px">${broke ? '<button class="btn small" data-buy="spectate">Leave seat and watch</button>' : ''}<button class="btn small" data-buy="close">${broke ? 'Not now' : 'Cancel'}</button></div>
   </div>`;
   pop.hidden = false;
+  const opened = Date.now();
   pop.onclick = (e) => {
+    // A move button acts on the press, so the click that ends the same tap arrives here: it must not close the box or pick an amount.
+    if (Date.now() - opened < 450) return;
     const b = e.target.closest('[data-buy]');
     if (e.target === pop || b?.dataset.buy === 'close') { pop.hidden = true; return; }
     if (b?.dataset.buy === 'spectate') { pop.hidden = true; send({ t: 'stand-up' }); return; }
     if (!b) return;
-    const amount = b.dataset.buy === 'custom' ? Number($('#buy-amt').value) : Number(b.dataset.buy);
+    const amount = b.dataset.buy === 'custom' ? Math.round(Number($('#buy-amt').value)) : Number(b.dataset.buy);
     if (!amount) { toast('Type an amount.'); return; }
-    send({ t: 'buyin', amount });
+    if (then && amount < need) { toast(`You need at least ${money(need)} more to ${word}.`); return; }
+    send(then ? { t: 'buyin', amount, then } : { t: 'buyin', amount });
     pop.hidden = true;
-    toast(`Added ${money(amount)} chips.`);
+    toast(then ? `Added ${money(amount)} chips and ${then === 'split' ? 'split' : 'doubled'}.` : `Added ${money(amount)} chips.`);
   };
+}
+// The move a buy-in would pay for: a double or a split that only the balance is in the way of.
+function shortFor(a) {
+  const st = S.state;
+  if (!st?.turn || st.phase !== 'playing' || st.actions?.includes(a) || !st.actions?.length) return 0;
+  const seat = st.seats[st.turn.seat], hand = seat?.hands[st.turn.hand];
+  const me = st.players.find((p) => p.id === S.myId);
+  if (!hand || !me || seat.playerId !== S.myId || hand.cards.length !== 2 || hand.splitAces || me.chips >= hand.bet) return 0;
+  const ten = (c) => ['10', 'J', 'Q', 'K'].includes(c.r);
+  const pair = hand.cards[0].r === hand.cards[1].r || (ten(hand.cards[0]) && ten(hand.cards[1]));
+  if (a === 'double' || (a === 'split' && pair && seat.hands.length < 4)) return hand.bet - me.chips;
+  return 0;
+}
+
+// Hand history: every round since the table opened, newest first, with a line where each shuffle starts.
+function histHTML(list) {
+  if (!list.length) return '<h2 style="margin-top:0">Hand history</h2><p class="hint">No round has been played yet.</p>';
+  const pl = (n) => `<span class="${n > 0 ? 'up' : n < 0 ? 'down' : ''}">${n > 0 ? '+' : n < 0 ? '-' : ''}${money(Math.abs(n))}</span>`;
+  const cards = (str) => str.split(' ').filter(Boolean).map((c) => `<span class="hc ${/[♥♦]/.test(c) ? 'red' : ''}">${esc(c)}</span>`).join('');
+  const rows = [];
+  const shoes = [...new Set(list.map((h) => h.shoe))];
+  for (let i = list.length - 1; i >= 0; i--) {
+    const h = list[i], next = list[i + 1];
+    if (!next || next.shoe !== h.shoe) {
+      const inShoe = list.filter((x) => x.shoe === h.shoe);
+      rows.push(`<div class="hist-shoe"><span>Shuffle ${shoes.indexOf(h.shoe) + 1}</span><small>${inShoe.length} ${inShoe.length === 1 ? 'round' : 'rounds'}, round ${inShoe[0].round}${inShoe.length > 1 ? ' to ' + inShoe[inShoe.length - 1].round : ''}</small></div>`);
+    }
+    rows.push(`<div class="hist-round">
+      <div class="hist-head"><b>Round ${h.round}</b><span>Dealer (${esc(h.dealerName)}): ${cards(h.dealer)} <em>${h.dealerTotal > 21 ? 'bust ' + h.dealerTotal : h.dealerTotal}</em></span>${h.counted ? '' : '<small>practice, not in the ledger</small>'}${h.midShuffle ? '<small>the shoe ran out and was shuffled during this round</small>' : ''}</div>
+      ${h.seats.map((s) => `<div class="hist-seat"><span class="hs-name">${esc(s.name)}</span><span class="hs-hands">${s.hands.map((x) => `<span class="hs-hand">${cards(x.cards)} <em>${x.total}</em> ${esc(x.result || '')}${x.doubled ? ', doubled' : ''} ${pl(x.net)}</span>`).join('')}${s.sides.map((x) => `<span class="hs-side">${esc(x.name)} ${x.net ? pl(x.net) : 'back'}</span>`).join('')}</span><span class="hs-net">${pl(s.net)}</span></div>`).join('')}
+    </div>`);
+  }
+  return `<h2 style="margin-top:0">Hand history</h2><p class="hint">Newest round first. A gold line marks where each new shuffle starts.</p><div id="hist-list" class="hist-list">${rows.join('')}</div>`;
+}
+function showHistory(ask = true) {
+  S.histShown = S.state?.histN;
+  if (S.role === 'host') S.hist = S.table.hist || [];
+  else if (ask) send({ t: 'hist-get' });
+  $('#modal-body').innerHTML = histHTML(S.hist || []) + (S.role !== 'host' && ask && !(S.hist || []).length ? '<p class="hint" id="hist-list">Loading...</p>' : '');
+  if (!$('#modal').open) $('#modal').showModal();
 }
 
 // Running tally of buy-ins and results for everyone at the table.
@@ -901,6 +953,7 @@ function renderLedger(st) {
       ${rows.map((r) => `<tr class="${r.id === S.myId ? 'me' : ''}"><td>${r.id === st.hostId ? '♛ ' : ''}${esc(r.name)}${r.kicked ? ' (left)' : r.connected ? '' : ' (away)'}${st.banker?.id === r.id ? ' (dealer)' : ''}</td><td>${money(r.totalIn)}</td><td>${money(r.chips)}</td><td>${pl(net(r))}</td></tr>`).join('')}
       <tr class="tot"><td>Table</td><td>${money(sumIn)}</td><td>${money(sumChips)}</td><td>${pl(rows.reduce((a, r) => a + net(r), 0))}</td></tr>
     </table>
+    <button class="btn small" data-act="history" style="margin:6px 0">🕘 Hand history</button>
     <div class="hint">Bought in counts starting chips, buy-ins and chips the host gives or takes. The +/- column counts only hands played with a player as the dealer, so it always adds up to zero. Hands against the house are practice and are left out.</div></div>`;
 }
 
@@ -922,6 +975,7 @@ function setHTML(el, html) {
 }
 
 function render(note) {
+  if ($('#modal')?.open && $('#hist-list') && S.state && S.state.histN !== S.histShown) showHistory();
   if (!S.role) return;
   const st = S.state;
   const pill = $('#conn-pill');
@@ -1467,6 +1521,8 @@ function dealMeInHTML(st) {
   const { seat, isBanker } = myInfo(st);
   // Only for a fresh bet, and only when the table can deal: with no dealer, or a dealer whose chips
   // do not cover the bets, the line above already says what the table is waiting for.
+  // A new hand with nothing down yet: the big middle button puts last hand's whole bet back, side bets included.
+  if (!isBanker && seat && st.phase === 'betting' && st.rebet && !betTotal(seat.bet)) return `<div class="deal-me-in"><button class="deal-btn rebet-btn" data-act="rebet" title="The same bet as last hand, side bets included (B)">↻ Rebet ${money(betTotal(st.rebet))}</button></div>`;
   if (isBanker || !seat || st.phase !== 'betting' || !seat.bet.main || st.noDealer || st.bankShort) return '';
   if (seat.ready) {
     const slow = st.seats.filter((s) => s && !s.ready && s.connected !== false && s.playerId !== S.myId).map((s) => s.name);
@@ -1812,7 +1868,8 @@ function trayHTML(st) {
         // Split and double cost one more bet. Say so when the balance is the only thing in the way.
         const isPair = hand.cards.length === 2 && (hand.cards[0].r === hand.cards[1].r || (['10', 'J', 'Q', 'K'].includes(hand.cards[0].r) && ['10', 'J', 'Q', 'K'].includes(hand.cards[1].r)));
         const broke = !ok && me.chips < hand.bet && ((a === 'double' && hand.cards.length === 2) || (a === 'split' && isPair));
-        return `<button class="move-btn tile ${a} ${big} ${cls} ${broke ? 'broke' : ''}" data-act="play" data-a="${a}" data-key="${tiles[a][2]}" ${ok ? '' : 'disabled'} title="${broke ? 'Not enough chips. Tap your balance to buy in more.' : `${tiles[a][1]} (${tiles[a][2]})`}"><span class="sym">${tiles[a][0]}</span><span class="lbl">${broke ? 'Not enough chips' : tiles[a][1]}</span></button>`;
+        const short = broke ? shortFor(a) : 0;
+        return `<button class="move-btn tile ${a} ${big} ${cls} ${short ? 'buy' : broke ? 'broke' : ''}" data-act="play" data-a="${a}" data-key="${tiles[a][2]}" ${ok || short ? '' : 'disabled'} title="${short ? `You are ${money(short)} short. Tap to buy in and ${a}.` : `${tiles[a][1]} (${tiles[a][2]})`}"><span class="sym">${tiles[a][0]}</span><span class="lbl">${short ? 'Buy in' : tiles[a][1]}</span></button>`;
       }).join('')}</div>`).join('')}</div>
       
       <div class="decide-timer" id="decide-timer"><span class="bar"><i id="decide-bar"></i></span><span class="num" id="decide-num"></span></div>
@@ -2033,6 +2090,13 @@ function rulesHTML() {
 const FAST_ACTS = new Set(['chip', 'main-spot', 'side-spot', 'take-chip', 'undo', 'double-bet', 'clear', 'rebet', 'ready', 'ins', 'play', 'pvp-clear']);
 const BET_ACTS = new Set(['chip', 'main-spot', 'side-spot', 'take-chip', 'undo', 'double-bet', 'clear', 'ready', 'side-clear', 'pvp', 'pvp-clear']);
 let pressHandled = false;
+// The middle mouse button puts last hand's bet back while betting is open.
+document.addEventListener('auxclick', (e) => {
+  if (e.button !== 1 || e.target.closest?.('input, textarea, a')) return;
+  const st = S.state;
+  if (st?.rebet && (st.phase === 'betting' || st.phase === 'settled') && myInfo(st).seat) { e.preventDefault(); doRebet(); }
+});
+document.addEventListener('mousedown', (e) => { if (e.button === 1 && S.state?.rebet && !e.target.closest?.('input, textarea, a')) e.preventDefault(); }); // no scroll cursor
 document.addEventListener('pointerdown', (e) => {
   pressHandled = false;
   if (e.button !== 0 || e.isPrimary === false || S.aim) return; // while aiming a reaction, taps on the table throw it
@@ -2139,6 +2203,7 @@ function runAct(el) {
       if (!seat) break;
       // With a chip picked, tapping the circle adds that chip. With none picked, it takes the last chip off.
       if (!S.chip) {
+        if (!bet.main && st.rebet && !betTotal(bet)) { doRebet(); break; } // empty circle on a new hand: the same bet as last hand
         if (!bet.main) { toast('Pick a chip first, then tap a bet to add it.'); break; }
         let v = S.mainChips.pop();
         if (!v || v > bet.main) v = [500, 100, 25, 5, 1].find((x) => x <= bet.main);
@@ -2173,6 +2238,7 @@ function runAct(el) {
     case 'undo': if (S.undo.length) { S.mainChips.pop(); const last = S.undo.pop(); chipSound(); placeBet(last); } break;
     case 'rebet': doRebet(); break;
     case 'keys': $('#modal-body').innerHTML = keysHTML(); $('#modal').showModal(); break;
+    case 'history': showHistory(); break;
     case 'double-bet': {
       S.undo.push(structuredClone(seat.bet));
       S.mainChips = S.mainChips.concat(S.mainChips);
@@ -2271,6 +2337,8 @@ document.addEventListener('click', (e) => {
 
 function playMove(a) {
   const st = S.state;
+  const short = shortFor(a);
+  if (short) { openBuyIn(false, a, short); return; }
   if (trainingOn() && st?.turn) {
     const hand = st.seats[st.turn.seat].hands[st.turn.hand];
     const up = st.dealer.cards[0];
@@ -2311,7 +2379,7 @@ document.addEventListener('keydown', (e) => {
   const map = { h: 'hit', s: 'stand', d: 'double', p: 'split', u: 'surrender' };
   // While the first cards are still being dealt there is nothing to decide yet.
   const wait = dealingNow() && S.dealMany;
-  if (map[k] && st.actions?.includes(map[k])) { if (!wait) playMove(map[k]); return; }
+  if (map[k] && (st.actions?.includes(map[k]) || shortFor(map[k]))) { if (!wait) playMove(map[k]); return; }
   const { seat } = myInfo(st);
   if (!seat) return;
   if (st.phase === 'insurance' && (k === 'y' || k === 'n')) {
