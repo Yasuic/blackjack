@@ -76,10 +76,10 @@ function vignette(g, w, h) {
 // Chips: the top face with its value, and the striped edge.
 const CHIP_COL = { 1: '#e4e4ea', 5: '#c8202b', 25: '#1f9a4a', 100: '#1d1d22', 500: '#6b3fc4' };
 const DENOMS = [500, 100, 25, 5, 1];
+const CHIP_UP = Math.PI / 2;
 function chipTop(v) {
   return (g, w) => {
     const c = w / 2, light = v === 1;
-    g.translate(w, 0); g.scale(-1, 1); // the top of a cylinder shows its picture mirrored, so draw it mirrored
     g.fillStyle = CHIP_COL[v]; g.beginPath(); g.arc(c, c, c, 0, Math.PI * 2); g.fill();
     g.fillStyle = light ? '#3a5fa8' : '#f4f1ea';
     for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; g.beginPath(); g.moveTo(c, c); g.arc(c, c, c, a - 0.17, a + 0.17); g.fill(); }
@@ -668,6 +668,8 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     return out;
   }
   let chipKey = '';
+  // Turn a chip so the number on it reads the right way up from where you are.
+  const faceYaw = () => CHIP_UP + (flipped ? Math.PI : 0);
   // list: one entry per taken seat: { seat, main (the bet), balance (chips not bet) }.
   function setChips(list = []) {
     lastChips = list;
@@ -694,7 +696,7 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
         const m = new THREE.Mesh(chipGeo, matsFor(v));
         m.scale.set(R, T, R);
         m.position.set(px, 1.6 + T / 2 + i * T, pz);
-        m.rotation.y = i * 1.7;
+        m.rotation.y = faceYaw() + (i % 3 - 1) * 0.12;
         m.castShadow = true;
         chipGroup.add(m);
       });
@@ -711,7 +713,7 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
           const m = new THREE.Mesh(chipGeo, matsFor(v));
           m.scale.set(R, T, R);
           m.position.set(at.x + colAt[col][0] + (rnd() - 0.5) * 2.4, 1.6 + T / 2 + lvl * T, at.z + colAt[col][1] + (rnd() - 0.5) * 2.4);
-          m.rotation.y = rnd() * Math.PI * 2;
+          m.rotation.y = faceYaw() + (rnd() - 0.5) * 0.3;
           m.castShadow = true; m.receiveShadow = true;
           chipGroup.add(m);
         });
@@ -719,20 +721,23 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
       // The rack: one pile for each kind of chip, on the rail in front of the player.
       const se = seatEdge.get(c.seat);
       if (se && c.balance > 0) {
-        const { e, sc } = se, r = 13 * sc, t = 3.2 * sc;
+        const { e, sc } = se, r = 13 * sc, t = 4.6 * sc;
+        // A real player's stack: most of the money in the big chips, the rest broken into smaller chips,
+        // so the piles grow with the balance. A pile taller than 20 chips starts a second pile behind it.
         const piles = DENOMS.map((v) => [v, 0]);
         let left = Math.round(c.balance);
-        for (const pile of piles) { pile[1] = Math.floor(left / pile[0]); left -= pile[1] * pile[0]; }
-        const shown = piles.filter((x) => x[1] > 0);
+        piles.forEach((pile, k) => { const last = k === piles.length - 1; pile[1] = Math.floor((last ? left : left * 0.7) / pile[0]); left -= pile[1] * pile[0]; });
+        const shown = piles.filter((x) => x[1] > 0).flatMap(([v, n]) => { const out = []; for (let row = 0; n > 0 && row < 3; row++, n -= 20) out.push([v, Math.min(20, n), row]); return out; });
+        const kinds = [...new Set(shown.map((x) => x[0]))];
         const pile = new THREE.Group();
         if (!c.mine) { racks.push(pile); chipGroup.add(pile); }
-        shown.forEach(([v, n], i) => {
-          const cnt = Math.min(12, n), along = (i - (shown.length - 1) / 2) * r * 2.12;
+        shown.forEach(([v, n, row], i) => {
+          const cnt = n, along = (kinds.indexOf(v) - (kinds.length - 1) / 2) * r * 2.12, back = RAIL * 0.5 + row * r * 2.1;
           const m = new THREE.Mesh(rackGeoFor(cnt), rackMatsFor(v));
           m.scale.set(r, t * cnt, r);
           // Along the rail: the direction at right angles to "away from the table".
-          m.position.set(e.x + e.nx * RAIL * 0.5 - e.nz * along, 20.5 + (t * cnt) / 2, e.z + e.nz * RAIL * 0.5 + e.nx * along);
-          m.rotation.y = i * 1.3;
+          m.position.set(e.x + e.nx * back - e.nz * along, 20.5 + (t * cnt) / 2, e.z + e.nz * back + e.nx * along);
+          m.rotation.y = faceYaw();
           m.castShadow = true;
           (c.mine ? myRack : pile).add(m);
         });
@@ -870,12 +875,15 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
   // Drag to look or walk around, wheel or pinch to move in and out. Presses on buttons, chips and
   // betting circles go to the felt as normal.
   const pointers = new Map();
+  const panR = new THREE.Vector3(), panF = new THREE.Vector3();
+  container.addEventListener('contextmenu', (e) => { if (!e.target.closest('input, textarea')) e.preventDefault(); });
   let drag = null, pinch = 0;
   const interactive = 'button, a, input, select, textarea, label, [data-act], [data-throw-at], [data-vote]';
   container.addEventListener('pointerdown', (e) => {
-    if (e.button > 0 || e.target.closest(interactive)) return;
+    if ((e.button > 0 && e.button !== 2) || e.target.closest(interactive)) return;
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    if (pointers.size === 1) drag = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: false };
+    // Left button (or one finger) turns the view. Right button slides the view across the room.
+    if (pointers.size === 1) drag = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: false, pan: e.button === 2 };
     else if (pointers.size === 2) { const [a, b] = [...pointers.values()]; pinch = Math.hypot(a.x - b.x, a.y - b.y); drag = null; }
   });
   container.addEventListener('pointermove', (e) => {
@@ -898,6 +906,17 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     drag.x = e.clientX; drag.y = e.clientY;
     rate = 16;
     const k = 2.4 / Math.max(320, container.clientHeight);
+    if (drag.pan) {
+      // The room follows the mouse: drag right and the table moves right, drag down and it comes nearer.
+      const kp = cur.r * 0.9 / Math.max(320, container.clientHeight);
+      panR.set(1, 0, 0).applyQuaternion(camera.quaternion); panR.y = 0; panR.normalize();
+      panF.set(-panR.z, 0, panR.x).multiplyScalar(-1); // straight ahead along the floor
+      goal.t.addScaledVector(panR, -dx * kp).addScaledVector(panF, dy * kp);
+      const lim = homeFit.r * (seated ? 0.45 : 1);
+      goal.t.x = Math.max(-lim, Math.min(lim, goal.t.x)); goal.t.z = Math.max(-lim, Math.min(lim, goal.t.z));
+      touch();
+      return;
+    }
     if (seated) { goal.yaw += dx * k * 1.5; goal.pitch += dy * k; }
     else { goal.theta -= dx * k * 1.6; goal.phi -= dy * k; }
     clampGoal(); touch();
@@ -1011,8 +1030,8 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     // the screen, so it is left out as well until you turn your head towards it.
     const edge = (o) => { tmp.setFromMatrixPosition(o.matrixWorld); tmp.y += 110 * U; tmp.project(camera); return Math.abs(tmp.x) > 0.72 || tmp.y < -0.6; };
     for (const f of others) { f.updateMatrixWorld(); f.visible = !seated || !(low(f, 0.35) || edge(f)); }
-    for (const r of racks) { r.updateMatrixWorld(); r.visible = !seated || !low(r, 0.95); }
-    if (myRack) myRack.visible = !seated;
+    for (const r of racks) r.visible = true;
+    if (myRack) myRack.visible = true;
     gl.render(scene, camera);
     css.render(scene, camera);
   };

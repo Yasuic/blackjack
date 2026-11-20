@@ -1,11 +1,11 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120b';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120b';
-import { tickSound, winSound } from './fx.js?v=20261120b';
-import { webglOK, initRoom } from './room3d.js?v=20261120b';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120b';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120c';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120c';
+import { tickSound, winSound } from './fx.js?v=20261120c';
+import { webglOK, initRoom } from './room3d.js?v=20261120c';
+import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120c';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -184,6 +184,8 @@ function startHost(resume) {
   if (resume) Object.values(S.table.players).forEach((p) => { if (!p.connected && !p.kicked && p.id !== S.myId) awayClock(p.id); });
   history.replaceState(null, '', location.pathname + '?' + new URLSearchParams({ ...Object.fromEntries(params), host: S.code }).toString());
   buildLayout();
+  stayAwake();
+  if (matchMedia('(pointer: coarse)').matches) setTimeout(() => toast('You are the host: keep this tab open and in front. Friends lose the table when you switch apps.'), 1500);
   openHostPeer(0);
   hostChanged();
 }
@@ -196,7 +198,7 @@ function openHostPeer(attempt) {
     conn.on('data', (msg) => onHostMessage(conn, msg));
     conn.on('close', () => connLost(conn));
   });
-  peer.on('disconnected', () => { S.online = false; render(); setTimeout(() => !peer.destroyed && peer.reconnect(), 1500); });
+  peer.on('disconnected', () => { S.online = false; render(); setTimeout(keepAlive, 1500); });
   peer.on('error', (e) => {
     if (e.type === 'unavailable-id' && attempt < 15) {
       // After a page refresh the old table name can stay reserved for a few seconds.
@@ -296,15 +298,6 @@ function runAction(id, msg, onError) {
       }
       case 'leave-dealer': t.leaveDealer(id); break;
       case 'seed': t.setClientSeed(id, msg.seed); return; // nothing on the table changes, so no update is sent
-      case 'peek': {
-        const card = t.peek(id);
-        // Everyone at the table sees the card, so nobody plays with knowledge the others lack.
-        const by = t.players[id]?.name || 'Someone';
-        showPeek(card, by);
-        Object.values(S.conns).forEach((c) => c?.open && c.send({ t: 'peek', card, by }));
-        t.addLog(`${by} paid to show the next card: ${card.r}${card.s}.`);
-        break;
-      }
       default: return;
     }
   } catch (e) {
@@ -524,6 +517,30 @@ function updateTimer() {
 }
 setInterval(updateTimer, 250);
 
+// ---------- Staying connected ----------
+// The link to the meeting point (where browsers find each other) can drop when a phone changes network,
+// a laptop sleeps or a tab comes back from the background. One retry is not enough, so this runs every
+// few seconds and again the moment the tab is shown or the network returns.
+function keepAlive() {
+  const peer = S.peer;
+  if (!peer || S.kicked || !S.role) return;
+  if (peer.destroyed) { if (S.role === 'host') openHostPeer(0); else openGuestPeer(); return; }
+  if (peer.disconnected) { try { peer.reconnect(); } catch {} return; }
+  if (S.role === 'player') {
+    // A link that has gone silent (the phone was asleep) is dropped at once instead of after the usual wait.
+    if (S.conn && S.online && Date.now() - S.lastSeen > 12000) { const c = S.conn; S.conn = null; S.online = false; try { c.close(); } catch {} render(); }
+    if (!S.conn && Date.now() - (S.lastTry || 0) > 4000) connectToHost();
+  }
+}
+setInterval(keepAlive, 5000);
+addEventListener('online', keepAlive);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { keepAlive(); stayAwake(); } });
+// Keep the screen on while you are at a table, so a phone or laptop does not sleep in the middle of a hand.
+async function stayAwake() {
+  if (!S.role || document.hidden || !navigator.wakeLock) return;
+  try { if (!S.wake || S.wake.released) S.wake = await navigator.wakeLock.request('screen'); } catch {}
+}
+
 // ---------- Player ----------
 function startPlayer(code, saved) {
   code = String(code || '').trim().toLowerCase();
@@ -535,27 +552,35 @@ function startPlayer(code, saved) {
   sessSet('bj-join-' + code, JSON.stringify({ name: S.name, buyIn: S.buyIn, look: S.look }));
   buildLayout();
   render();
+  stayAwake();
+  openGuestPeer();
+}
+
+function openGuestPeer() {
   const peer = new Peer(peerOptions());
   S.peer = peer;
-  peer.on('open', () => connectToHost());
-  peer.on('disconnected', () => setTimeout(() => !peer.destroyed && peer.reconnect(), 1500));
+  peer.on('open', () => { if (!S.conn?.open) connectToHost(); });
+  peer.on('disconnected', () => { S.why = 'net'; setTimeout(keepAlive, 1500); });
   peer.on('error', (e) => {
     if (e.type === 'peer-unavailable') {
-      S.online = false;
-      render('The table was not found. The host may be offline. Trying again...');
-      setTimeout(connectToHost, 3000);
-      return;
+      // The meeting point answered: no table with this code is open right now.
+      S.online = false; S.why = 'nohost'; S.conn = null;
+      render();
+      return; // keepAlive tries again every few seconds
     }
+    if (['network', 'server-error', 'socket-error', 'socket-closed'].includes(e.type)) { S.why = 'net'; return; }
     toast('Connection problem: ' + (e.type || e.message));
   });
 }
 
 function connectToHost() {
-  if (S.peer.disconnected) return;
+  if (S.peer.disconnected || S.peer.destroyed) return;
+  S.lastTry = Date.now();
   const conn = S.peer.connect(ROOM_PREFIX + S.code, { reliable: true });
   S.conn = conn;
   conn.on('open', () => {
     S.online = true;
+    S.why = '';
     S.retry = 0;
     conn.send({ t: 'join', clientId: S.myId, name: S.name, buyIn: S.buyIn, look: S.look });
   });
@@ -730,7 +755,8 @@ function use3D() {
   const saved = safeGet('bj-3d');
   if (saved === '1') return true;
   if (saved === '0') return false;
-  return Math.min(innerWidth, innerHeight) >= 600 && innerWidth >= 1000;
+  // Computers get the 3D room, also in a small browser window. Phones get the flat table: the room is too small to read there.
+  return innerWidth >= 900 && innerHeight >= 420 && !(matchMedia('(pointer: coarse)').matches && Math.min(innerWidth, innerHeight) < 600);
 }
 
 // Zoom the table a little in or out. Saved for next time on this device.
@@ -915,10 +941,14 @@ function render(note) {
     if (S.online) S.offSince = 0; else S.offSince ||= Date.now();
     const stuck = !S.online && Date.now() - S.offSince > 6000;
     let box = $('#offline-note');
+    if (box && box.dataset.why !== (S.why || '')) { box.remove(); box = null; }
     if (stuck && !box) {
       let mine = null; try { mine = JSON.parse(safeGet('bj-host') || 'null')?.code; } catch {}
-      box = document.createElement('div'); box.id = 'offline-note'; box.className = 'offline-note';
-      box.innerHTML = `<b>Cannot reach the host.</b><div>This table runs inside the host's browser tab. It is reachable only while the host keeps that tab open. Ask the host to open the table again, then this page reconnects by itself.</div>${mine === S.code ? `<a class="btn gold" href="${location.pathname}?host=${encodeURIComponent(S.code)}">I am the host: reopen my table</a>` : ''}<a class="btn" href="${location.pathname}">Start a new table</a>`;
+      box = document.createElement('div'); box.id = 'offline-note'; box.className = 'offline-note'; box.dataset.why = S.why || '';
+      const why = S.why === 'net' ? ['Your connection dropped.', 'This phone or computer lost its internet link for a moment. The page keeps trying and joins the table again by itself.']
+        : S.why === 'nohost' ? ['The table is closed right now.', 'The table runs inside the host\'s browser tab. The host closed that tab, or their phone or computer went to sleep. Ask the host to open the table again. This page joins again by itself.']
+        : ['Cannot reach the host.', 'The table is open, but this device cannot make a direct link to the host. Try switching between Wi-Fi and mobile data, or turn off a VPN. The page keeps trying.'];
+      box.innerHTML = `<b>${why[0]}</b><div>${why[1]}</div>${mine === S.code ? `<a class="btn gold" href="${location.pathname}?host=${encodeURIComponent(S.code)}">I am the host: reopen my table</a>` : ''}<a class="btn" href="${location.pathname}">Start a new table</a>`;
       document.body.appendChild(box);
     } else if (!stuck && box) box.remove();
     if (!S.online && !S.offTick) S.offTick = setInterval(() => { if (S.online) { clearInterval(S.offTick); S.offTick = null; } render(); }, 2000);
@@ -1724,7 +1754,7 @@ function trayHTML(st) {
     const queued = S.rebetWhenOpen === st.round;
     const rb = st.rebet ? `<button class="btn gold rebet-btn ${queued ? 'on' : ''}" data-act="rebet" title="Bet the same as last round (B)">${queued ? `✓ Rebet ${money(betTotal(st.rebet))} goes down when betting opens. Tap to cancel` : `↻ Rebet ${money(betTotal(st.rebet))}`}</button>` : '';
     return `<div class="tray-msg round-result"><b class="${seat.net > 0 ? 'up' : seat.net < 0 ? 'down' : ''}">${head}</b>${parts.length ? `<div class="rr-parts">${parts.join('')}</div>` : ''}</div>
-      <div class="actions">${rb}${peekBtnHTML(st)}<span class="hint">Betting opens when the cards are cleared.</span></div>`;
+      <div class="actions">${rb}<span class="hint">Betting opens when the cards are cleared.</span></div>`;
   }
   if (ph === 'betting') {
     const b = seat.bet;
@@ -1744,7 +1774,7 @@ function trayHTML(st) {
       </div>
       <div class="actions">
         ${pvpBtnHTML(st, seat)}
-        ${peekBtnHTML(st)}
+        
         ${rebet || `<button class="btn" data-act="clear" ${betTotal(b) ? '' : 'disabled'}>Clear all</button>`}
         <button class="btn danger" data-act="stand-up">Leave seat</button>
       </div>`;
@@ -1784,7 +1814,7 @@ function trayHTML(st) {
         const broke = !ok && me.chips < hand.bet && ((a === 'double' && hand.cards.length === 2) || (a === 'split' && isPair));
         return `<button class="move-btn tile ${a} ${big} ${cls} ${broke ? 'broke' : ''}" data-act="play" data-a="${a}" data-key="${tiles[a][2]}" ${ok ? '' : 'disabled'} title="${broke ? 'Not enough chips. Tap your balance to buy in more.' : `${tiles[a][1]} (${tiles[a][2]})`}"><span class="sym">${tiles[a][0]}</span><span class="lbl">${broke ? 'Not enough chips' : tiles[a][1]}</span></button>`;
       }).join('')}</div>`).join('')}</div>
-      ${peekBtnHTML(st)}
+      
       <div class="decide-timer" id="decide-timer"><span class="bar"><i id="decide-bar"></i></span><span class="num" id="decide-num"></span></div>
       <div class="decide-warn" id="decide-warn" role="alert" hidden></div>
     </div>`;
@@ -2158,7 +2188,6 @@ function runAct(el) {
     case 'buyin-open': openBuyIn(); break;
     case 'ledger-toggle': { const l = $('#ledger'); l.classList.toggle('closed'); safeSet('bj-ledger', l.classList.contains('closed') ? '0' : '1'); renderLedger(S.state); break; }
     case 'buyin-answer': hostDo((t) => t.answerBuyIn(Number(el.dataset.id), el.dataset.yes === '1')); break;
-    case 'peek': send({ t: 'peek' }); break;
     case 'throw-open': openThrowPanel(el); break;
     case 'poop-dealer': send({ t: 'throw', item: 'poop', to: st.banker ? st.banker.id : 'house', paid: true }); el.closest('.badbeat')?.remove(); break;
     case 'view-reset': S.room?.home(); break;
