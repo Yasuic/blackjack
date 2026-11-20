@@ -1,13 +1,13 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120zm';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261120zm';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120zm';
-import { tickSound, winSound } from './fx.js?v=20261120zm';
-import * as HX from './history.js?v=20261120zm';
-import { webglOK, initRoom } from './room3d.js?v=20261120zm';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120zm';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120zs';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261120zs';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120zs';
+import { tickSound, winSound } from './fx.js?v=20261120zs';
+import * as HX from './history.js?v=20261120zs';
+import { webglOK, initRoom } from './room3d.js?v=20261120zs';
+import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120zs';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -1772,7 +1772,7 @@ function seatSpots(st) {
   const home = me ? me.home ?? me.seat : null;
   const mid = home !== null && home !== undefined && order.includes(home) ? order.indexOf(home) : order.length - 1 - Math.floor(order.length / 2);
   // The dealer looks at the table from the other side and has no seat there, so no seat is the big one.
-  return { order, mid, box, spots: seatLayout(order.length, mid, { ...box, noFocus: box.flip }) };
+  return { order, mid, box, spots: seatLayout(order.length, mid, { ...box, noFocus: box.flip || !box.phone }) };
 }
 const spotStyle = (p) => `--x:${p.x}%;--y:${p.y}%;--s:${p.s};--r:${p.r}deg;--hw:${p.hw}px;--hh:${p.hh}px${p.rz ? `;--rz:${p.rz}` : ''}${p.sw ? `;--sw:${p.sw}px` : ''}`;
 // The window changed size: applyZoom draws the table again when the felt itself changed.
@@ -1942,17 +1942,26 @@ function arcTextHTML(st, box) {
 // hands sit side by side with a gap (two rows when that keeps the cards larger), first hand on the
 // right. The card width shrinks until every hand fits. Room for a doubled card is always kept above.
 function handsHTML(st, s, i, mode, W, H) {
-  const B = HAND_BOX[mode];
+  let B = HAND_BOX[mode];
   const n = s.hands.length;
-  if (!n) return '<div class="hands"></div>';
+  if (!n) return mode === 'seat' && s.playerId === S.myId ? `<div class="hands" style="height:${Math.round(H * 1.45)}px"></div>` : '<div class="hands"></div>';
   const turn = st.turn && st.turn.seat === i && !(S.dealing && S.dealMany);
   // A small seat with three or four hands has no room for cards: it shows each hand's total, and a tap shows the cards large.
-  if ((mode === 'mini' || mode === 'seat') && n > 2) {
+  if (mode === 'mini' && n > 2) {
     return `<div class="hands totals-only">${s.hands.map((h, j) => `<div class="hand ${turn && st.turn.hand === j ? 'active' : ''}"><span class="total ${h.total > 21 ? 'bust' : ''} ${h.result ? 'r-' + h.result.toLowerCase() : ''}">${h.total}${h.doubled ? ' ×2' : ''}</span></div>`).join('')}<small>Tap to see the cards</small></div>`;
   }
   const units = s.hands.map((h) => fanUnits(h.cards.length, h.doubled));
   let best = null;
-  for (const rows of n > 2 ? [1, 2] : [1]) {
+  // A seat on the arc with three or four hands: two rows, and the box grows toward the dealer (the
+  // middle of the table is free), so the cards stay as large as with two hands.
+  const tall = mode === 'seat' && n > 2;
+  // My own seats have the same circle as everyone's, but their cards may reach further toward the
+  // dealer and be larger, as far as the width of the seat's lane allows.
+  const mineBig = mode === 'seat' && s.playerId === S.myId;
+  const B0 = B;
+  if (mineBig) { B = { ...B0, cwMax: 54 }; H = Math.round(H * 1.45); }
+  if (tall) H = H * 2 + 2;
+  for (const rows of tall ? [2] : n > 2 ? [1, 2] : [1]) {
     const per = Math.ceil(n / rows), meta = rows > 1 ? B.meta1 : B.meta;
     let cw = Math.min(B.cwMax, (H / rows - meta - 2) / 2.26);
     for (let r = 0; r < rows; r++) {
@@ -1995,7 +2004,7 @@ function handsHTML(st, s, i, mode, W, H) {
     </div>`;
   };
   const rowsHtml = Array.from({ length: rows }, (_, r) => `<div class="hrow">${s.hands.map((h, j) => (Math.floor(j / per) === r ? hand(h, j) : '')).join('')}</div>`).join('');
-  return `<div class="hands ${rows > 1 ? 'two-rows' : ''}">${rowsHtml}</div>`;
+  return `<div class="hands ${rows > 1 ? 'two-rows' : ''}" ${tall || mineBig ? `style="height:${H}px"` : ''}>${rowsHtml}</div>`;
 }
 
 // One seat on the felt. `spot` says where it goes and how it is drawn: 'focus' is your own big seat,
