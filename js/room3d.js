@@ -146,7 +146,7 @@ function buildOffice(signText) {
     chrome: mk({ color: '#b9bec4', roughness: 0.25, metalness: 0.9 }),
     screen: mk({ color: '#0d0f12', roughness: 0.25, metalness: 0.2 }),
     // What the office screens show: the ARC Group logo, from the photo of it, lit like a screen that is on.
-    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261120j'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
+    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261120k'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
     dark: mk({ color: '#30353c', roughness: 0.6 }),
   };
   const group = new THREE.Group();
@@ -354,6 +354,101 @@ function buildOffice(signText) {
   return group;
 }
 
+// ---------- The shop across the lane ----------
+// A Hong Kong siu mei shop outside the windows that the seated players face: a white signboard with
+// red brush lettering, a striped awning, and roast meats hanging behind the glass. Same units and
+// axes as the office. It is scenery only: nobody walks there and it casts no shadow.
+function buildStorefront() {
+  const group = new THREE.Group();
+  const lam = (color, glow = 0.35) => new THREE.MeshLambertMaterial({ color, emissive: color, emissiveIntensity: glow });
+  const lit = (color) => new THREE.MeshBasicMaterial({ color });
+  const tex = (file) => { const t = new THREE.TextureLoader().load(file); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t; };
+  const M = {
+    wall: lam('#c9c1b0'), wall2: lam('#b3ab9b'), pier: lam('#e9e4d8', 0.5), dark: lam('#3b3f45', 0.2), pane: lam('#5d7586', 0.3),
+    back: lit('#f6e3b4'), tile: lit('#e9efe6'), steel: lam('#c9ced3', 0.45), kerb: lam('#9aa0a6', 0.3),
+    siu: lam('#a3261a', 0.55), siuDark: lam('#6e160f', 0.45), goose: lam('#a8521a', 0.55), chicken: lam('#e0aa45', 0.55), crackle: lam('#d98a2b', 0.55), pork: lam('#e8c9a6', 0.5),
+    lamp: lam('#c8161d', 0.6), bulb: lit('#ffe9a8'), red: lit('#c8161d'), gold: lit('#f4c542'), wood: lam('#7a5234', 0.35),
+    glass: new THREE.MeshBasicMaterial({ color: '#dff3f7', transparent: true, opacity: 0.13, depthWrite: false }),
+    awning: new THREE.MeshBasicMaterial({ map: canvasTexture(512, 64, (g, w, h) => { for (let i = 0; i < 16; i++) { g.fillStyle = i % 2 ? '#fff6e6' : '#f08a1c'; g.fillRect((i * w) / 16, 0, w / 16 + 1, h); } }), side: THREE.DoubleSide }),
+    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261120k') }),
+    menu: new THREE.MeshBasicMaterial({ map: canvasTexture(256, 384, (g, w, h) => {
+      g.fillStyle = '#c8161d'; g.fillRect(0, 0, w, h); g.fillStyle = '#f4c542'; g.fillRect(14, 14, w - 28, 44);
+      const r = rng(11); g.fillStyle = '#fff3d6';
+      for (let i = 0; i < 9; i++) { g.fillRect(22, 84 + i * 32, 90 + r() * 70, 12); g.fillRect(w - 62, 84 + i * 32, 40, 12); }
+    }) }),
+  };
+  const buckets = new Map();
+  const unit = new THREE.BoxGeometry(1, 1, 1), ball = new THREE.SphereGeometry(1, 14, 10), cone = new THREE.CylinderGeometry(0.03, 0.13, 0.12, 14), rod = new THREE.CylinderGeometry(1, 1, 1, 8);
+  const Q = (rx, ry, rz) => new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, ry, rz));
+  const put = (geo, mat, x, y, z, sx, sy, sz, q = Q(0, 0, 0)) => {
+    const g = geo.toNonIndexed(); g.applyMatrix4(new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), q, new THREE.Vector3(sx, sy, sz)));
+    let b = buckets.get(mat); if (!b) buckets.set(mat, (b = []));
+    b.push(g);
+  };
+  const box = (w, h, d, mat, x, y, z, q) => put(unit, mat, x, y, z, w, h, d, q);
+
+  const Y0 = 11.3, F = -Y0;            // plan y of the shop front; the lane is about 3 m wide
+  const CX = -7.3, WID = 7.0, TOP = 2.3; // middle of the shop, its width, and the height of its opening
+  const L = CX - WID / 2, R = CX + WID / 2;
+  // The building: the shop's back wall, the floors above, the piers at both ends, the pavement.
+  box(WID + 1.4, 7.2, 2.6, M.wall2, CX, 3.6, F - 2.9);
+  box(WID + 1.4, 7.2 - TOP, 1.6, M.wall, CX, TOP + (7.2 - TOP) / 2, F - 0.8);
+  [L - 0.35, R + 0.35].forEach((x) => box(0.7, TOP, 1.6, M.pier, x, TOP / 2, F - 0.8));
+  box(WID, TOP, 0.02, M.back, CX, TOP / 2, F - 1.58);
+  box(WID, 0.02, 1.6, M.tile, CX, 0.13, F - 0.8);
+  box(WID + 3, 0.12, 1.5, M.kerb, CX, 0.06, F + 0.7);
+  for (let row = 0; row < 2; row++) for (let i = 0; i < 4; i++) {
+    const x = L + 0.9 + i * ((WID - 1.8) / 3), y = 4.35 + row * 1.55;
+    box(1.25, 1.05, 0.05, M.pane, x, y, F + 0.02); box(1.35, 0.06, 0.09, M.pier, x, y - 0.55, F + 0.03); box(0.04, 1.05, 0.07, M.pier, x, y, F + 0.03);
+    if (row && i % 2) box(0.55, 0.36, 0.32, M.steel, x + 0.3, y - 0.78, F + 0.17);
+  }
+  // The signboard over the awning, then the awning.
+  { const m = new THREE.Mesh(new THREE.PlaneGeometry(6.6, 1.03), M.sign); m.position.set(CX, 3.07, F + 0.09); group.add(m); }
+  box(6.8, 1.15, 0.08, M.pier, CX, 3.07, F + 0.04);
+  { const m = new THREE.Mesh(new THREE.PlaneGeometry(WID + 0.2, 0.95), M.awning); m.position.set(CX, 2.33, F + 0.42); m.rotation.x = -1.22; group.add(m); }
+  // Left of the door: the roast meat counter. A steel base, glass above it, a rail with hooks.
+  const A = R - 4.1, B = R - 0.15, mid = (A + B) / 2, len = B - A, zc = F - 0.3;
+  box(len, 0.95, 0.6, M.steel, mid, 0.6, zc); box(len, 0.05, 0.66, M.pier, mid, 1.1, zc);
+  box(len, 0.1, 0.12, M.red, mid, 0.5, zc + 0.31);
+  box(len, TOP - 1.12, 0.02, M.glass, mid, 1.12 + (TOP - 1.12) / 2, F - 0.02);
+  [A, mid, B].forEach((x) => box(0.05, TOP - 1.12, 0.05, M.steel, x, 1.12 + (TOP - 1.12) / 2, F - 0.02));
+  put(rod, M.steel, mid, 2.08, zc, 0.014, len, 0.014, Q(0, 0, Math.PI / 2));
+  const hook = (x, drop) => put(rod, M.steel, x, 2.08 - drop / 2, zc, 0.005, drop, 0.005);
+  const r = rng(23);
+  // Char siu: bunches of long dark red strips, each on its own hook.
+  [A + 0.3, A + 0.75, A + 1.2, A + 2.55].forEach((x0, k) => { for (let i = 0; i < 3; i++) { const x = x0 + (i - 1) * 0.105, h = 0.38 + r() * 0.12; hook(x, 0.1); put(ball, (i + k) % 3 ? M.siu : M.siuDark, x, 1.98 - h / 2, zc + (r() - 0.5) * 0.04, 0.045, h / 2, 0.035, Q(0, 0, (r() - 0.5) * 0.12)); } });
+  // Roast geese and soy chickens: a body, a neck up to the hook, two legs.
+  const bird = (x, mat, big) => { const h = big ? 0.27 : 0.21; hook(x, 0.08); put(rod, mat, x, 1.93, zc, 0.018, 0.16, 0.018); put(ball, mat, x, 1.86 - h, zc, big ? 0.15 : 0.125, h, 0.11); [-1, 1].forEach((sgn) => put(ball, mat, x + sgn * 0.09, 1.86 - h * 1.75, zc, 0.03, 0.07, 0.03)); };
+  [A + 1.62, A + 1.98, A + 2.2 + 0.72].forEach((x) => bird(x, M.goose, true));
+  [A + 3.3, A + 3.62].forEach((x) => bird(x, M.chicken, false));
+  // Crispy pork: a pale slab with a golden top edge, and one more on the counter with cut pieces.
+  hook(B - 0.16, 0.1); box(0.2, 0.5, 0.07, M.pork, B - 0.16, 1.73, zc); box(0.21, 0.5, 0.02, M.crackle, B - 0.16, 1.73, zc + 0.045);
+  box(0.9, 0.03, 0.4, M.steel, A + 0.75, 1.14, zc); box(0.45, 0.08, 0.2, M.pork, A + 0.6, 1.2, zc); box(0.45, 0.02, 0.2, M.crackle, A + 0.6, 1.25, zc);
+  for (let i = 0; i < 5; i++) put(ball, M.siu, A + 0.95 + i * 0.05, 1.19, zc + 0.02, 0.022, 0.03, 0.12);
+  put(rod, M.wood, B - 0.75, 1.21, zc, 0.2, 0.16, 0.2);
+  // Red heat lamps over the meat, price cards on the glass.
+  for (let i = 0; i < 4; i++) { const x = A + 0.55 + i * ((len - 1.1) / 3); put(rod, M.dark, x, 2.24, zc + 0.12, 0.006, 0.12, 0.006); put(cone, M.lamp, x, 2.14, zc + 0.12, 1, 1, 1); put(ball, M.bulb, x, 2.09, zc + 0.12, 0.045, 0.03, 0.045); }
+  for (let i = 0; i < 6; i++) box(0.2, 0.13, 0.004, i % 2 ? M.gold : M.red, A + 0.45 + i * 0.62, 1.24, F - 0.005);
+  // Right of the counter: the open door, a menu board on the pier, a table and stools inside.
+  { const m = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.75), M.menu); m.position.set(L - 0.35, 1.45, F + 0.012); group.add(m); }
+  { const m = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.75), M.menu); m.position.set(R + 0.35, 1.45, F + 0.012); group.add(m); }
+  [[L + 0.9, F - 1.0], [L + 2.1, F - 0.75]].forEach(([x, z]) => {
+    put(rod, M.wood, x, 0.86, z, 0.36, 0.03, 0.36); put(rod, M.steel, x, 0.5, z, 0.03, 0.72, 0.03);
+    [[-0.5, 0.1], [0.5, -0.1], [0, 0.5]].forEach(([dx, dz]) => { put(rod, M.red, x + dx, 0.58, z + dz, 0.14, 0.04, 0.14); put(rod, M.steel, x + dx, 0.35, z + dz, 0.02, 0.44, 0.02); });
+  });
+  box(1.5, 0.5, 0.02, M.red, L + 1.5, 1.95, F - 1.56); box(1.3, 0.06, 0.022, M.gold, L + 1.5, 2.02, F - 1.56); box(1.0, 0.05, 0.022, M.gold, L + 1.5, 1.88, F - 1.56);
+
+  for (const [mat, list] of buckets) {
+    let n = 0; list.forEach((g) => { n += g.attributes.position.count; });
+    const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), uv = new Float32Array(n * 2);
+    let o = 0; list.forEach((g) => { pos.set(g.attributes.position.array, o * 3); nor.set(g.attributes.normal.array, o * 3); uv.set(g.attributes.uv.array, o * 2); o += g.attributes.position.count; });
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3)); geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+    const m = new THREE.Mesh(geo, mat); if (mat === M.glass) m.renderOrder = 2; group.add(m);
+  }
+  return group;
+}
+
 export function initRoom(container, feltEl, { phone, pixel = false, hud = null, size = null } = {}) {
   // The felt keeps the size and shape its own style sheet gives it, so the 3D table always matches the
   // flat one: the height and the rounded end are read from the page, not fixed here. On a phone the felt
@@ -454,6 +549,9 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
   office.scale.setScalar(S);
   office.position.set(OFFICE_AT.x * S, FLOOR, OFFICE_AT.y * S);
   scene.add(office);
+  const shop = buildStorefront(); // added on its own, so the walking limits stay those of the office
+  shop.scale.copy(office.scale); shop.position.copy(office.position);
+  scene.add(shop);
   scene.background = new THREE.Color(0xd5dade);
   scene.add(new THREE.HemisphereLight(0xf4f1ea, 0x3a4048, 0.9));
   const sun = new THREE.DirectionalLight(0xffffff, 1.6);
