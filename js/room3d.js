@@ -146,7 +146,7 @@ function buildOffice(signText) {
     chrome: mk({ color: '#b9bec4', roughness: 0.25, metalness: 0.9 }),
     screen: mk({ color: '#0d0f12', roughness: 0.25, metalness: 0.2 }),
     // What the office screens show: the ARC Group logo, from the photo of it, lit like a screen that is on.
-    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261120k'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
+    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261120l'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
     dark: mk({ color: '#30353c', roughness: 0.6 }),
   };
   const group = new THREE.Group();
@@ -253,6 +253,18 @@ function buildOffice(signText) {
     const n = Math.max(1, Math.round(c.width / 0.45));
     for (let i = 1; i < n; i++) box(0.006, Hh.cab - 0.12, 0.004, M.frame, -(c.x + (c.width * i) / n), Hh.cab / 2, -c.y + 0.001, false);
     box(c.width, 0.006, 0.004, M.frame, -(c.x + c.width / 2), 0.9, -c.y + 0.001, false);
+    // Its doors, seen from the table: gray on the far left, then oak, then gray, then oak.
+    const doorMat = [mk({ color: '#9a9fa4', roughness: 0.6, emissive: '#9a9fa4', emissiveIntensity: 0.3 }), mk({ color: '#c8a06c', roughness: 0.55, emissive: '#c8a06c', emissiveIntensity: 0.3 })]; // this face is turned away from the sun, so it glows a little
+    for (let i = 0; i < n; i++) box(c.width / n - 0.008, Hh.cab - 0.02, 0.008, doorMat[(n - 1 - i) % 2], -(c.x + (c.width * (i + 0.5)) / n), Hh.cab / 2, -c.y + 0.004);
+    box(c.width, 0.006, 0.004, M.frame, -(c.x + c.width / 2), 0.9, -c.y + 0.009, false);
+    { // A very small egg shaped camera on the top left corner, looking at the table.
+      const X = -(c.x + c.width - 0.13), Z = -c.y - 0.1, top = Hh.cab;
+      cyl(0.03, 0.034, 0.012, 14, M.dark, X, top + 0.006, Z, false);
+      const egg = new THREE.Mesh(new THREE.SphereGeometry(1, 18, 14), mk({ color: '#f4f4f1', roughness: 0.35 }));
+      egg.scale.set(0.036, 0.05, 0.036); egg.position.set(X, top + 0.06, Z); group.add(egg);
+      const lens = new THREE.Mesh(new THREE.SphereGeometry(0.016, 12, 10), mk({ color: '#0b0c0f', roughness: 0.15, metalness: 0.4 }));
+      lens.position.set(X, top + 0.066, Z + 0.027); group.add(lens);
+    }
     if (signText) { // one plain name plate on the cupboard that faces the room
       const draw = (g, w, h) => {
         g.fillStyle = '#f4f2ee'; g.fillRect(0, 0, w, h);
@@ -370,7 +382,7 @@ function buildStorefront() {
     lamp: lam('#c8161d', 0.6), bulb: lit('#ffe9a8'), red: lit('#c8161d'), gold: lit('#f4c542'), wood: lam('#7a5234', 0.35),
     glass: new THREE.MeshBasicMaterial({ color: '#dff3f7', transparent: true, opacity: 0.13, depthWrite: false }),
     awning: new THREE.MeshBasicMaterial({ map: canvasTexture(512, 64, (g, w, h) => { for (let i = 0; i < 16; i++) { g.fillStyle = i % 2 ? '#fff6e6' : '#f08a1c'; g.fillRect((i * w) / 16, 0, w / 16 + 1, h); } }), side: THREE.DoubleSide }),
-    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261120k') }),
+    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261120l') }),
     menu: new THREE.MeshBasicMaterial({ map: canvasTexture(256, 384, (g, w, h) => {
       g.fillStyle = '#c8161d'; g.fillRect(0, 0, w, h); g.fillStyle = '#f4c542'; g.fillRect(14, 14, w - 28, 44);
       const r = rng(11); g.fillStyle = '#fff3d6';
@@ -859,8 +871,15 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
   // The open floor of the office, inside the glass walls, the cupboard and the cabinets. The camera stays in it.
   const BOUND = { x0: -(11.419 - OFFICE_AT.x - 0.35) * S, x1: (OFFICE_AT.x - 2.96 - 0.3) * S, z0: -(6.7455 - OFFICE_AT.y - 0.3) * S, z1: (OFFICE_AT.y - 0.381 - 0.3) * S };
   // Walking around: the whole office, every room, straight through the glass walls and doors.
-  const ALL = (() => { const b = new THREE.Box3().setFromObject(office), m = 0.25 * S; return { x0: b.min.x + m, x1: b.max.x - m, z0: b.min.z + m, z1: b.max.z - m }; })();
+  // The limits are the outer walls of the office: nobody walks out to the street.
+  const ALL = (() => { const m = 0.35; return { x0: (OFFICE_AT.x - OFFICE.width + m) * S, x1: (OFFICE_AT.x - OFFICE.bump.x - m) * S, z0: (OFFICE_AT.y - OFFICE.depth + m) * S, z1: (OFFICE_AT.y - m) * S }; })();
   let walking = false;
+  // The office is not a plain rectangle: beside the big board room, past the wall, is outdoors. Keep out of that corner too.
+  const CORNER = { x: (OFFICE_AT.x - 0.35) * S, z: (OFFICE_AT.y - OFFICE.bump.d + 0.35) * S };
+  const keepIn = (p) => {
+    p.x = Math.max(ALL.x0, Math.min(ALL.x1, p.x)); p.z = Math.max(ALL.z0, Math.min(ALL.z1, p.z));
+    if (p.x > CORNER.x && p.z < CORNER.z) { if (p.x - CORNER.x < CORNER.z - p.z) p.x = CORNER.x; else p.z = CORNER.z; }
+  };
   const outline = tableShape(W, H, RAIL + 26).getPoints(10).map((p) => new THREE.Vector3(p.x, 24, -p.y));
   // Your own cards must clear the buttons at the bottom; the padded rail in front of them may slip behind.
   const nearEdge = tableShape(W, H, RAIL * 0.42).getPoints(10).map((p) => new THREE.Vector3(p.x, 1, -p.y));
@@ -1009,7 +1028,7 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     panR.set(1, 0, 0).applyQuaternion(camera.quaternion); panR.y = 0; panR.normalize();
     panF.set(-panR.z, 0, panR.x).multiplyScalar(-1); // straight ahead along the floor
     goal.t.addScaledVector(panR, -dx * kp).addScaledVector(panF, dy * kp);
-    if (walking) { goal.t.x = Math.max(ALL.x0, Math.min(ALL.x1, goal.t.x)); goal.t.z = Math.max(ALL.z0, Math.min(ALL.z1, goal.t.z)); touch(); return; }
+    if (walking) { keepIn(goal.t); touch(); return; }
     const lim = homeFit.r * (seated ? 0.45 : 1);
     goal.t.x = Math.max(-lim, Math.min(lim, goal.t.x)); goal.t.z = Math.max(-lim, Math.min(lim, goal.t.z));
     touch();
@@ -1147,8 +1166,8 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     // Never under the table top, the floor or outside the walls, whatever the numbers above say.
     camera.position.y = Math.max(seated ? 120 * U : EYE, Math.min(FLOOR + 7.5 * S, camera.position.y));
     const lim = walking ? ALL : BOUND;
-    camera.position.x = Math.max(lim.x0, Math.min(lim.x1, camera.position.x));
-    camera.position.z = Math.max(lim.z0, Math.min(lim.z1, camera.position.z));
+    if (walking) keepIn(camera.position);
+    else { camera.position.x = Math.max(lim.x0, Math.min(lim.x1, camera.position.x)); camera.position.z = Math.max(lim.z0, Math.min(lim.z1, camera.position.z)); }
     tmp.copy(cur.t).sub(camera.position);
     const yaw0 = Math.atan2(-tmp.x, -tmp.z), pitch0 = Math.atan2(tmp.y, Math.hypot(tmp.x, tmp.z));
     camera.rotation.set(Math.max(-1.5, Math.min(0.6, pitch0 + cur.pitch)), yaw0 + cur.yaw, 0, 'YXZ');
