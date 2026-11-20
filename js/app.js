@@ -1,12 +1,12 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120h';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120h';
-import { tickSound, winSound } from './fx.js?v=20261120h';
-import * as HX from './history.js?v=20261120h';
-import { webglOK, initRoom } from './room3d.js?v=20261120h';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120h';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120i';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120i';
+import { tickSound, winSound } from './fx.js?v=20261120i';
+import * as HX from './history.js?v=20261120i';
+import { webglOK, initRoom } from './room3d.js?v=20261120i';
+import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120i';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -855,6 +855,8 @@ function roomPeople(st) {
     return { id: p.id, name: p.name, look: p.look || { skin: 2, hair: 0 }, seat, seats: st.seats.length, isMe: p.id === S.myId, isDealer,
       x: at[seat]?.x, y: at[seat]?.y, bet: seat !== null && st.seats[seat] ? betTotal(st.seats[seat].bet) : 0 };
   });
+  // The house dealer stands behind the table too, so someone is seen dealing the cards.
+  if (!st.banker && st.frozen) list.push({ id: 'house-dealer', name: 'Dealer', look: { skin: 2, hair: 0 }, seat: null, seats: st.seats.length, isMe: false, isDealer: true, bet: 0 });
   return [list, order.map((i, pos) => ({ seat: i, x: spots[pos].x, y: spots[pos].y }))];
 }
 function getZoom() { const z = Number(safeGet('bj-zoom')); return z >= 0.6 && z <= 1.6 ? z : 1; }
@@ -1380,6 +1382,7 @@ function runDealQueue() {
       const b = el.getBoundingClientRect();
       el.classList.remove('pending');
       cardSound();
+      S.room?.dealCard?.();
       if (!a) return;
       const dx = a.left + a.width / 2 - (b.left + b.width / 2);
       const dy = a.top + a.height / 2 - (b.top + b.height / 2);
@@ -1513,7 +1516,7 @@ function phoneLayout(n, c, { W, H, flip, noFocus, pct, in3d }) {
   const lane = W - (left || right ? 2 * (B.mw + B.side + inset(ybSide)) + 8 : 16);
   const dealerH = H < 500 ? 96 : 112, laneH = 74;
   const ring = Math.round(Math.max(96, Math.min(curve ? 150 : lane - 8, H * 0.27, 150))); // in the 3D room the side seats stop above the circle
-  const hh = Math.round(Math.max(64, H - B.bottom - B.who - 8 - ring - dealerH - laneH));
+  const hh = Math.round(Math.max(64, H - B.bottom - (curve ? 20 : 0) - B.who - 8 - ring - dealerH - laneH));
   const yb = ybSide;
   const col = (count, x0, posOf) => {
     if (!count) return;
@@ -1523,7 +1526,7 @@ function phoneLayout(n, c, { W, H, flip, noFocus, pct, in3d }) {
   };
   col(left, B.side + B.mw / 2, (k) => c - 1 - k);
   col(right, W - B.side - B.mw / 2, (k) => c + 1 + k);
-  out[c] = { x: 50, y: pct(H - B.bottom, H), s: 1, r: 0, mode: 'focus', phone: true, hw: lane, hh, rz: Math.round((ring / 160) * 1000) / 1000, sw: lane };
+  out[c] = { x: 50, y: pct(H - B.bottom - (curve ? 20 : 0), H), s: 1, r: 0, mode: 'focus', phone: true, hw: lane, hh, rz: Math.round((ring / 160) * 1000) / 1000, sw: lane };
   return out;
 }
 function seatSpots(st) {
@@ -1779,7 +1782,7 @@ function seatHTML(st, s, i, focus, spot) {
   let bets;
   if (mini) {
     const side = Object.values(s.bet.sides || {}).reduce((a, b) => a + b, 0);
-    bets = `<div class="mini-bet" id="spot-${i}">${shownBet ? `<span class="chipv hb-chip ${chipClass(shownBet)}"></span><b>${money(shownBet)}</b>` : '<span class="mini-ring"></span>'}${side ? `<small title="Side bets">+${money(side)}</small>` : ''}${s.insurance ? '<small>Ins</small>' : ''}</div>`;
+    bets = `<div class="mini-bet"><span class="mb-chip" id="spot-${i}">${shownBet ? `<span class="chipv hb-chip ${chipClass(shownBet)}"></span>` : '<span class="mini-ring"></span>'}</span>${shownBet ? `<b>${money(shownBet)}</b>` : ''}${side ? `<small title="Side bets">+${money(side)}</small>` : ''}${s.insurance ? '<small>Ins</small>' : ''}</div>`;
   } else bets = spotAreaHTML(st, s, i, isMe, shownBet);
   const many = mode === 'seat' && s.hands.length > 2;
   return `<div class="seat ${cls} ${many ? 'many' : ''} ${hot} ${isMe ? 'me' : ''} ${turn ? 'turn' : ''} ${s.connected ? '' : 'away'}" id="seat-${i}" ${place} ${mini || many ? 'title="Tap to see this seat large"' : ''}>

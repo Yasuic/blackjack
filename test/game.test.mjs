@@ -466,6 +466,7 @@ const da = t.players.a.chips, dd = t.players.d.chips;
   assert.equal(t.players.b.chips, 500); assert.equal(t.shoe.length, left); assert.equal(t.hist.length, n);
   const h = t.hist[n - 1];
   assert.equal(h.frozen, true); assert.equal(h.seats[0].auto, true); assert.equal(h.seats[1].auto, undefined);
-  assert.ok(h.events.some((e) => /auto play/.test(e.k)));
+  // A blackjack ends the hand with no move, so the auto mark on a move is only there when Ann had to act.
+  assert.ok(h.events.every((e) => e.who !== 'Ann' || !/^(hit|stand|double|split)/.test(e.k) || /auto play/.test(e.k)));
   console.log('ok frozen reset');
 }

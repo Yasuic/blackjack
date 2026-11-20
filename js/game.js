@@ -8,7 +8,7 @@ export const DEFAULT_SETTINGS = {
   seats: 7,              // player seats at the table (any whole number from 1 up)
   decks: 6,              // 1, 2, 6, 8, or 'csm' (randomized: full reshuffle before every round)
   shuffleMode: 'penetration', // 'penetration' or 'rounds'
-  penetration: 75,       // reshuffle once this % of the shoe has been dealt
+  penetration: 85,       // reshuffle once this % of the shoe has been dealt
   shuffleEvery: 5,       // or reshuffle every N rounds
   startChips: 1000,
   minBet: 10,

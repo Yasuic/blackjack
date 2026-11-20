@@ -1393,3 +1393,48 @@ body.room3d .felt .spot-amt { pointer-events: none; }
 .auto-bar .seat-tab { padding: 3px 9px; }
 .auto-bar.on span { color: #ffe9a8; font-weight: 700; }
 .auto-bar .stop { border-color: #ff9b9b; color: #ffb4b4; }
+
+/* Seen from the dealer's own side, the shoe is still on the dealer's left and the discard tray on the right. */
+.felt.flip > .shoe-box { right: auto; left: 26px; align-items: flex-start; }
+.felt.flip > .shoe-box .shoe-info { text-align: left; }
+.felt.flip > .discard-box { left: auto; right: 30px; }
+
+/* ---- Phone, 3D room, upright: the table takes the full width and nothing lies on top of it. ----
+   Top: one thin row with the view buttons and the balance. Bottom: one dock with the status line,
+   the chips, the bet buttons and "Deal me in". The table is drawn in the space between them. */
+@media (max-width: 700px) and (orientation: portrait) {
+  body.room3d.in-room .hud-bar > .zoom-ctl { right: 128px; grid-template-columns: 1fr 34px 1fr 30px 30px; gap: 2px; padding: 2px; }
+  body.room3d .zoom-ctl button { height: 28px; }
+  body.room3d .zoom-ctl .view-btn { font-size: 0; }
+  body.room3d .zoom-ctl .view-btn::before { font-size: 13px; content: '◀'; }
+  body.room3d .zoom-ctl [data-d="-1"].view-btn::before { content: '▶'; }
+  body.room3d .zoom-ctl .view-reset::before { content: '⟲'; font-size: 15px; }
+  body.room3d.in-room .float-balance { top: calc(var(--topbar-h, 52px) + 42px); right: 6px; width: 116px; height: 32px; box-sizing: border-box; justify-content: center; padding: 0 6px; }
+  body.room3d.in-room .hud3d .tray:has(.chip-rack) { position: static; transform: none; width: 100%; max-width: none; padding: 2px 4px; gap: 4px; pointer-events: auto; order: 1; }
+  body.room3d .hud3d { gap: 3px; }
+  body.room3d .hud3d .hud-top { display: contents; }
+  body.room3d .hud3d .status { order: 0; align-self: center; }
+  body.room3d .hud3d .deal-me-in { order: 2; align-self: center; }
+  body.room3d .hud3d .felt-actions.hud { order: 3; }
+  body.room3d.in-room .hud3d .tray:not(:has(.chip-rack)) { order: 1; }
+  body.room3d.in-room .hud3d .tray:has(.chip-rack) .tray-row { gap: 4px; }
+  body.room3d.in-room .hud3d .tray .chip-rack .chipv { width: 42px; height: 42px; }
+  body.room3d.in-room .hud3d .tray .chip-rack .icon-btn { width: 40px; height: 40px; }
+  body.room3d.in-room .hud3d .tray:has(.chip-rack) .actions .btn { padding: 5px 9px; font-size: 12px; }
+  body.room3d .hud3d .deal-btn { font-size: 16px; padding: 8px 30px; }
+}
+
+.mini-bet .mb-chip { display: inline-flex; align-items: center; justify-content: center; }
+/* 3D room: the real chip stack stands where the small chip picture was, with the amount beside it. */
+.felt.in3d .mini-bet .mb-chip { width: 24px; height: 16px; }
+.felt.in3d .mini-bet .mb-chip > .chipv { visibility: hidden; }
+.felt.in3d .mini-bet { gap: 6px; }
+@media (max-width: 700px) and (orientation: portrait) {
+  body.room3d .hud3d::before { content: ''; position: absolute; left: -50vw; right: -50vw; top: -10px; bottom: -40px; z-index: -1; pointer-events: none; background: linear-gradient(180deg, rgba(8,10,14,0), rgba(8,10,14,.82) 26px, rgba(8,10,14,.92)); }
+}
+@media (max-width: 700px) and (orientation: portrait) {
+  /* Your odds line stays as narrow as your cards, so it never reaches over the seats beside you. */
+  body.room3d .seat.pfocus .odds .odds-sep, body.room3d .seat.pfocus .odds .odds-sep + small, body.room3d .seat.pfocus .odds .fav-tag { display: none; }
+  /* One Rebet button is enough: the big one. */
+  body.room3d .hud3d:has(.deal-me-in .rebet-btn) .tray .actions .rebet-btn { display: none; }
+}

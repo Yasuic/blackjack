@@ -145,6 +145,8 @@ function buildOffice(signText) {
     chairMesh: mk({ color: '#3a4048', roughness: 0.9 }),
     chrome: mk({ color: '#b9bec4', roughness: 0.25, metalness: 0.9 }),
     screen: mk({ color: '#0d0f12', roughness: 0.25, metalness: 0.2 }),
+    // What the office screens show: the ARC Group logo, from the photo of it, lit like a screen that is on.
+    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261120i'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
     dark: mk({ color: '#30353c', roughness: 0.6 }),
   };
   const group = new THREE.Group();
@@ -335,7 +337,7 @@ function buildOffice(signText) {
       if (alongX) { px += back; py += k * gap; } else { py += back; px += k * gap; }
       const fx = -(alongX ? sgn : 0), fz = -(alongX ? 0 : sgn);
       parent = at(-px, Hh.desk, -py, Math.atan2(fx, fz) + Math.PI + k * 0.12 * (alongX ? 1 : -1) * sgn);
-      box(0.54, 0.33, 0.025, M.screen, 0, 0.33, 0); box(0.04, 0.2, 0.03, M.leg, 0, 0.1, 0.03); box(0.22, 0.012, 0.18, M.leg, 0, 0, 0.03, false);
+      box(0.54, 0.33, 0.025, M.screen, 0, 0.33, 0); box(0.51, 0.3, 0.003, M.logo, 0, 0.33, -0.0125, false); box(0.04, 0.2, 0.03, M.leg, 0, 0.1, 0.03); box(0.22, 0.012, 0.18, M.leg, 0, 0, 0.03, false);
       parent = null;
     });
   });
@@ -624,6 +626,8 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
         f.userData.bet = oldBets.has(p.id) ? oldBets.get(p.id) : (p.bet || 0);
         people.add(f);
         figs.set(p.id, f);
+        f.userData.isDealer = !!p.isDealer;
+        f.userData.armY = f.userData.arms[1].position.y;
         if (p.isMe) myFig = f;
       }
       // Everyone but you. From your own chair the nearest of them fill the bottom corners of the screen,
@@ -772,7 +776,9 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     const w = container.clientWidth || 1, h = container.clientHeight || 1;
     const sgn = side === 'dealer' ? -1 : 1;
     const bottom = -1 + (2 * Math.min(hudReserve, h * 0.42) + 8) / h; // lowest the table may reach, in screen units (-1 bottom, 1 top)
-    const topMax = 1 - 2 * (w < 600 ? 118 : Math.min(34, h * 0.05)) / h, sideMax = 1 - (w < 600 ? 10 : 16) / w;
+    // An upright phone: the table is as wide as the screen. Its padded rail may run off both sides, the felt may not.
+    const tall = w < 600 && h > w * 1.2;
+    const topMax = 1 - 2 * (w < 600 ? (tall ? 86 : 118) : Math.min(34, h * 0.05)) / h, sideMax = tall ? 1.15 : 1 - (w < 600 ? 10 : 16) / w;
     probe.fov = camera.fov; probe.aspect = w / h; probe.near = 10; probe.far = 12000; probe.updateProjectionMatrix();
     const box = (phi, r, tz) => {
       probe.position.set(0, r * Math.cos(phi), sgn * (tz + r * Math.sin(phi)));
@@ -792,7 +798,8 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     if (leanR) return { phi: homeFit.phi, r: leanR, tz: align(homeFit.phi, leanR) };
     let best = null;
     // Start low, like sitting at the table, and look from higher only when the screen is tall and narrow.
-    for (let phi = 0.64; phi >= 0.34; phi -= 0.06) {
+    // An upright phone looks from higher up, so the far seats stay large enough to read.
+    for (let phi = tall ? 0.5 : 0.64; phi >= (tall ? 0.26 : 0.34); phi -= 0.06) {
       let rLo = 300, rHi = 9000, tzAt = 0;
       for (let i = 0; i < 16; i++) {
         const r = (rLo + rHi) / 2;
@@ -1021,6 +1028,14 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
         u.arms[1].rotation.x = -0.5 * a; u.arms[1].position.z = 34 * a;
         dirty = Math.max(dirty, 2);
       }
+      // The dealer's left hand goes to the shoe and brings the card out over the table, once for each card.
+      if (u.deal > 0) {
+        u.deal = Math.max(0, u.deal - dt / 0.34);
+        // First half: the hand swings out to the shoe on the dealer's left. Second half: it comes back over the felt with the card.
+        const q = 1 - u.deal, a = Math.sin(q * Math.PI), out = Math.sin(Math.min(1, q * 2) * Math.PI), arm = u.arms[1];
+        arm.rotation.y = 0.95 * out; arm.rotation.x = -0.75 * a; arm.position.z = 46 * a; arm.position.y = u.armY + 10 * a;
+        dirty = Math.max(dirty, 2);
+      }
     }
     if (dirty <= 0) return;
     dirty--;
@@ -1034,6 +1049,8 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     camera.rotation.set(Math.max(-1.5, Math.min(0.6, pitch0 + cur.pitch)), yaw0 + cur.yaw, 0, 'YXZ');
     // In your own chair you see your body, arms and stool when you look down, but no head in front of your eyes.
     if (myFig) for (const part of myFig.userData.headParts) part.visible = !seated;
+    // On an upright phone your own body would cover your cards and your name, so it is left out.
+    if (myFig) myFig.visible = !(seated && container.clientWidth < 600 && container.clientHeight > container.clientWidth * 1.2);
     // From your chair, anything that would be drawn in the bottom quarter of the screen is in your way:
     // a neighbour's arms, their chips, or your own rack under the buttons. It comes back as soon as you
     // turn your head or stand up.
@@ -1085,6 +1102,10 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     look,
     setPeople,
     setChips,
+    // One card leaves the shoe: the dealer's hand moves with it.
+    dealCard() { for (const f of figs.values()) if (f.userData.isDealer) { f.userData.deal = 1; touch(); } },
+    // For tests only: the drawing parts, so a test can look at one spot of the room.
+    dbg: () => ({ gl, scene, camera, figs }),
     setPixel(on) { pixelOn = !!on; applyPixel(); },
     // For checks and tests: where the camera is and how fast the room is drawing.
     info: () => ({ calls: gl.info.render.calls, triangles: gl.info.render.triangles, fps, seated, side, pos: camera.position.toArray().map(Math.round), yaw: cur.yaw, r: Math.round(cur.r), home: homeFit && Math.round(homeFit.r), people: figs.size }),
