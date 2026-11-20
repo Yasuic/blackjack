@@ -1,12 +1,12 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120m';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120m';
-import { tickSound, winSound } from './fx.js?v=20261120m';
-import * as HX from './history.js?v=20261120m';
-import { webglOK, initRoom } from './room3d.js?v=20261120m';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120m';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120n';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120n';
+import { tickSound, winSound } from './fx.js?v=20261120n';
+import * as HX from './history.js?v=20261120n';
+import { webglOK, initRoom } from './room3d.js?v=20261120n';
+import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120n';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -1275,6 +1275,7 @@ function render(note) {
   // Move buttons wait until the cards being dealt have landed.
   const watching = !myInfo(st).seat && !myInfo(st).isBanker; // someone watching always keeps their line and the ask for a seat
   const inTray = between || !S.room || watching;
+  drawSitOut(st);
   setHTML(tray, autoBarHTML(st) + (inTray ? (between || !S.dealing || watching ? trayHTML(st) : '') + sideResultsHTML(st) : ''));
   setHTML($('#felt-actions'), inTray || S.dealing ? '' : trayHTML(st));
   // The round result stays up until the cards are cleared.
@@ -1886,9 +1887,7 @@ function seatHTML(st, s, i, focus, spot) {
   const hands = handsHTML(st, s, i, mini ? 'mini' : spot.phone ? 'pfocus' : mode === 'seat' ? 'seat' : 'focus', spot.hw, spot.hh);
   // What the seat won or lost this round, beside its chips on the name plate.
   const net = st.phase === 'settled' && s.net && s.hands.length && !S.dealing ? ` <i class="net-in ${s.net > 0 ? 'up' : 'down'}">${signed(s.net)}</i>` : '';
-  const ready = s.out ? (s.playerId === S.myId ? '' : '<span class="ready-tag out-tag">Sitting out</span>') : st.phase === 'betting' && s.ready ? '<span class="ready-tag">Ready</span>' : '';
-  // Each of your own seats always has its sit out button. A seat that sits out keeps its place and is dealt no cards.
-  const outBtn = isMe ? `<button class="seat-out ${s.out ? 'on' : ''}" data-act="sit-out" data-seat="${i}" data-on="${s.out ? 0 : 1}" title="${s.out ? 'Play this seat again from the next round' : s.hands.length ? 'Skip the next rounds on this seat. This hand is still played.' : 'Skip rounds on this seat. You keep the seat.'}">${s.out ? 'Sit back in' : 'Sit out'}</button>` : '';
+  const ready = s.out ? '<span class="ready-tag out-tag">Sitting out</span>' : st.phase === 'betting' && s.ready ? '<span class="ready-tag">Ready</span>' : '';
   const mineN = isMe ? (st.players.find((p) => p.id === S.myId)?.seats || []).length : 0;
   const inHand = isMe && mineN > 1 && st.players.find((p) => p.id === S.myId)?.seat === i;
   const shownBet = s.hands.length > 1 ? s.bet.main : s.hands.length ? s.hands[0].bet : s.bet.main;
@@ -1899,10 +1898,10 @@ function seatHTML(st, s, i, focus, spot) {
     bets = `<div class="mini-bet"><span class="mb-chip" id="spot-${i}">${shownBet ? `<span class="chipv hb-chip ${chipClass(shownBet)}"></span>` : '<span class="mini-ring"></span>'}</span>${shownBet ? `<b>${money(shownBet)}</b>` : ''}${side ? `<small title="Side bets">+${money(side)}</small>` : ''}${s.insurance ? '<small>Ins</small>' : ''}</div>`;
   } else bets = spotAreaHTML(st, s, i, isMe, shownBet);
   const many = mode === 'seat' && s.hands.length > 2;
-  return `<div class="seat ${cls} ${many ? 'many' : ''} ${hot} ${isMe ? 'me' : ''} ${turn ? 'turn' : ''} ${inHand ? 'inhand' : ''} ${s.out ? 'out' : ''} ${s.connected ? '' : 'away'}" ${inHand ? `data-inhand="${st.phase === 'playing' || st.phase === 'insurance' ? 'Playing' : 'Betting here'}"` : ''} id="seat-${i}" ${place} ${mini || many ? 'title="Tap to see this seat large"' : ''}>
+  return `<div class="seat ${cls} ${many ? 'many' : ''} ${hot} ${isMe ? 'me' : ''} ${turn ? 'turn' : ''} ${inHand ? 'inhand' : ''} ${s.out ? 'out' : ''} ${s.connected ? '' : 'away'}" id="seat-${i}" ${place} ${mini || many ? 'title="Tap to see this seat large"' : ''}>
     ${hands}
     ${bets}
-    <div class="who" ${isMe ? '' : `data-throw-at="${s.playerId}" title="Tap to throw something at ${esc(s.name)}"`}><span class="name">${s.streak >= 3 ? `<span class="fire">🔥</span>${s.streak} ` : ''}${s.playerId === st.hostId ? '♛ ' : ''}${esc(s.name)}${isMe ? ' (you)' : ''}${s.connected ? '' : ' (away)'}</span><span class="chips">${money(s.chips)}${net}</span>${ready}${outBtn}</div>
+    <div class="who" ${isMe ? '' : `data-throw-at="${s.playerId}" title="Tap to throw something at ${esc(s.name)}"`}><span class="name">${s.streak >= 3 ? `<span class="fire">🔥</span>${s.streak} ` : ''}${s.playerId === st.hostId ? '♛ ' : ''}${esc(s.name)}${isMe ? ' (you)' : ''}${s.connected ? '' : ' (away)'}</span><span class="chips">${money(s.chips)}${net}</span>${ready}</div>
   </div>`;
 }
 
@@ -2048,6 +2047,21 @@ function askOutHTML(st) {
 // Practice only (frozen ledger): the table can bet and play your seats by itself with basic strategy.
 // It looks at your cards and the dealer's up card, nothing else. It never uses a count.
 const AUTO_SPEEDS = { slow: 2600, normal: 1300, fast: 450 };
+// Sit out: one button for each of your own seats, always there, kept off the table so nothing covers it.
+// A seat that sits out keeps its place, gets no cards, and nobody waits for it.
+function sitOutHTML(st) {
+  const me = st.players.find((p) => p.id === S.myId);
+  const mine = (me?.seats || []).filter((i) => st.seats[i]);
+  if (!mine.length || st.banker?.id === S.myId) return '';
+  return mine.map((i) => { const o = st.seats[i].out; return `<button class="seat-out ${o ? 'on' : ''}" data-act="sit-out" data-seat="${i}" data-on="${o ? 0 : 1}" title="${o ? 'Play this seat again from the next round' : 'Skip rounds on this seat. You keep the seat, and a hand in play is still finished.'}">${mine.length > 1 ? `Seat ${i + 1}: ` : ''}${o ? 'Sit back in' : 'Sit out'}</button>`; }).join('');
+}
+function drawSitOut(st) {
+  let el = $('#sitout-bar');
+  if (el && !el.isConnected) el = null;
+  if (!el) { el = document.createElement('div'); el.id = 'sitout-bar'; app.appendChild(el); }
+  const h = st ? sitOutHTML(st) : '';
+  if (el.dataset.h !== h) { el.dataset.h = h; el.innerHTML = h; }
+}
 function autoBarHTML(st) {
   const { seat, isBanker } = myInfo(st);
   if (!st.frozen || !seat || isBanker) return '';

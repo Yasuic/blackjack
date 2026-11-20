@@ -1453,14 +1453,19 @@ body.room3d .room.walking { cursor: move; }
 /* Away from the table the chips and bet buttons are put away. */
 body.room3d:has(.room.walking) .hud3d .tray:has(.chip-rack), body.room3d:has(.room.walking) .hud3d .deal-me-in { display: none; }
 
-/* Sit out: a small button on each of your own seats, always there. */
-.who .seat-out { position: absolute; left: -6px; top: -19px; font: 700 10.5px/1.5 inherit; font-family: inherit; padding: 0 7px; border-radius: 999px; border: 1px solid rgba(255,255,255,.35); background: #1a2029; color: #e8ecf1; cursor: pointer; white-space: nowrap; z-index: 3; }
-.who .seat-out:hover { border-color: var(--gold); color: var(--gold); }
-.who .seat-out.on { background: var(--gold); color: #1b1300; border-color: var(--gold); }
-.seat.mini .who .seat-out { left: 0; top: -30px; font-size: 9.5px; padding: 0 5px; }
+/* Sit out: one button per own seat in a small stack at the left edge of the screen, off the table. */
+#sitout-bar { position: fixed; left: 14px; bottom: 208px; z-index: 40; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+#sitout-bar:empty { display: none; }
+#sitout-bar .seat-out { font: inherit; font-weight: 700; font-size: 13px; padding: 7px 12px; border-radius: 12px; border: 1px solid var(--line); background: rgba(12,15,20,.92); color: var(--text); cursor: pointer; white-space: nowrap; }
+#sitout-bar .seat-out:hover { border-color: var(--gold); color: var(--gold); }
+#sitout-bar .seat-out.on { background: var(--gold); color: #1b1300; border-color: var(--gold); }
+@media (min-width: 701px) and (max-width: 1180px) { body.in-room #sitout-bar { bottom: 336px; } }
+@media (max-width: 700px) {
+  /* A phone has no free edge beside the table: the buttons go in one row under the top buttons. */
+  #sitout-bar, body.in-room #sitout-bar { left: 8px; right: 8px; bottom: auto; top: 92px; flex-direction: row; flex-wrap: wrap; gap: 4px; pointer-events: none; }
+  #sitout-bar .seat-out { font-size: 11px; padding: 3px 8px; border-radius: 999px; pointer-events: auto; }
+}
 .who .ready-tag.out-tag { background: #3a2a10; border-color: #c9a24a; color: #f2d58a; }
 .seat.out .hands, .seat.out .spot-area, .seat.out .mini-bet { opacity: .45; }
 /* More than one seat: nothing moves when the turn changes. The seat being played gets a bright ring. */
 .seat.inhand .who { box-shadow: 0 0 0 2px var(--gold), 0 0 16px rgba(242,201,76,.75); }
-.seat.inhand::after { content: attr(data-inhand); position: absolute; left: 50%; bottom: 100%; transform: translateX(-50%); font: 800 10px/1.6 inherit; font-family: inherit; letter-spacing: .08em; text-transform: uppercase; padding: 0 8px; border-radius: 999px; background: var(--gold); color: #1b1300; pointer-events: none; white-space: nowrap; }
-.seat:not(.mini) > .who .seat-out { left: auto; right: 100%; top: 50%; transform: translateY(-50%); margin-right: 6px; }
