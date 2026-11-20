@@ -146,7 +146,7 @@ function buildOffice(signText) {
     chrome: mk({ color: '#b9bec4', roughness: 0.25, metalness: 0.9 }),
     screen: mk({ color: '#0d0f12', roughness: 0.25, metalness: 0.2 }),
     // What the office screens show: the ARC Group logo, from the photo of it, lit like a screen that is on.
-    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261120i'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
+    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261120j'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
     dark: mk({ color: '#30353c', roughness: 0.6 }),
   };
   const group = new THREE.Group();
@@ -385,7 +385,7 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
   gl.toneMapping = THREE.ACESFilmicToneMapping;
   gl.toneMappingExposure = 1.05;
   gl.shadowMap.enabled = true;
-  gl.shadowMap.type = THREE.PCFSoftShadowMap;
+  gl.shadowMap.type = phone ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap; // the plainer shadow is cheaper on a phone
   gl.outputColorSpace = THREE.SRGBColorSpace;
   gl.domElement.className = 'room-gl';
   container.append(css.domElement, gl.domElement);
@@ -760,6 +760,9 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
   const EYE = 340 * U; // lowest the camera goes when walking around: standing eye height, above the table top
   // The open floor of the office, inside the glass walls, the cupboard and the cabinets. The camera stays in it.
   const BOUND = { x0: -(11.419 - OFFICE_AT.x - 0.35) * S, x1: (OFFICE_AT.x - 2.96 - 0.3) * S, z0: -(6.7455 - OFFICE_AT.y - 0.3) * S, z1: (OFFICE_AT.y - 0.381 - 0.3) * S };
+  // Walking around: the whole office, every room, straight through the glass walls and doors.
+  const ALL = (() => { const b = new THREE.Box3().setFromObject(office), m = 0.25 * S; return { x0: b.min.x + m, x1: b.max.x - m, z0: b.min.z + m, z1: b.max.z - m }; })();
+  let walking = false;
   const outline = tableShape(W, H, RAIL + 26).getPoints(10).map((p) => new THREE.Vector3(p.x, 24, -p.y));
   // Your own cards must clear the buttons at the bottom; the padded rail in front of them may slip behind.
   const nearEdge = tableShape(W, H, RAIL * 0.42).getPoints(10).map((p) => new THREE.Vector3(p.x, 1, -p.y));
@@ -829,6 +832,7 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     touch();
   }
   function home(animate) {
+    walking = false; container.classList.remove('walking');
     seated = true; goal.yaw = 0; goal.pitch = 0; rate = 4.5;
     seatGoal(animate);
     container.classList.add('seated');
@@ -839,7 +843,7 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     goal.r = Math.max(goal.r, homeFit.r * 1.12);
     container.classList.remove('seated');
   }
-  const rMin = () => homeFit.r * 0.45;
+  const rMin = () => homeFit.r * (walking ? 0.3 : 0.45);
   const rMax = () => Math.max(homeFit.r * 1.6, 5.4 * S);
   function clampGoal() {
     if (seated) {
@@ -897,7 +901,7 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     if ((e.button > 0 && e.button !== 2) || e.target.closest(interactive)) return;
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     // Left button (or one finger) turns the view. Right button slides the view across the room.
-    if (pointers.size === 1) drag = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: false, pan: e.button === 2 };
+    if (pointers.size === 1) drag = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: false, pan: (e.button === 2) !== walking }; // walking: a plain drag moves you, the right button turns
     else if (pointers.size === 2) { const [a, b] = [...pointers.values()]; pinch = Math.hypot(a.x - b.x, a.y - b.y); mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }; drag = null; container.classList.remove('dragging'); }
   });
   // The room follows the hand: drag right and the table moves right, drag down and it comes nearer.
@@ -907,6 +911,7 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     panR.set(1, 0, 0).applyQuaternion(camera.quaternion); panR.y = 0; panR.normalize();
     panF.set(-panR.z, 0, panR.x).multiplyScalar(-1); // straight ahead along the floor
     goal.t.addScaledVector(panR, -dx * kp).addScaledVector(panF, dy * kp);
+    if (walking) { goal.t.x = Math.max(ALL.x0, Math.min(ALL.x1, goal.t.x)); goal.t.z = Math.max(ALL.z0, Math.min(ALL.z1, goal.t.z)); touch(); return; }
     const lim = homeFit.r * (seated ? 0.45 : 1);
     goal.t.x = Math.max(-lim, Math.min(lim, goal.t.x)); goal.t.z = Math.max(-lim, Math.min(lim, goal.t.z));
     touch();
@@ -978,7 +983,8 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     const w = container.clientWidth, h = container.clientHeight;
     if (!w || !h) return;
     // Pixel look: draw the room small and let the browser blow it up without smoothing.
-    gl.setPixelRatio(pixelOn ? 1 / (Math.min(w, h) < 520 ? 3 : 4) : Math.min(2, devicePixelRatio || 1));
+    // A phone draws at one and a half times its screen points at most: sharp enough, and far fewer pixels to fill each frame.
+    gl.setPixelRatio(pixelOn ? 1 / (Math.min(w, h) < 520 ? 3 : 4) : Math.min(Math.min(w, h) < 520 ? 1.5 : 2, devicePixelRatio || 1));
     gl.setSize(w, h);
     gl.domElement.classList.toggle('pixel', pixelOn);
     touch();
@@ -1042,8 +1048,9 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     posFor(cur, camera.position);
     // Never under the table top, the floor or outside the walls, whatever the numbers above say.
     camera.position.y = Math.max(seated ? 120 * U : EYE, Math.min(FLOOR + 7.5 * S, camera.position.y));
-    camera.position.x = Math.max(BOUND.x0, Math.min(BOUND.x1, camera.position.x));
-    camera.position.z = Math.max(BOUND.z0, Math.min(BOUND.z1, camera.position.z));
+    const lim = walking ? ALL : BOUND;
+    camera.position.x = Math.max(lim.x0, Math.min(lim.x1, camera.position.x));
+    camera.position.z = Math.max(lim.z0, Math.min(lim.z1, camera.position.z));
     tmp.copy(cur.t).sub(camera.position);
     const yaw0 = Math.atan2(-tmp.x, -tmp.z), pitch0 = Math.atan2(tmp.y, Math.hypot(tmp.x, tmp.z));
     camera.rotation.set(Math.max(-1.5, Math.min(0.6, pitch0 + cur.pitch)), yaw0 + cur.yaw, 0, 'YXZ');
@@ -1103,6 +1110,16 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     setPeople,
     setChips,
     // One card leaves the shoe: the dealer's hand moves with it.
+    // Walk mode: leave the chair and move through the whole office. A drag moves you, two fingers or the
+    // right button turn and zoom. Reset view takes you back to your seat.
+    walk(on) {
+      if (!on) { home(true); return false; }
+      standUp(); walking = true; container.classList.add('walking');
+      goal.r = homeFit.r * 0.7; goal.phi = 1.05; rate = 4.5;
+      clampGoal(); touch();
+      return true;
+    },
+    walking: () => walking,
     dealCard() { for (const f of figs.values()) if (f.userData.isDealer) { f.userData.deal = 1; touch(); } },
     // For tests only: the drawing parts, so a test can look at one spot of the room.
     dbg: () => ({ gl, scene, camera, figs }),

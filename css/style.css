@@ -1438,3 +1438,17 @@ body.room3d .felt .spot-amt { pointer-events: none; }
   /* One Rebet button is enough: the big one. */
   body.room3d .hud3d:has(.deal-me-in .rebet-btn) .tray .actions .rebet-btn { display: none; }
 }
+/* Walk around the office */
+body.room3d .zoom-ctl .view-walk { grid-column: 1 / -1; }
+body.room3d .zoom-ctl .view-walk.on { background: #7ef0b6; color: #06281a; border-color: #7ef0b6; }
+body.room3d .room.walking { cursor: move; }
+@media (max-width: 700px) {
+  body.room3d.in-room .hud-bar > .zoom-ctl { grid-template-columns: 1fr 1fr 1fr 1fr 34px 34px; }
+  body.room3d .zoom-ctl .view-walk { grid-column: auto; order: 1; }
+}
+@media (max-width: 700px) and (orientation: portrait) {
+  body.room3d.in-room .hud-bar > .zoom-ctl { grid-template-columns: 1fr 34px 1fr 34px 30px 30px; }
+  body.room3d .zoom-ctl .view-walk::before { content: '🚶'; font-size: 14px; }
+}
+/* Away from the table the chips and bet buttons are put away. */
+body.room3d:has(.room.walking) .hud3d .tray:has(.chip-rack), body.room3d:has(.room.walking) .hud3d .deal-me-in { display: none; }

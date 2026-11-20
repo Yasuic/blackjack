@@ -1,12 +1,12 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120i';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120i';
-import { tickSound, winSound } from './fx.js?v=20261120i';
-import * as HX from './history.js?v=20261120i';
-import { webglOK, initRoom } from './room3d.js?v=20261120i';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120i';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120j';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120j';
+import { tickSound, winSound } from './fx.js?v=20261120j';
+import * as HX from './history.js?v=20261120j';
+import { webglOK, initRoom } from './room3d.js?v=20261120j';
+import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120j';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -158,9 +158,11 @@ function readName() {
 }
 
 // ---------- Host ----------
-function startHost(resume) {
-  if (!readName()) return;
+// taken: set when this browser takes the table over from a host who left ({ code, table, peer }).
+function startHost(resume, taken = null) {
+  if (!taken && !readName()) return;
   S.role = 'host';
+  S.conns = {}; S.goneTimers = S.goneTimers || {}; S.keyDropped = {}; S.spareKeys = []; S.histSaved = undefined; S.snapSent = '';
   clearInterval(S.pinger);
   S.pinger = setInterval(() => Object.values(S.conns || {}).forEach((c) => {
     try { c?.open && c.send({ t: 'ping' }); } catch {}
@@ -168,7 +170,8 @@ function startHost(resume) {
     // link itself can take half a minute to notice, so the host does not wait for it.
     if (c?.answers && Date.now() - c.lastSeen > 9000) { connLost(c); try { c.close(); } catch {} }
   }), 4000);
-  if (resume) {
+  if (taken) { S.code = taken.code; S.table = taken.table; }
+  else if (resume) {
     try {
       const saved = JSON.parse(safeGet('bj-host'));
       S.code = saved.code;
@@ -179,6 +182,7 @@ function startHost(resume) {
     S.code = newCode();
     S.table = new Table();
   }
+  resume = resume || !!taken;
   S.table.join(S.myId, S.name, S.buyIn, S.look);
   S.table.hostId = S.myId;
   // The table's secret id for its hand history. It stays in this browser and is never sent to players.
@@ -190,13 +194,16 @@ function startHost(resume) {
   buildLayout();
   stayAwake();
   if (matchMedia('(pointer: coarse)').matches) setTimeout(() => toast('You are the host: keep this tab open and in front. Friends lose the table when you switch apps.'), 1500);
-  openHostPeer(0);
+  if (taken) { S.peer = taken.peer; S.online = true; wireHostPeer(taken.peer, 99); } else openHostPeer(0);
   hostChanged();
 }
 
 function openHostPeer(attempt) {
   const peer = new Peer(ROOM_PREFIX + S.code, peerOptions());
   S.peer = peer;
+  wireHostPeer(peer, attempt);
+}
+function wireHostPeer(peer, attempt) {
   peer.on('open', () => { S.online = true; render(); });
   peer.on('connection', (conn) => {
     conn.on('data', (msg) => onHostMessage(conn, msg));
@@ -204,6 +211,13 @@ function openHostPeer(attempt) {
   });
   peer.on('disconnected', () => { S.online = false; render(); setTimeout(keepAlive, 1500); });
   peer.on('error', (e) => {
+    if (e.type === 'unavailable-id' && S.role === 'host' && (attempt >= 6 || attempt === 99)) {
+      // The table's name is held by someone else for good: while this browser was away, another
+      // player's browser took the table over. Join it as a player; chips and seat are still there.
+      peer.destroy();
+      demoteToPlayer();
+      return;
+    }
     if (e.type === 'unavailable-id' && attempt < 15) {
       // After a page refresh the old table name can stay reserved for a few seconds.
       peer.destroy();
@@ -214,6 +228,89 @@ function openHostPeer(attempt) {
     if (e.type === 'peer-unavailable') return;
     toast('Connection problem: ' + (e.type || e.message));
   });
+}
+
+// The host's own copy of the table, for a page refresh. Writing it is the slowest part of a change,
+// so it waits for a quiet half second (and is written at once when the page is hidden or closed).
+// It holds the last 40 rounds of history; every round is already in the browser's database.
+function saveHostNow() {
+  clearTimeout(S.saveT); S.saveT = null;
+  if (S.role !== 'host' || !S.table) return;
+  const j = S.table.toJSON();
+  safeSet('bj-host', JSON.stringify({ code: S.code, table: { ...j, hist: (j.hist || []).slice(-40) } }));
+}
+function saveHostSoon() { if (!S.saveT) S.saveT = setTimeout(saveHostNow, 500); }
+addEventListener('pagehide', saveHostNow);
+document.addEventListener('visibilitychange', () => { if (document.hidden) saveHostNow(); });
+
+// ---------- The table outlives its host ----------
+// Between rounds the host's browser sends every player a copy of the table as everyone can already
+// see it: seats, chips, buy-ins and settings. The shoe, the shuffle codes and the hand history are
+// left out. If the host's browser goes away, the next player's browser opens the table again from
+// that copy with a new shuffle, so nobody ever learns the order of the old shoe.
+function sendSnap() {
+  const t = S.table;
+  if (!(t.phase === 'betting' || t.phase === 'settled')) return;
+  const { shoe, shoeSize, fair, hist, evts, created, runCount, dealer, turn, pendingSettings, ...lite } = t.toJSON();
+  const order = Object.values(t.players).filter((p) => p.id !== S.myId && p.connected && !p.kicked).map((p) => p.id);
+  const body = JSON.stringify({ order, table: lite });
+  if (body === S.snapSent) return;
+  S.snapSent = body;
+  const msg = { t: 'snap', snap: body };
+  for (const conn of Object.values(S.conns)) if (conn.open) { try { conn.send(msg); } catch {} }
+}
+// A player's browser found no host at the table's address. After a short wait (longer for players
+// further down the list, so only one steps up) it opens the table itself.
+function maybeTakeOver() {
+  if (S.role !== 'player' || S.kicked || S.taking || S.conn?.open) return;
+  S.noHostAt ||= Date.now();
+  let snap = null;
+  try { snap = S.snap ? JSON.parse(S.snap) : null; } catch {}
+  const at = snap ? snap.order.indexOf(S.myId) : -1;
+  const rank = snap ? (at < 0 ? snap.order.length + 1 : at) : 2;
+  if (Date.now() - S.noHostAt < 6000 + rank * 6000) return;
+  S.taking = true;
+  const peer = new Peer(ROOM_PREFIX + S.code, peerOptions());
+  const fail = () => { try { peer.destroy(); } catch {} S.taking = false; S.noHostAt = Date.now(); };
+  const timer = setTimeout(fail, 12000);
+  peer.on('error', () => { clearTimeout(timer); fail(); });
+  peer.on('open', () => {
+    clearTimeout(timer);
+    peer.removeAllListeners('error');
+    let table = null;
+    try { if (snap) table = Table.fromJSON(snap.table); } catch { table = null; }
+    const fresh = !table;
+    if (!table) table = new Table();
+    const oldHost = table.hostId;
+    for (const p of Object.values(table.players)) { p.connected = false; p.gone = false; }
+    table.join(S.myId, S.name, S.buyIn, S.look);
+    if (table.banker && table.banker === oldHost) { table.banker = null; table.pendingBanker = null; }
+    table.phase = 'settled'; table.startBetting(); // bets from a round that never finished go back
+    table.vote = null; table.hist = []; table.evts = []; table.created = null;
+    table.newShoe();
+    table.addLog(fresh ? `${S.name} opened the table.` : `The host left. ${S.name} is the host now. The shoe was shuffled again.`);
+    table.ev(fresh ? 'table opened with no host present' : 'host handoff: new host, new shuffle', S.myId);
+    try { S.conn?.close(); } catch {}
+    try { S.peer?.destroy(); } catch {}
+    clearInterval(S.watchdog);
+    S.conn = null; S.taking = false; S.noHostAt = null; S.why = '';
+    sessDel('bj-join-' + S.code);
+    startHost(true, { code: S.code, table, peer });
+    toast(fresh ? 'Nobody was hosting, so the table opened in your browser. You are the host: keep this tab open.' : 'The host left. You are the host now: keep this tab open.');
+  });
+}
+// This browser was the host, came back, and found the table running in someone else's browser.
+function demoteToPlayer() {
+  const code = S.code;
+  clearInterval(S.pinger);
+  if (S.timer) { clearTimeout(S.timer.handle); S.timer = null; }
+  Object.values(S.goneTimers || {}).forEach(clearTimeout);
+  S.snap = S.snapSent || null; // if nobody is hosting after all, the table can still be opened again from this copy
+  S.goneTimers = {}; S.conns = {}; S.table = null; S.peer = null; S.online = false;
+  safeDel('bj-host');
+  history.replaceState(null, '', location.pathname + '?' + new URLSearchParams({ ...Object.fromEntries([...params].filter(([k]) => k !== 'host')), room: code }).toString());
+  toast('Another player kept the table running while you were away. You are back as a player.');
+  startPlayer(code, { name: S.name, buyIn: S.buyIn, look: S.look });
 }
 
 // A guest's link is gone. A reload or a short drop is not the end of their hand: they get a little
@@ -245,6 +342,7 @@ function onHostMessage(conn, msg) {
     clearTimeout(S.goneTimers[id]); delete S.goneTimers[id];
     S.table.join(id, msg.name, msg.buyIn, msg.look);
     hostChanged();
+    if (S.snapSent) { try { conn.send({ t: 'snap', snap: S.snapSent }); } catch {} }
     return;
   }
   if (!conn.clientId) return;
@@ -481,7 +579,8 @@ function hostChanged() {
   }
   setState({ ...mine, timer, voteEndsIn });
   setTimerFromState(S.state);
-  safeSet('bj-host', JSON.stringify({ code: S.code, table: t }));
+  saveHostSoon();
+  sendSnap();
   // Finished rounds go to this browser's own database (and from there to the online backup).
   const lastRound = t.hist?.length ? t.hist[t.hist.length - 1].round : 0;
   if (t.created?.id && lastRound && lastRound !== S.histSaved) { const from = S.histSaved ?? -1; S.histSaved = lastRound; HX.saveRounds(t.created.id, t.hist.filter((h) => h.round > from)); }
@@ -617,6 +716,7 @@ function openGuestPeer() {
       // The meeting point answered: no table with this code is open right now.
       S.online = false; S.why = 'nohost'; S.conn = null;
       render();
+      maybeTakeOver();
       return; // keepAlive tries again every few seconds
     }
     if (['network', 'server-error', 'socket-error', 'socket-closed'].includes(e.type)) { S.why = 'net'; return; }
@@ -632,7 +732,7 @@ function connectToHost() {
   conn.on('open', () => {
     S.online = true;
     S.why = '';
-    S.retry = 0;
+    S.retry = 0; S.noHostAt = null;
     conn.send({ t: 'join', clientId: S.myId, name: S.name, buyIn: S.buyIn, look: S.look });
   });
   conn.on('data', (msg) => {
@@ -640,6 +740,7 @@ function connectToHost() {
     if (msg.t === 'ping') { try { conn.send({ t: 'pong' }); } catch {} return; }
     if (msg.t === 'state') { setState(msg.state); render(); setTimerFromState(msg.state); }
     else if (msg.t === 'error') { toast(msg.msg); if (msg.bet) dropPend(); }
+    else if (msg.t === 'snap') S.snap = String(msg.snap || '').slice(0, 400000);
     else if (msg.t === 'say') toast(String(msg.msg || '').slice(0, 200));
     else if (msg.t === 'ask-out') showAsk(msg);
     else if (msg.t === 'note') showNote(msg);
@@ -768,6 +869,8 @@ function doRebet() {
 // ---------- Layout and rendering ----------
 function buildLayout() {
   const host = S.role === 'host';
+  try { S.room?.stop(); } catch {}
+  S.room = null;
   document.body.classList.add('in-room');
   app.innerHTML = `
     <div class="topbar">
@@ -821,7 +924,7 @@ function buildLayout() {
     <button class="float-chart" data-act="chart" title="Basic strategy chart">Chart</button>
     <button class="float-throw" data-act="throw-open" title="Pick a reaction, then tap a player or the dealer">😀 Reactions</button>
     <div class="ledger ${safeGet('bj-ledger') !== '1' ? 'closed' : ''}" id="ledger"></div>
-    <div class="zoom-ctl">${use3D() ? '<button class="view-btn" data-act="turn" data-d="1" title="Turn to the players on your left" aria-label="Look left">◀ Look left</button><button class="view-btn" data-act="turn" data-d="-1" title="Turn to the players on your right" aria-label="Look right">Look right ▶</button><button class="view-btn view-reset" data-act="view-reset" title="Back to your own seat">Reset view</button>' : ''}<label class="tilt-ctl" title="Camera angle: drag to tilt the table"><span>Angle</span><input type="range" id="tilt" min="0" max="50" step="1" /></label><button data-act="zoom" data-d="-1" aria-label="Zoom out">−</button><span id="zoom-val"></span><button data-act="zoom" data-d="1" aria-label="Zoom in">+</button></div>
+    <div class="zoom-ctl">${use3D() ? '<button class="view-btn" data-act="turn" data-d="1" title="Turn to the players on your left" aria-label="Look left">◀ Look left</button><button class="view-btn" data-act="turn" data-d="-1" title="Turn to the players on your right" aria-label="Look right">Look right ▶</button><button class="view-btn view-reset" data-act="view-reset" title="Back to your own seat">Reset view</button><button class="view-btn view-walk" data-act="walk" title="Leave your chair and move through the whole office" aria-label="Walk around">🚶 Walk around</button>' : ''}<label class="tilt-ctl" title="Camera angle: drag to tilt the table"><span>Angle</span><input type="range" id="tilt" min="0" max="50" step="1" /></label><button data-act="zoom" data-d="-1" aria-label="Zoom out">−</button><span id="zoom-val"></span><button data-act="zoom" data-d="1" aria-label="Zoom in">+</button></div>
     </div>
     <div class="buyin-pop" id="buyin-pop" hidden></div>
     <div class="host-pops" id="host-pops"></div>`;
@@ -1127,7 +1230,7 @@ function render(note) {
       let mine = null; try { mine = JSON.parse(safeGet('bj-host') || 'null')?.code; } catch {}
       box = document.createElement('div'); box.id = 'offline-note'; box.className = 'offline-note'; box.dataset.why = S.why || '';
       const why = S.why === 'net' ? ['Your connection dropped.', 'This phone or computer lost its internet link for a moment. The page keeps trying and joins the table again by itself.']
-        : S.why === 'nohost' ? ['The table is closed right now.', 'The table runs inside the host\'s browser tab. The host closed that tab, or their phone or computer went to sleep. Ask the host to open the table again. This page joins again by itself.']
+        : S.why === 'nohost' ? ['The host is away.', 'The host\'s browser closed or went to sleep. In a few seconds the table opens again in another player\'s browser, with the same seats and chips and a new shuffle. This page joins again by itself.']
         : ['Cannot reach the host.', 'The table is open, but this device cannot make a direct link to the host. Try switching between Wi-Fi and mobile data, or turn off a VPN. The page keeps trying.'];
       box.innerHTML = `<b>${why[0]}</b><div>${why[1]}</div>${mine === S.code ? `<a class="btn gold" href="${location.pathname}?host=${encodeURIComponent(S.code)}">I am the host: reopen my table</a>` : ''}<a class="btn" href="${location.pathname}">Start a new table</a>`;
       document.body.appendChild(box);
@@ -2458,8 +2561,9 @@ function runAct(el) {
     case 'buyin-answer': hostDo((t) => t.answerBuyIn(Number(el.dataset.id), el.dataset.yes === '1')); break;
     case 'throw-open': openThrowPanel(el); break;
     case 'poop-dealer': send({ t: 'throw', item: 'poop', to: st.banker ? st.banker.id : 'house', paid: true }); el.closest('.badbeat')?.remove(); break;
-    case 'view-reset': S.room?.home(); break;
+    case 'view-reset': S.room?.home(); $('.view-walk')?.classList.remove('on'); break;
     case 'turn': S.room?.look(Number(el.dataset.d)); break;
+    case 'walk': if (S.room) { const on = S.room.walk(!S.room.walking()); el.classList.toggle('on', on); if (on) toast(matchMedia('(pointer: coarse)').matches ? 'Walking: drag to move through the office. Two fingers turn and zoom. ⟲ takes you back to your seat.' : 'Walking: drag to move through the office. Right button turns, the wheel zooms. Reset view takes you back to your seat.'); } break;
     case 'pixel': safeSet('bj-pixel', pixelOn() ? '0' : '1'); el.textContent = pixelOn() ? '👾 Pixel look: on' : '👾 Pixel look: off'; S.room?.setPixel(pixelOn()); break;
     case 'room3d': safeSet('bj-3d', use3D() ? '0' : '1'); location.reload(); break;
     case 'zoom': if (S.room) { S.room.zoomBy(Number(el.dataset.d)); break; } safeSet('bj-zoom', String(Math.round(Math.min(1.6, Math.max(0.6, getZoom() + 0.1 * Number(el.dataset.d))) * 10) / 10)); applyZoom(); break;
