@@ -391,6 +391,7 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
   let dirty = 3; // frames still to draw; the room rests when nothing moves
   const touch = () => { dirty = Math.max(dirty, 2); };
 
+  const bbQ = new THREE.Quaternion(), bbM = new THREE.Matrix4(); let bbLast = '';
   // The HTML felt, lying flat on the table.
   const feltObj = new CSS3DObject(feltEl);
   feltObj.rotation.x = -Math.PI / 2;
@@ -1047,6 +1048,13 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     for (const r of racks) r.visible = true;
     if (myRack) myRack.visible = true;
     gl.render(scene, camera);
+    // Names, totals and amounts stand up off the felt and face you, so text at the far side of the
+    // table reads as easily as text near you. The felt gets the turn that undoes its own tilt.
+    bbQ.copy(feltObj.quaternion).invert().multiply(camera.quaternion);
+    bbM.makeRotationFromQuaternion(bbQ);
+    const m = bbM.elements, f = (i, flip) => { const v = Math.round((flip ? -m[i] : m[i]) * 1e5) / 1e5; return v === 0 ? 0 : v; };
+    const bb = `matrix3d(${f(0)},${f(1, 1)},${f(2)},0,${f(4, 1)},${f(5)},${f(6, 1)},0,${f(8)},${f(9, 1)},${f(10)},0,0,0,0,1)`;
+    if (bb !== bbLast) { bbLast = bb; feltEl.style.setProperty('--bb', bb); }
     css.render(scene, camera);
   };
   requestAnimationFrame(loop);

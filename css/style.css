@@ -1329,3 +1329,22 @@ body.room3d .felt .spot-amt { pointer-events: none; }
   body.room3d.in-room .hud3d .tray:has(.chip-rack) .chipv { width: 40px; height: 40px; }
   body.room3d.in-room .hud3d .tray:has(.chip-rack) .icon-btn { width: 44px; height: 44px; }
 }
+
+/* 3D room: names, chip counts, totals, results, odds and bet amounts stand up off the felt and face you.
+   --bb is set by the room on every frame: the turn that undoes the felt's tilt. Every box between the felt
+   and a standing text keeps its children in 3D, or the browser would press the text flat again. */
+.felt.in3d, .felt.in3d > .seats, .felt.in3d .seat, .felt.in3d .hands, .felt.in3d .hrow, .felt.in3d .hand, .felt.in3d > .dealer, .felt.in3d .dealer-hand, .felt.in3d .shoe-box, .felt.in3d .spot-area, .felt.in3d .spot { transform-style: preserve-3d; }
+.felt.in3d .seat .who, .felt.in3d .hand .meta, .felt.in3d .hands.totals-only .hand, .felt.in3d .mini-bet, .felt.in3d .dealer-name, .felt.in3d .dealer-total { transform: rotate(calc(-1 * var(--r, 0deg))) var(--bb, none); transform-origin: 50% 100%; }
+.felt.in3d .spot-amt { transform: translateX(-50%) rotate(calc(-1 * var(--r, 0deg))) var(--bb, none); transform-origin: 50% 100%; }
+/* A PvP bet tag floats above the name it belongs to. */
+.felt.in3d .seat .pvp-tags { transform: translateX(-50%) rotate(calc(-1 * var(--r, 0deg))) var(--bb, none) translateY(-52px); transform-origin: 50% 100%; }
+.felt.in3d { overflow: visible !important; backface-visibility: visible; -webkit-backface-visibility: visible; }
+/* A blended layer on the felt would press everything on it flat again, so the 3D felt goes without the grain. */
+.felt.in3d::after { display: none; }
+/* Everything on the felt lies a hair above the cloth itself, so a tap always lands on the button and never on the cloth under it. */
+.felt.in3d > * { translate: 0 0 1px; }
+.felt.in3d :is(.seats, .seat, .hands, .hrow, .hand, .dealer, .dealer-hand, .spot-area, .spot) > * { translate: 0 0 .4px; }
+/* Your own seat is the nearest one, so its total and odds stay flat under your cards. */
+.felt.in3d .seat.focus .hand .meta { transform: none; }
+/* Small phone seats are packed tight: a line that stood up would cover the line behind it, so they stay flat. */
+.felt.in3d .seat.mini .who, .felt.in3d .seat.mini .mini-bet, .felt.in3d .seat.mini .hand .meta, .felt.in3d .seat.mini .hands.totals-only .hand { transform: none; }
