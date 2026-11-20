@@ -6,7 +6,7 @@ export const RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q
 
 export const DEFAULT_SETTINGS = {
   seats: 7,              // player seats at the table (any whole number from 1 up)
-  decks: 6,              // 1, 2, 6, 8, or 'csm' (randomized: full reshuffle before every round)
+  decks: 20,             // 1, 2, 6, 8, 20, or 'csm' (randomized: full reshuffle before every round)
   shuffleMode: 'penetration', // 'penetration' or 'rounds'
   penetration: 85,       // reshuffle once this % of the shoe has been dealt
   shuffleEvery: 5,       // or reshuffle every N rounds
@@ -401,7 +401,7 @@ export class Table {
     num('startChips', 1);
     num('peekCost', 0);
     for (const k of ['betTimer', 'turnTimer']) { const v = Number(s[k]); s[k] = Number.isFinite(v) && v > 0 ? clamp(Math.round(v), 5, 300) : 0; }
-    if (![1, 2, 6, 8, 'csm'].includes(s.decks)) s.decks = [1, 2, 6, 8].includes(Number(s.decks)) ? Number(s.decks) : 'csm';
+    if (![1, 2, 6, 8, 20, 'csm'].includes(s.decks)) s.decks = [1, 2, 6, 8, 20].includes(Number(s.decks)) ? Number(s.decks) : 'csm';
     if (![1.5, 1.2, 1].includes(s.blackjackPays)) s.blackjackPays = [1.5, 1.2, 1].includes(Number(s.blackjackPays)) ? Number(s.blackjackPays) : (Number.isFinite(old.blackjackPays) ? old.blackjackPays : 1.5);
     s.sideBets = Array.isArray(s.sideBets) ? [...new Set(s.sideBets)].filter((k) => SIDE_KEYS.includes(k)) : (Array.isArray(old.sideBets) ? old.sideBets : DEFAULT_SETTINGS.sideBets);
     if (s.shuffleMode !== 'rounds') s.shuffleMode = 'penetration';

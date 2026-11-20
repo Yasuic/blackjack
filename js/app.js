@@ -1,13 +1,13 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120zza';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261120zza';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120zza';
-import { tickSound, winSound } from './fx.js?v=20261120zza';
-import * as HX from './history.js?v=20261120zza';
-import { webglOK, initRoom } from './room3d.js?v=20261120zza';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120zza';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120zzb';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261120zzb';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120zzb';
+import { tickSound, winSound } from './fx.js?v=20261120zzb';
+import * as HX from './history.js?v=20261120zzb';
+import { webglOK, initRoom } from './room3d.js?v=20261120zzb';
+import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120zzb';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -2640,7 +2640,7 @@ function renderHostPanel(st) {
     ${fold('set-cards', '🂠 Cards and reshuffle', `<div class="settings-grid">
       <label class="full">Cards in the shoe
         <select id="set-decks" ${dis}>
-          ${[[1, '1 deck'], [2, '2 decks'], [6, '6 decks'], [8, '8 decks'], ['csm', 'Randomized (full shuffle every round)']].map(([v, l]) => `<option value="${v}" ${String(s.decks) === String(v) ? 'selected' : ''}>${l}</option>`).join('')}
+          ${[[1, '1 deck'], [2, '2 decks'], [6, '6 decks'], [8, '8 decks'], [20, '20 decks'], ['csm', 'Randomized (full shuffle every round)']].map(([v, l]) => `<option value="${v}" ${String(s.decks) === String(v) ? 'selected' : ''}>${l}</option>`).join('')}
         </select></label>
       <label class="full">When to reshuffle
         <select id="set-mode" ${dis}>
