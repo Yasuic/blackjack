@@ -1,12 +1,12 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120r';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120r';
-import { tickSound, winSound } from './fx.js?v=20261120r';
-import * as HX from './history.js?v=20261120r';
-import { webglOK, initRoom } from './room3d.js?v=20261120r';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120r';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120s';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120s';
+import { tickSound, winSound } from './fx.js?v=20261120s';
+import * as HX from './history.js?v=20261120s';
+import { webglOK, initRoom } from './room3d.js?v=20261120s';
+import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120s';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -86,10 +86,27 @@ function toast(msg) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => (t.hidden = true), 2800);
 }
+// One small line for the "cannot reach the host" box, so a screenshot shows what went wrong.
+function linkNote() {
+  const l = S.link;
+  if (!l) return '';
+  const names = { host: 'local', srflx: 'public', prflx: 'public', relay: 'relay' };
+  const kinds = [...new Set([...l.kinds].map((k) => names[k] || k))];
+  return `<small class="link-note">Details: tries ${(S.linkTries || 0) + 1}, link ${esc(l.state)}, paths found: ${kinds.length ? kinds.join(', ') : 'none yet'}.</small>`;
+}
 function peerOptions() {
   // Optional: ?peerhost=... lets you use your own PeerJS server instead of the free public one.
   const host = params.get('peerhost');
-  if (!host) return { debug: 1 };
+  // How two browsers find a path to each other. First they try a direct link (the "stun" helpers tell each
+  // browser its public address). When a network blocks direct links, the "turn" helpers pass the data along
+  // instead. The second turn helper also listens on the ports web pages use (80 and 443), which strict
+  // office and school networks leave open.
+  const config = { iceServers: [
+    { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302', 'stun:stun.cloudflare.com:3478'] },
+    { urls: ['turn:eu-0.turn.peerjs.com:3478', 'turn:us-0.turn.peerjs.com:3478'], username: 'peerjs', credential: 'peerjsp' },
+    { urls: ['turn:openrelay.metered.ca:80', 'turn:openrelay.metered.ca:443', 'turn:openrelay.metered.ca:443?transport=tcp', 'turns:openrelay.metered.ca:443?transport=tcp'], username: 'openrelayproject', credential: 'openrelayproject' },
+  ], sdpSemantics: 'unified-plan' };
+  if (!host) return { debug: 1, config };
   return { host, port: Number(params.get('peerport') || 443), path: params.get('peerpath') || '/', secure: params.get('peersecure') !== '0', debug: 1 };
 }
 function shareLink() {
@@ -686,6 +703,8 @@ function keepAlive() {
   if (S.role === 'player') {
     // A link that has gone silent (the phone was asleep) is dropped at once instead of after the usual wait.
     if (S.conn && S.online && Date.now() - S.lastSeen > 12000) { const c = S.conn; S.conn = null; S.online = false; try { c.close(); } catch {} render(); }
+    // A link that was started but never opened (the host's browser did not answer) is thrown away and started again.
+    if (S.conn && !S.conn.open && !S.online && Date.now() - (S.lastTry || 0) > 12000) { const c = S.conn; S.conn = null; S.linkTries = (S.linkTries || 0) + 1; try { c.close(); } catch {} }
     if (!S.conn && Date.now() - (S.lastTry || 0) > 4000) connectToHost();
   }
 }
@@ -736,10 +755,18 @@ function connectToHost() {
   S.lastTry = Date.now();
   const conn = S.peer.connect(ROOM_PREFIX + S.code, { reliable: true });
   S.conn = conn;
+  // Notes for the "cannot reach the host" box: which kinds of path this browser found, and how far the link got.
+  S.link = { kinds: new Set(), state: 'starting' };
+  const link = S.link;
+  const watch = () => { const pc = conn.peerConnection; if (!pc || pc._bj) return !!pc; pc._bj = true;
+    pc.addEventListener('icecandidate', (e) => { const t = e.candidate?.type || (/ typ (\w+)/.exec(e.candidate?.candidate || '') || [])[1]; if (t) link.kinds.add(t); });
+    pc.addEventListener('iceconnectionstatechange', () => { link.state = pc.iceConnectionState; });
+    return true; };
+  if (!watch()) setTimeout(watch, 300);
   conn.on('open', () => {
     S.online = true;
     S.why = '';
-    S.retry = 0; S.noHostAt = null;
+    S.retry = 0; S.noHostAt = null; S.linkTries = 0;
     conn.send({ t: 'join', clientId: S.myId, name: S.name, buyIn: S.buyIn, look: S.look });
   });
   conn.on('data', (msg) => {
@@ -1237,18 +1264,20 @@ function render(note) {
   }
   const share = $('#share');
   if (share && share.value !== shareLink()) share.value = shareLink();
+  if (S.role === 'host') $('#offline-note')?.remove(); // this browser took the table over: the note is out of date
   // A guest whose host has gone away: say why, since the table lives in the host's browser tab.
   if (S.role !== 'host') {
     if (S.online) S.offSince = 0; else S.offSince ||= Date.now();
     const stuck = !S.online && Date.now() - S.offSince > 6000;
     let box = $('#offline-note');
     if (box && box.dataset.why !== (S.why || '')) { box.remove(); box = null; }
+    if (box && stuck) { const n = box.querySelector('.link-note'); if (n) n.outerHTML = linkNote() || '<small class="link-note"></small>'; }
     if (stuck && !box) {
       let mine = null; try { mine = JSON.parse(safeGet('bj-host') || 'null')?.code; } catch {}
       box = document.createElement('div'); box.id = 'offline-note'; box.className = 'offline-note'; box.dataset.why = S.why || '';
       const why = S.why === 'net' ? ['Your connection dropped.', 'This phone or computer lost its internet link for a moment. The page keeps trying and joins the table again by itself.']
         : S.why === 'nohost' ? ['The host is away.', 'The host\'s browser closed or went to sleep. In a few seconds the table opens again in another player\'s browser, with the same seats and chips and a new shuffle. This page joins again by itself.']
-        : ['Cannot reach the host.', 'The table is open, but this device cannot make a direct link to the host. Try switching between Wi-Fi and mobile data, or turn off a VPN. The page keeps trying.'];
+        : ['Cannot reach the host.', 'The table is open, but the link to the host does not open. Either the host\'s browser is asleep or in a background tab, or one of the two networks blocks the link. Ask the host to open the game tab. If the host stays away, the table moves to another player after about a minute. If that does not happen, switch between Wi-Fi and mobile data, or turn off a VPN. The page keeps trying.' + linkNote()];
       box.innerHTML = `<b>${why[0]}</b><div>${why[1]}</div>${mine === S.code ? `<a class="btn gold" href="${location.pathname}?host=${encodeURIComponent(S.code)}">I am the host: reopen my table</a>` : ''}<a class="btn" href="${location.pathname}">Start a new table</a>`;
       document.body.appendChild(box);
     } else if (!stuck && box) box.remove();
