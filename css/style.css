@@ -1454,12 +1454,12 @@ body.room3d .room.walking { cursor: move; }
 body.room3d:has(.room.walking) .hud3d .tray:has(.chip-rack), body.room3d:has(.room.walking) .hud3d .deal-me-in { display: none; }
 
 /* Sit out: one button per own seat in a small stack at the left edge of the screen, off the table. */
-#sitout-bar { position: fixed; left: 14px; bottom: 208px; z-index: 40; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+#sitout-bar { position: fixed; left: 14px; bottom: 150px; z-index: 40; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
 #sitout-bar:empty { display: none; }
 #sitout-bar .seat-out { font: inherit; font-weight: 700; font-size: 13px; padding: 7px 12px; border-radius: 12px; border: 1px solid var(--line); background: rgba(12,15,20,.92); color: var(--text); cursor: pointer; white-space: nowrap; }
 #sitout-bar .seat-out:hover { border-color: var(--gold); color: var(--gold); }
 #sitout-bar .seat-out.on { background: var(--gold); color: #1b1300; border-color: var(--gold); }
-@media (min-width: 701px) and (max-width: 1180px) { body.in-room #sitout-bar { bottom: 336px; } }
+@media (min-width: 701px) and (max-width: 1180px) { body.in-room #sitout-bar { bottom: 288px; } }
 @media (max-width: 700px) {
   /* A phone has no free edge beside the table: the buttons go in one row under the top buttons. */
   #sitout-bar, body.in-room #sitout-bar { left: 8px; right: 8px; bottom: auto; top: 92px; flex-direction: row; flex-wrap: wrap; gap: 4px; pointer-events: none; }
@@ -1485,7 +1485,7 @@ body.room3d:has(.room.walking) .hud3d .tray:has(.chip-rack), body.room3d:has(.ro
 .chat-empty { color: #8b949e; font-size: 12.5px; }
 #chat-form { display: flex; gap: 6px; padding: 8px; border-top: 1px solid var(--line); }
 #chat-input { flex: 1; min-width: 0; padding: 7px 8px; border-radius: 10px; border: 1px solid var(--line); background: #0d1117; color: var(--text); font: inherit; font-size: 14px; }
-#chat-peek { position: fixed; left: 150px; bottom: 208px; max-width: 260px; z-index: 39; background: rgba(12,15,20,.92); border: 1px solid var(--line); border-radius: 12px; padding: 6px 10px; font-size: 13px; opacity: 0; pointer-events: none; transition: opacity .25s; }
+#chat-peek { position: fixed; left: 150px; bottom: 150px; max-width: 260px; z-index: 39; background: rgba(12,15,20,.92); border: 1px solid var(--line); border-radius: 12px; padding: 6px 10px; font-size: 13px; opacity: 0; pointer-events: none; transition: opacity .25s; }
 #chat-peek.show { opacity: 1; }
 @media (max-width: 700px) {
   #sitout-bar .chat-btn { font-size: 11px; padding: 3px 8px; border-radius: 999px; pointer-events: auto; }
@@ -1493,3 +1493,14 @@ body.room3d:has(.room.walking) .hud3d .tray:has(.chip-rack), body.room3d:has(.ro
   #chat-input { font-size: 16px; }
   #chat-peek { left: 8px; right: 8px; max-width: none; bottom: auto; top: 122px; }
 }
+/* The strategy chart button is gone: Reactions moves down into its place. */
+.float-throw { bottom: 92px; }
+@media (min-width: 701px) and (max-width: 1180px) { body.in-room .float-throw { bottom: 232px; } }
+/* Voice chat panel, in the same corner as the chat. */
+#voice-panel { position: fixed; left: 14px; bottom: 14px; width: 250px; max-height: min(360px, 60vh); z-index: 60; display: flex; flex-direction: column; background: rgba(12,15,20,.96); border: 1px solid var(--gold); border-radius: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.5); overflow: hidden; }
+#voice-body { padding: 10px; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; font-size: 13px; }
+.voice-list { display: flex; flex-direction: column; gap: 5px; }
+.voice-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.voice-mic { width: 100%; white-space: normal; }
+#sitout-bar .mic-btn.live { background: #1f7a45; border-color: #4fd18a; color: #fff; }
+@media (max-width: 700px) { #voice-panel { left: 8px; right: 8px; width: auto; bottom: 8px; } }

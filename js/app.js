@@ -1,12 +1,12 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120p';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120p';
-import { tickSound, winSound } from './fx.js?v=20261120p';
-import * as HX from './history.js?v=20261120p';
-import { webglOK, initRoom } from './room3d.js?v=20261120p';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120p';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120q';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120q';
+import { tickSound, winSound } from './fx.js?v=20261120q';
+import * as HX from './history.js?v=20261120q';
+import { webglOK, initRoom } from './room3d.js?v=20261120q';
+import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120q';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -320,6 +320,7 @@ function connLost(conn) {
   if (!id || S.conns[id] !== conn) return;
   delete S.conns[id];
   conn.clientId = null;
+  if (S.voice?.[id]) { delete S.voice[id]; voiceCast(); }
   S.table.disconnect(id);
   S.table.addLog(`${S.table.players[id]?.name || 'A player'} lost the connection.`);
   awayClock(id, Date.now() - (conn.lastSeen || Date.now()));
@@ -344,11 +345,13 @@ function onHostMessage(conn, msg) {
     hostChanged();
     if (S.snapSent) { try { conn.send({ t: 'snap', snap: S.snapSent }); } catch {} }
     if (S.chat?.length) { try { conn.send({ t: 'chat-log', list: S.chat.slice(-40) }); } catch {} }
+    try { conn.send({ t: 'voice-list', list: voiceList() }); } catch {}
     return;
   }
   if (!conn.clientId) return;
   if (msg.t === 'throw') { relayThrow(conn.clientId, msg); return; }
   if (msg.t === 'chat') { relayChat(conn.clientId, msg); return; }
+  if (msg.t === 'voice') { voiceSet(conn.clientId, conn.peer, !!msg.on, !!msg.mic); return; }
   if (msg.t === 'keys') { gotNonce(msg, conn.clientId); return; }
   if (msg.t === 'hist-get') return; // hand history is for the host only and is never sent to players
   fresh(moveCount(msg), () => runAction(conn.clientId, msg, (err) => conn.open && conn.send({ t: 'error', msg: err, bet: msg.t === 'bet' })));
@@ -747,6 +750,7 @@ function connectToHost() {
     else if (msg.t === 'snap') S.snap = String(msg.snap || '').slice(0, 400000);
     else if (msg.t === 'say') toast(String(msg.msg || '').slice(0, 200));
     else if (msg.t === 'chat') gotChat(msg);
+    else if (msg.t === 'voice-list') gotVoiceList(msg.list);
     else if (msg.t === 'chat-log') { if (Array.isArray(msg.list) && !S.chat?.length) { S.chat = []; msg.list.slice(-40).forEach((m) => gotChat(m, true)); } }
     else if (msg.t === 'ask-out') showAsk(msg);
     else if (msg.t === 'note') showNote(msg);
@@ -777,6 +781,7 @@ function connectToHost() {
 // Send a move: players send it to the host, the host runs it directly.
 function send(msg) {
   if (S.role === 'host' && msg.t === 'chat') { relayChat(S.myId, msg); return; }
+  if (S.role === 'host' && msg.t === 'voice') { voiceSet(S.myId, S.peer?.id, !!msg.on, !!msg.mic); return; }
   if (S.role === 'host' && msg.t === 'throw') relayThrow(S.myId, msg);
   else if (S.role === 'host') fresh(moveCount(msg), () => runAction(S.myId, msg, (err) => { toast(err); if (msg.t === 'bet') dropPend(); }));
   else if (S.conn?.open) S.conn.send(msg);
@@ -904,7 +909,6 @@ function buildLayout() {
             ${host ? '<button class="menu-item" data-act="history">🕘 Hand history</button><button class="menu-item" data-act="export">📤 Export hand history</button>' : ''}`)}
           ${fold('m-view', '🎛️ My view and sound', `
             <button class="menu-item" data-act="four">🎨 Four colour cards</button>
-            <button class="menu-item" data-act="chart">📊 Basic strategy chart</button>
             <button class="menu-item" data-act="hints" id="hints-btn">${hintsOn() ? '💡 Strategy hints: on' : '💡 Strategy hints: off'}</button>
             <button class="menu-item" data-act="room3d">${use3D() ? '🧊 3D room: on' : '🧊 3D room: off'}</button>
             ${use3D() ? `<button class="menu-item" data-act="pixel">${pixelOn() ? '👾 Pixel look: on' : '👾 Pixel look: off'}</button>` : ''}
@@ -932,7 +936,6 @@ function buildLayout() {
     </div>
     <div class="hud-bar" id="hud-bar">
     <details class="sb-guide" id="sb-guide"><summary>🎲 Side bets <span>▾</span></summary><div id="sb-guide-body"></div></details>
-    <button class="float-chart" data-act="chart" title="Basic strategy chart">Chart</button>
     <button class="float-throw" data-act="throw-open" title="Pick a reaction, then tap a player or the dealer">😀 Reactions</button>
     <div class="ledger ${safeGet('bj-ledger') !== '1' ? 'closed' : ''}" id="ledger"></div>
     <div class="zoom-ctl">${use3D() ? '<button class="view-btn" data-act="turn" data-d="1" title="Turn to the players on your left" aria-label="Look left">◀ Look left</button><button class="view-btn" data-act="turn" data-d="-1" title="Turn to the players on your right" aria-label="Look right">Look right ▶</button><button class="view-btn view-reset" data-act="view-reset" title="Back to your own seat">Reset view</button><button class="view-btn view-walk" data-act="walk" title="Leave your chair and move through the whole office" aria-label="Walk around">🚶 Walk around</button>' : ''}<label class="tilt-ctl" title="Camera angle: drag to tilt the table"><span>Angle</span><input type="range" id="tilt" min="0" max="50" step="1" /></label><button data-act="zoom" data-d="-1" aria-label="Zoom out">−</button><span id="zoom-val"></span><button data-act="zoom" data-d="1" aria-label="Zoom in">+</button></div>
@@ -2102,6 +2105,7 @@ function chatPeek(m) {
 }
 function toggleChat(on = !S.chatOpen) {
   S.chatOpen = !!on;
+  if (on) $('#voice-panel')?.remove();
   let el = $('#chat-panel');
   if (!on) { el?.remove(); if (S.state) drawSitOut(S.state); return; }
   if (!el || !el.isConnected) {
@@ -2122,11 +2126,143 @@ function toggleChat(on = !S.chatOpen) {
   if (!matchMedia('(max-width: 700px)').matches) $('#chat-input')?.focus();
 }
 
+// ---------- Voice chat ----------
+// Sound goes straight from each person's browser to every other person in voice, over the same kind of
+// link the table already uses. The host only keeps the list of who is in voice. Joining lets you
+// listen; your microphone stays off until you turn it on, and the browser asks for it only then.
+const V = { on: false, mic: false, out: null, ctx: null, micTrack: null, calls: {}, list: [], muted: {}, peer: null, timer: null };
+// Host side: who is in voice.
+function voiceList() {
+  const t = S.table;
+  return Object.entries(S.voice || {}).filter(([id]) => t?.players[id]).map(([id, v]) => ({ id, name: String(t.players[id].name).slice(0, 16), peer: v.peer, mic: !!v.mic }));
+}
+function voiceCast() {
+  const out = { t: 'voice-list', list: voiceList() };
+  for (const c of Object.values(S.conns || {})) { if (c?.open) { try { c.send(out); } catch {} } }
+  gotVoiceList(out.list);
+}
+function voiceSet(id, peer, on, mic) {
+  S.voice ||= {};
+  if (!S.table?.players[id] || !peer) return;
+  if (on) { if (Object.keys(S.voice).length >= 12 && !S.voice[id]) { sayTo(id, 'Voice is full (12 people).'); return; } S.voice[id] = { peer: String(peer), mic }; }
+  else delete S.voice[id];
+  voiceCast();
+}
+// Everyone: keep one sound link to each other person in voice. Of two people, the one whose link name sorts first makes the call.
+function gotVoiceList(list) {
+  V.list = Array.isArray(list) ? list.slice(0, 12).map((m) => ({ id: String(m.id), name: String(m.name || '').slice(0, 16), peer: String(m.peer), mic: !!m.mic })) : [];
+  if (V.on) syncCalls();
+  drawVoice();
+  if (S.state) drawSitOut(S.state);
+}
+function syncCalls() {
+  const mine = S.peer?.id;
+  if (!mine || !V.out) return;
+  const want = new Set(V.list.filter((m) => m.id !== S.myId).map((m) => m.peer));
+  for (const [p, c] of Object.entries(V.calls)) if (!want.has(p)) { try { c.close(); } catch {} dropCall(c); }
+  for (const p of want) if (!V.calls[p] && mine < p) { try { wireCall(S.peer.call(p, V.out)); } catch {} }
+}
+function dropCall(c) { if (V.calls[c.peer] === c) delete V.calls[c.peer]; if (c._audio) { c._audio.srcObject = null; c._audio.remove(); c._audio = null; } }
+function wireCall(c) {
+  if (!c) return;
+  const old = V.calls[c.peer];
+  if (old && old !== c) { try { old.close(); } catch {} dropCall(old); }
+  V.calls[c.peer] = c;
+  c.on('stream', (stream) => {
+    if (!c._audio) { c._audio = document.createElement('audio'); c._audio.autoplay = true; c._audio.style.display = 'none'; document.body.appendChild(c._audio); }
+    c._audio.srcObject = stream;
+    applyMutes();
+    c._audio.play?.().catch(() => {});
+  });
+  c.on('close', () => dropCall(c));
+  c.on('error', () => dropCall(c));
+}
+function applyMutes() {
+  for (const c of Object.values(V.calls)) { const m = V.list.find((x) => x.peer === c.peer); if (c._audio) c._audio.muted = !!(m && V.muted[m.id]); }
+}
+function wireVoicePeer() {
+  const peer = S.peer;
+  if (!peer || peer._voice) return;
+  peer._voice = true;
+  peer.on('call', (c) => { if (!V.on || !V.out || !V.list.some((m) => m.peer === c.peer)) { try { c.close(); } catch {} return; } c.answer(V.out); wireCall(c); });
+}
+function joinVoice() {
+  if (V.on) return;
+  if (!S.peer || typeof RTCPeerConnection === 'undefined') { toast('Voice does not work in this browser.'); return; }
+  try {
+    // Until the microphone is on, a silent track is sent, so the browser does not ask for the microphone just to listen.
+    V.ctx = new (window.AudioContext || window.webkitAudioContext)();
+    V.out = V.ctx.createMediaStreamDestination().stream;
+  } catch { toast('Voice does not work in this browser.'); return; }
+  V.on = true; V.mic = false; V.peer = S.peer;
+  wireVoicePeer();
+  send({ t: 'voice', on: true, mic: false });
+  // The table can change hands or the link can drop. Every few seconds, make sure the table still lists me and my links are up.
+  clearInterval(V.timer);
+  V.timer = setInterval(() => {
+    if (!V.on) return;
+    if (V.peer !== S.peer) { for (const c of Object.values(V.calls)) { try { c.close(); } catch {} dropCall(c); } V.peer = S.peer; wireVoicePeer(); }
+    const me = V.list.find((m) => m.id === S.myId);
+    if (!me || me.peer !== S.peer?.id) { if (S.role === 'host' || S.conn?.open) send({ t: 'voice', on: true, mic: V.mic }); }
+    else syncCalls();
+  }, 4000);
+  drawVoice(); if (S.state) drawSitOut(S.state);
+}
+function leaveVoice() {
+  if (!V.on) return;
+  V.on = false; V.mic = false;
+  clearInterval(V.timer);
+  for (const c of Object.values(V.calls)) { try { c.close(); } catch {} dropCall(c); }
+  try { V.micTrack?.stop(); } catch {}
+  try { V.ctx?.close(); } catch {}
+  V.micTrack = null; V.out = null; V.ctx = null;
+  if (S.role === 'host' || S.conn?.open) send({ t: 'voice', on: false });
+  drawVoice(); if (S.state) drawSitOut(S.state);
+}
+async function setMic(on) {
+  if (!V.on) return;
+  if (on && !V.micTrack) {
+    try {
+      const ms = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+      if (!V.on) { ms.getTracks().forEach((t) => t.stop()); return; }
+      V.micTrack = ms.getAudioTracks()[0];
+      V.out = new MediaStream([V.micTrack]);
+      for (const c of Object.values(V.calls)) { const sender = c.peerConnection?.getSenders().find((x) => !x.track || x.track.kind === 'audio'); try { await sender?.replaceTrack(V.micTrack); } catch {} }
+    } catch { toast('The browser did not allow the microphone. Allow it in the address bar, then try again.'); return; }
+  }
+  if (V.micTrack) V.micTrack.enabled = on;
+  V.mic = on && !!V.micTrack;
+  send({ t: 'voice', on: true, mic: V.mic });
+  drawVoice(); if (S.state) drawSitOut(S.state);
+}
+function drawVoice() {
+  const el = $('#voice-panel');
+  if (!el) return;
+  const others = V.list.filter((m) => m.id !== S.myId);
+  const row = (m) => `<div class="voice-row"><span>${m.mic ? '🎤' : '🔇'} <b>${esc(m.name)}</b></span>${V.on ? `<button class="btn small ghost" data-act="voice-mute" data-id="${esc(m.id)}">${V.muted[m.id] ? 'Unmute' : 'Mute'}</button>` : ''}</div>`;
+  el.querySelector('#voice-body').innerHTML = V.on
+    ? `<button class="btn ${V.mic ? '' : 'ghost'} voice-mic" data-act="voice-mic">${V.mic ? '🎤 Your mic is on. Tap to turn it off' : '🔇 Your mic is off. Tap to talk'}</button>
+       <div class="voice-list">${others.map(row).join('') || '<div class="chat-empty">Nobody else is in voice yet.</div>'}</div>
+       <button class="btn small danger" data-act="voice-leave">Leave voice</button>`
+    : `<div class="chat-empty">Talk with the table. You join with your mic off, and the browser asks for the mic only when you turn it on.</div>
+       <div class="voice-list">${V.list.map(row).join('') || '<div class="chat-empty">Nobody is in voice yet.</div>'}</div>
+       <button class="btn" data-act="voice-join">Join voice</button>`;
+}
+function toggleVoicePanel(on = !$('#voice-panel')) {
+  let el = $('#voice-panel');
+  if (!on) { el?.remove(); return; }
+  toggleChat(false);
+  if (!el) { el = document.createElement('div'); el.id = 'voice-panel'; el.innerHTML = '<div class="chat-head"><b>Voice chat</b><button class="chat-x" data-act="voice-close" aria-label="Close voice">✕</button></div><div id="voice-body"></div>'; app.appendChild(el); }
+  drawVoice();
+}
+
 function drawSitOut(st) {
   let el = $('#sitout-bar');
   if (el && !el.isConnected) el = null;
   if (!el) { el = document.createElement('div'); el.id = 'sitout-bar'; app.appendChild(el); }
-  const h = st ? sitOutHTML(st) + `<button class="chat-btn ${S.chatOpen ? 'on' : ''}" data-act="chat" title="Chat with everyone at the table">💬 Chat${S.chatUnread ? `<i>${S.chatUnread > 9 ? '9+' : S.chatUnread}</i>` : ''}</button>` : '';
+  const h = st ? sitOutHTML(st) + `<button class="chat-btn ${S.chatOpen ? 'on' : ''}" data-act="chat" title="Chat with everyone at the table">💬 Chat${S.chatUnread ? `<i>${S.chatUnread > 9 ? '9+' : S.chatUnread}</i>` : ''}</button>`
+    + `<button class="chat-btn ${V.on ? 'on' : ''}" data-act="voice" title="Voice chat with the table">🎧 Voice${V.list.length ? ` (${V.list.length})` : ''}</button>`
+    + (V.on ? `<button class="chat-btn mic-btn ${V.mic ? 'live' : ''}" data-act="voice-mic" title="Turn your microphone on or off">${V.mic ? '🎤 Mic on' : '🔇 Mic off'}</button>` : '') : '';
   if (el.dataset.h !== h) { el.dataset.h = h; el.innerHTML = h; }
 }
 function autoBarHTML(st) {
@@ -2647,8 +2783,13 @@ function runAct(el) {
       break;
     }
     case 'train': safeSet('bj-train', trainingOn() ? '0' : '1'); el.textContent = trainingOn() ? '🧮 Count training: on' : '🧮 Count training: off'; S.train = { right: 0, total: 0 }; render(); break;
-    case 'chart': openChart(); break;
     case 'chat': toggleChat(); break;
+    case 'voice': toggleVoicePanel(); break;
+    case 'voice-close': toggleVoicePanel(false); break;
+    case 'voice-join': joinVoice(); break;
+    case 'voice-leave': leaveVoice(); break;
+    case 'voice-mic': setMic(!V.mic); break;
+    case 'voice-mute': V.muted[el.dataset.id] = !V.muted[el.dataset.id]; applyMutes(); drawVoice(); break;
     case 'chat-close': toggleChat(false); break;
     case 'hints': safeSet('bj-hints', hintsOn() ? '0' : '1'); el.textContent = hintsOn() ? '💡 Strategy hints: on' : '💡 Strategy hints: off'; render(); break;
     case 'buyin-open': openBuyIn(); break;
