@@ -771,7 +771,7 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     const w = container.clientWidth || 1, h = container.clientHeight || 1;
     const sgn = side === 'dealer' ? -1 : 1;
     const bottom = -1 + (2 * Math.min(hudReserve, h * 0.42) + 8) / h; // lowest the table may reach, in screen units (-1 bottom, 1 top)
-    const topMax = 1 - 2 * (w < 600 ? 118 : Math.min(34, h * 0.05)) / h, sideMax = 1 - (w < 600 ? 4 : 16) / w;
+    const topMax = 1 - 2 * (w < 600 ? 118 : Math.min(34, h * 0.05)) / h, sideMax = 1 - (w < 600 ? 10 : 16) / w;
     probe.fov = camera.fov; probe.aspect = w / h; probe.near = 10; probe.far = 12000; probe.updateProjectionMatrix();
     const box = (phi, r, tz) => {
       probe.position.set(0, r * Math.cos(phi), sgn * (tz + r * Math.sin(phi)));
@@ -811,6 +811,12 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     goal.theta = base + Math.PI * 2 * Math.round((cur.theta - base) / (Math.PI * 2));
     goal.phi = homeFit.phi; goal.r = homeFit.r;
     goal.t.set(0, 0, (side === 'dealer' ? -1 : 1) * homeFit.tz);
+    // A phone held sideways is too short to show the whole table with cards you can read, so you
+    // lean in over your own cards and the dealer's. The look buttons and a pinch show the rest.
+    if (container.clientHeight < 440 && container.clientWidth > container.clientHeight) {
+      goal.r = homeFit.r * 0.74;
+      goal.t.z = (side === 'dealer' ? -1 : 1) * fitHome(goal.r).tz;
+    }
     if (!animate) { cur.theta = goal.theta; cur.phi = goal.phi; cur.r = goal.r; cur.yaw = goal.yaw; cur.pitch = goal.pitch; cur.t.copy(goal.t); }
     touch();
   }
@@ -877,22 +883,38 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
   const pointers = new Map();
   const panR = new THREE.Vector3(), panF = new THREE.Vector3();
   container.addEventListener('contextmenu', (e) => { if (!e.target.closest('input, textarea')) e.preventDefault(); });
-  let drag = null, pinch = 0;
+  let drag = null, pinch = 0, mid = null, twoFinger = false;
   const interactive = 'button, a, input, select, textarea, label, [data-act], [data-throw-at], [data-vote]';
   container.addEventListener('pointerdown', (e) => {
     if ((e.button > 0 && e.button !== 2) || e.target.closest(interactive)) return;
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     // Left button (or one finger) turns the view. Right button slides the view across the room.
     if (pointers.size === 1) drag = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: false, pan: e.button === 2 };
-    else if (pointers.size === 2) { const [a, b] = [...pointers.values()]; pinch = Math.hypot(a.x - b.x, a.y - b.y); drag = null; }
+    else if (pointers.size === 2) { const [a, b] = [...pointers.values()]; pinch = Math.hypot(a.x - b.x, a.y - b.y); mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }; drag = null; container.classList.remove('dragging'); }
   });
+  // The room follows the hand: drag right and the table moves right, drag down and it comes nearer.
+  function slide(dx, dy) {
+    rate = 16;
+    const kp = cur.r * 0.9 / Math.max(320, container.clientHeight);
+    panR.set(1, 0, 0).applyQuaternion(camera.quaternion); panR.y = 0; panR.normalize();
+    panF.set(-panR.z, 0, panR.x).multiplyScalar(-1); // straight ahead along the floor
+    goal.t.addScaledVector(panR, -dx * kp).addScaledVector(panF, dy * kp);
+    const lim = homeFit.r * (seated ? 0.45 : 1);
+    goal.t.x = Math.max(-lim, Math.min(lim, goal.t.x)); goal.t.z = Math.max(-lim, Math.min(lim, goal.t.z));
+    touch();
+  }
   container.addEventListener('pointermove', (e) => {
     const p = pointers.get(e.pointerId);
     if (!p) return;
     p.x = e.clientX; p.y = e.clientY;
     if (pointers.size === 2 && pinch) {
+      // Two fingers: spread or pinch them to move in and out, move them together to slide the view.
       const [a, b] = [...pointers.values()], d = Math.hypot(a.x - b.x, a.y - b.y);
-      if (d > 0) { zoom(Math.max(0.8, Math.min(1.25, pinch / d))); pinch = d; }
+      const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+      if (d > 0 && Math.abs(d - pinch) > 1) { zoom(Math.max(0.8, Math.min(1.25, pinch / d))); pinch = d; }
+      if (mid) slide(mx - mid.x, my - mid.y);
+      mid = { x: mx, y: my };
+      twoFinger = true;
       return;
     }
     if (!drag || drag.id !== e.pointerId) return;
@@ -906,24 +928,16 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     drag.x = e.clientX; drag.y = e.clientY;
     rate = 16;
     const k = 2.4 / Math.max(320, container.clientHeight);
-    if (drag.pan) {
-      // The room follows the mouse: drag right and the table moves right, drag down and it comes nearer.
-      const kp = cur.r * 0.9 / Math.max(320, container.clientHeight);
-      panR.set(1, 0, 0).applyQuaternion(camera.quaternion); panR.y = 0; panR.normalize();
-      panF.set(-panR.z, 0, panR.x).multiplyScalar(-1); // straight ahead along the floor
-      goal.t.addScaledVector(panR, -dx * kp).addScaledVector(panF, dy * kp);
-      const lim = homeFit.r * (seated ? 0.45 : 1);
-      goal.t.x = Math.max(-lim, Math.min(lim, goal.t.x)); goal.t.z = Math.max(-lim, Math.min(lim, goal.t.z));
-      touch();
-      return;
-    }
+    if (drag.pan) { slide(dx, dy); return; }
     if (seated) { goal.yaw += dx * k * 1.5; goal.pitch += dy * k; }
     else { goal.theta -= dx * k * 1.6; goal.phi -= dy * k; }
     clampGoal(); touch();
   });
   const endPointer = (e) => {
     pointers.delete(e.pointerId);
-    if (pointers.size < 2) pinch = 0;
+    if (pointers.size < 2) { pinch = 0; mid = null; }
+    // The tap that ends a two finger move must not press whatever is under the last finger.
+    if (twoFinger && !pointers.size) { twoFinger = false; container.classList.add('was-drag'); setTimeout(() => container.classList.remove('was-drag'), 60); }
     if (drag && drag.id === e.pointerId) {
       if (drag.moved) { container.classList.add('was-drag'); setTimeout(() => container.classList.remove('was-drag'), 60); }
       drag = null; container.classList.remove('dragging');

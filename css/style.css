@@ -1295,3 +1295,37 @@ body.room3d.in-room .hud3d .tray:has(.chip-rack) { --tray-y: .42; }
 .seat.empty > [data-act=sit]::before { content: '▼'; position: absolute; left: 50%; bottom: calc(100% + 4px); margin-left: -0.5em; width: 1em; text-align: center; color: var(--gold, #f1c76a); font-size: 16px; line-height: 1; text-shadow: 0 2px 4px rgba(0,0,0,.7); pointer-events: none; animation: sit-arrow 0.9s ease-in-out infinite; }
 @keyframes sit-arrow { 0%, 100% { transform: translateY(-7px); } 50% { transform: translateY(0); } }
 @media (prefers-reduced-motion: reduce) { .seat.empty > [data-act=sit]::before { animation: none; } }
+
+/* 3D room on a phone. The chip tray floats over the felt, so only its buttons take taps: a tap between
+   them goes to the table underneath. */
+body.room3d.in-room .hud3d .tray:has(.chip-rack) { pointer-events: none; }
+body.room3d.in-room .hud3d .tray:has(.chip-rack) :is(button, .btn, [data-act]) { pointer-events: auto; }
+body.room3d .felt .spot-amt { pointer-events: none; }
+@media (max-width: 700px) {
+  body.room3d .zoom-ctl button { height: 36px; }
+  body.room3d.in-room .float-balance { top: calc(var(--topbar-h, 52px) + 90px); }
+  /* Round over: Rebet is on its own line, with the note under it. */
+  body.room3d.in-room .hud3d .tray:has(.round-result) .actions { flex-direction: column; align-items: center; gap: 4px; }
+  body.room3d.in-room .hud3d .tray:has(.round-result) .actions .hint { font-size: 12px; background: rgba(8,10,14,.6); border-radius: 10px; padding: 2px 10px; }
+  body.room3d.in-room .hud3d .tray:has(.round-result) .rebet-btn { font-size: 14px; padding: 9px 18px; }
+}
+@media (max-width: 700px) { body.room3d.in-room .hud3d .tray:has(.round-result) .rebet-btn { background-color: rgba(12,15,20,.86); } }
+/* 3D room on a phone held sideways: everything around the table is smaller, so the table has the room. */
+@media (max-height: 500px) and (orientation: landscape) {
+  body.room3d .hud3d { gap: 2px; bottom: calc(2px + env(safe-area-inset-bottom, 0px)); }
+  body.room3d .hud3d .decide-title { display: none; }
+  body.room3d .hud3d .felt-actions.hud > .decide { padding: 2px 12px 0; gap: 2px; }
+  body.room3d .hud3d .move-btn.tile { width: 70px; height: 44px; }
+  body.room3d .hud3d .move-btn.tile.big { width: 104px; height: 50px; }
+  body.room3d .hud3d .move-btn.tile .sym, body.room3d .hud3d .move-btn.tile.big .sym { font-size: 16px; line-height: 1; }
+  body.room3d .hud3d .move-btn.tile .lbl, body.room3d .hud3d .move-btn.tile.big .lbl { font-size: 11px; }
+  body.room3d .hud3d .status { font-size: 12px; padding: 3px 10px; }
+  body.room3d .hud3d .deal-btn { font-size: 15px; padding: 6px 24px; }
+  body.room3d .zoom-ctl { width: 168px; gap: 3px; padding: 3px; top: 66px; right: 6px; }
+  body.room3d .zoom-ctl button { height: 30px; font-size: 16px; }
+  body.room3d .zoom-ctl .view-btn { font-size: 11px; padding: 0 4px; }
+  body.room3d.in-room .float-balance small { display: none; }
+  body.room3d.in-room .hud3d .tray:has(.chip-rack) { --tray-y: .2; gap: 3px; }
+  body.room3d.in-room .hud3d .tray:has(.chip-rack) .chipv { width: 40px; height: 40px; }
+  body.room3d.in-room .hud3d .tray:has(.chip-rack) .icon-btn { width: 44px; height: 44px; }
+}

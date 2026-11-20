@@ -1,11 +1,11 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120c';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120c';
-import { tickSound, winSound } from './fx.js?v=20261120c';
-import { webglOK, initRoom } from './room3d.js?v=20261120c';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120c';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120d';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120d';
+import { tickSound, winSound } from './fx.js?v=20261120d';
+import { webglOK, initRoom } from './room3d.js?v=20261120d';
+import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120d';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -742,21 +742,16 @@ function buildLayout() {
     try { S.room = initRoom($('#room'), $('#felt'), { phone: innerWidth < 700, pixel: pixelOn(), hud: $('#hud3d'), size: innerWidth < 700 ? { W: Math.max(320, Math.min(460, innerWidth - 16)), H: 600 } : FELT }); }
     catch (e) { console.error(e); safeSet('bj-3d', '0'); toast('The 3D room could not start on this device.'); }
     if (params.has('roomdebug')) window.__room = S.room; // lets a test read the camera and the frame rate
-    if (S.room && !S.roomHint) { S.roomHint = true; setTimeout(() => toast('Drag to look around. Scroll or pinch out to walk around the table.'), 1200); }
+    if (S.room && !S.roomHint) { S.roomHint = true; setTimeout(() => toast(matchMedia('(pointer: coarse)').matches ? 'One finger turns the view. Two fingers slide it, and a pinch moves you in or out.' : 'Drag to look around. Scroll or pinch out to walk around the table.'), 1200); }
   }
 }
 
 // The 3D room is on unless the browser cannot draw it or the person turned it off.
-// The 3D room is the usual view on a computer. On a phone the flat table is the usual view, because
-// cards are too small in 3D there. The menu switch overrides either one and is remembered.
+// The 3D room is the usual view on every device that can draw it. The menu switch turns it off and is remembered.
 function use3D() {
   if (params.get('flat') === '1' || !webglOK()) return false;
   if (params.get('room') === '3d' || params.get('3d') === '1') return true;
-  const saved = safeGet('bj-3d');
-  if (saved === '1') return true;
-  if (saved === '0') return false;
-  // Computers get the 3D room, also in a small browser window. Phones get the flat table: the room is too small to read there.
-  return innerWidth >= 900 && innerHeight >= 420 && !(matchMedia('(pointer: coarse)').matches && Math.min(innerWidth, innerHeight) < 600);
+  return safeGet('bj-3d') !== '0';
 }
 
 // Zoom the table a little in or out. Saved for next time on this device.
@@ -1272,9 +1267,9 @@ const HAND_BOX = {
 // little larger. Seats shrink only when the circles would touch. Returns one spot per place: x and y
 // are percentages of the felt for the seat's outer edge, s its size (1 = full), r its turn in degrees,
 // mode is 'focus' (your own big seat), 'seat' or 'mini', and hw by hh is the box for its cards.
-function seatLayout(n, c, { W, H, phone, flip, round, noFocus }) {
+function seatLayout(n, c, { W, H, phone, flip, round, noFocus, in3d }) {
   const pct = (v, of) => Math.round((v / of) * 10000) / 100;
-  if (phone) return phoneLayout(n, c, { W, H, flip, noFocus, pct });
+  if (phone) return phoneLayout(n, c, { W, H, flip, noFocus, pct, in3d });
   const B = SEAT_BOX.desk, rad = Math.PI / 180;
   const K = Math.max(c, n - 1 - c, 1);
   const step = Math.min(24, 60 / K); // degrees between two seats
@@ -1309,7 +1304,7 @@ function seatLayout(n, c, { W, H, phone, flip, round, noFocus }) {
 // Phone: your own seat is large at the bottom middle, the dealer large at the top, and everyone else
 // is a small card (name, chips, bet, total, tiny cards) down the two sides. Tap one to see it large.
 // The dealer's own view has no seat of its own, so every player is a small card in rows at the far end.
-function phoneLayout(n, c, { W, H, flip, noFocus, pct }) {
+function phoneLayout(n, c, { W, H, flip, noFocus, pct, in3d }) {
   const B = SEAT_BOX.phone;
   const out = new Array(n);
   if (noFocus) {
@@ -1325,16 +1320,21 @@ function phoneLayout(n, c, { W, H, flip, noFocus, pct }) {
     return out;
   }
   const left = c, right = n - 1 - c;
-  const lane = W - (left || right ? 2 * (B.mw + B.side) + 8 : 16);
+  // In the 3D room the felt is rounded like a real table and narrows towards your own seat, so the
+  // side seats stop higher up and each one moves in as far as the curved edge at its height.
+  const curve = in3d && !flip;
+  const inset = (y) => (curve ? (W / 2) * (1 - Math.sqrt(Math.max(0, 1 - ((y / H - 0.12) / 0.88) ** 2))) : 0);
+  const ybSide = curve ? H - 190 : H - 50; // flat table: the felt's rounded end lifts the corners
+  const lane = W - (left || right ? 2 * (B.mw + B.side + inset(ybSide)) + 8 : 16);
   const dealerH = H < 500 ? 96 : 112, laneH = 74;
-  const ring = Math.round(Math.max(96, Math.min(lane - 8, H * 0.27, 150)));
+  const ring = Math.round(Math.max(96, Math.min(curve ? 150 : lane - 8, H * 0.27, 150))); // in the 3D room the side seats stop above the circle
   const hh = Math.round(Math.max(64, H - B.bottom - B.who - 8 - ring - dealerH - laneH));
-  const yb = H - 50; // the felt's rounded end lifts the corners
-  const col = (count, x, posOf) => {
+  const yb = ybSide;
+  const col = (count, x0, posOf) => {
     if (!count) return;
     const slot = (yb - B.top) / count;
     const s = Math.min(1, (slot - 4) / B.mh);
-    for (let k = 0; k < count; k++) out[posOf(k)] = { x: pct(x, W), y: pct(yb - k * slot, H), s: Math.round(s * 1000) / 1000, r: 0, mode: 'mini', hw: B.mw - 4, hh: 66 };
+    for (let k = 0; k < count; k++) out[posOf(k)] = { x: pct(x0 + Math.sign(W / 2 - x0) * inset(yb - k * slot), W), y: pct(yb - k * slot, H), s: Math.round(s * 1000) / 1000, r: 0, mode: 'mini', hw: B.mw - 4, hh: 66 };
   };
   col(left, B.side + B.mw / 2, (k) => c - 1 - k);
   col(right, W - B.side - B.mw / 2, (k) => c + 1 + k);
