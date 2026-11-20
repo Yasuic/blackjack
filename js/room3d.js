@@ -152,7 +152,7 @@ function buildOffice(signText, midShift = 0, midClear = 0) {
     chrome: mk({ color: '#b9bec4', roughness: 0.25, metalness: 0.9 }),
     screen: mk({ color: '#0d0f12', roughness: 0.25, metalness: 0.2 }),
     // What the office screens show: the ARC Group logo, from the photo of it, lit like a screen that is on.
-    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261120zzk'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
+    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261120zzm'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
     dark: mk({ color: '#30353c', roughness: 0.6 }),
   };
   const group = new THREE.Group();
@@ -305,7 +305,12 @@ function buildOffice(signText, midShift = 0, midClear = 0) {
     const X = -f.cx, Z = -f.cy;
     if (f.kind === 'tvh') { // a wall screen: wide, with the logo on the side that faces its room
       const face = f.id === 'tv4' ? -1 : 1, zc = Z + 0.03 * face;
-      box(1.3, 0.76, 0.05, M.screen, X, 1.45, zc); box(1.24, 0.7, 0.003, M.logo, X, 1.45, zc + 0.026 * face, false); return;
+      box(1.3, 0.76, 0.05, M.screen, X, 1.45, zc); box(1.24, 0.7, 0.003, f.id === 'tv4' ? (M.news ||= new THREE.MeshBasicMaterial({ map: canvasTexture(640, 360, (g, cw, ch) => { // a business news channel, always on
+        g.fillStyle = '#05070a'; g.fillRect(0, 0, cw, ch); g.fillStyle = '#111'; g.fillRect(0, 0, cw, 46); g.fillStyle = '#ff9b1a'; g.textBaseline = 'middle'; g.font = `700 30px ${FONT}`; g.fillText('BLOOMBERG', 14, 24); g.fillStyle = '#fff'; g.font = `700 18px ${FONT}`; g.fillText('MARKETS LIVE', cw - 160, 24);
+        g.strokeStyle = '#2bd66b'; g.lineWidth = 4; g.beginPath(); let y = 220; for (let x = 20; x < 400; x += 12) { y += Math.sin(x * 0.7) * 14 - 2.2; g.lineTo(x, y); } g.stroke();
+        [['HSI', '+1.2%', 1], ['SPX', '-0.4%', 0], ['NKY', '+0.8%', 1], ['USDHKD', '7.78', 1], ['GOLD', '-0.3%', 0]].forEach(([n2, v, upq], q) => { g.fillStyle = '#fff'; g.font = `700 22px ${FONT}`; g.fillText(n2, 430, 80 + q * 44); g.fillStyle = upq ? '#2bd66b' : '#ff4d4d'; g.fillText(v, 540, 80 + q * 44); });
+        g.fillStyle = '#ff9b1a'; g.fillRect(0, ch - 46, cw, 46); g.fillStyle = '#111'; g.font = `700 22px ${FONT}`; g.fillText('BREAKING: ANALYSTS STILL IN THE OFFICE AT 3AM', 14, ch - 22);
+      }) })) : M.logo, X, 1.45, zc + 0.026 * face, false); return;
     }
     if (f.id === 'sv') { box(f.w, 0.95, f.d, M.dark, X, 0.475, Z); return; }
     surfaces.push(f);
@@ -363,20 +368,20 @@ function buildOffice(signText, midShift = 0, midClear = 0) {
   // Three people the office asked for by place: the woman at the yellow desk by the wooden slats who
   // faces the small meeting room, the person across from her, and the man at the desk behind her.
   const SPECIAL = {
-    9: { name: 'Charlene', skin: '#f0c9a4', hair: '#17110d', top: '#111214', legs: '#111214', longHair: true, dress: true },
-    10: { name: 'Felix', skin: '#e2ad82', hair: '#1d1712', top: '#e9e6df', legs: '#2b2f38', vest: '#131416' },
-    8: { name: 'Tony', skin: '#e8b98f', hair: '#2a1d14', top: '#4a6fa0', legs: '#2b2f38', wide: 1.5 },
-    27: { name: 'Nigel', skin: '#e8b98f', hair: '#1d1712', top: '#f6f5f1', legs: '#3a3f47', tattoo: true, golf: true },
+    9: { name: 'Charlene', skin: '#f0c9a4', hair: '#3a2416', top: '#111214', legs: '#111214', longHair: true, dress: true, lush: true, lines: ['yooo look at my new keyboard'], rare: 0.1 },
+    10: { name: 'Felix', skin: '#e2ad82', hair: '#1d1712', top: '#e9e6df', legs: '#2b2f38', vest: '#131416', zip: true, lines: ['im going to the gym'] },
+    8: { name: 'Tony', skin: '#e8b98f', hair: '#2a1d14', top: '#4a6fa0', legs: '#2b2f38', wide: 0.8, spiky: true, recede: true, cup: 'DETOUR COFFEE', lines: ['WHY IS SERGIO CALLING ME AGAIN'] },
+    27: { name: 'Nigel', skin: '#e8b98f', hair: '#1d1712', top: '#f6f5f1', legs: '#3a3f47', tattoo: true, golf: true, buttons: true },
     // The middle block, seen from above with the sign cupboard at the top. Bottom row, left to right: 31, 30, 29, 28. Top row: 35, 34, 33, 32.
-    31: { name: 'Henry', skin: '#e2ad82', hair: '#0f0d0c', top: '#5b6470', legs: '#2b2f38', postits: true },
-    34: { name: 'David', skin: '#e8b98f', hair: '#2a1d14', top: '#2f3640', legs: '#22262d', glowKeys: true, goose: true },
-    32: { name: 'Jeff', skin: '#e2ad82', hair: '#15110e', top: '#141518', legs: '#e9dfc8', shoes: '#f7f6f2', collar: true, glasses: true, nap: true, whiteKeys: true, says: 'f*** this shit', cars: true, flask: true },
-    30: { name: 'Victor', skin: '#e8b98f', hair: '#1d1712', top: '#dfe8f2', legs: '#30343c' },
-    29: { name: 'Allie', skin: '#f0c9a4', hair: '#2a1d14', top: '#c0262d', legs: '#c0262d', longHair: true, dress: true, wide: 1.5, mess: true },
-    22: { name: 'Gordon', skin: '#e2ad82', hair: '#1d1712', top: '#5c6b7a', legs: '#2b2f38', wide: 1.55, eat: true },
-    12: { name: 'Alan', skin: '#e8b98f', hair: '#1d1712', top: '#f6f5f1', legs: '#3a3f47', wide: 0.82 },
-    11: { name: 'Thibaud', skin: '#f6dccb', hair: '#f2f2ee', top: '#a9cdea', legs: '#f1efea', shoes: '#f7f6f2', spiky: true },
-    7: { name: 'Yuya', skin: '#f0c9a4', hair: '#0f0d0c', top: '#d9cfbd', legs: '#3a3f47', bowl: true, word: 'MUJI' },
+    31: { name: 'Henry', skin: '#e2ad82', hair: '#0f0d0c', top: '#5b6470', legs: '#2b2f38', postits: true, pinkKeys: true },
+    34: { name: 'David', skin: '#e8b98f', hair: '#2a1d14', top: '#2f3640', legs: '#22262d', glowKeys: true, goose: true, sideHair: true, lines: ['BRUCE DA GOOSE'] },
+    32: { name: 'Jeff', skin: '#e2ad82', hair: '#15110e', top: '#141518', legs: '#e9dfc8', shoes: '#f7f6f2', collar: true, glasses: true, nap: true, whiteKeys: true, cars: true, flask: true, burns: true, tea: true, lines: ['*sigh* fuck this shit', 'fuck im so tired', 'fuckkkkkkkkkk', 'MANIKAAAAAAA'] },
+    30: { name: 'Victor', skin: '#e8b98f', hair: '#1d1712', top: '#dfe8f2', legs: '#30343c', buttons: true, lines: ['ALL IN', "Let's get 龙邦?"] },
+    29: { name: 'Allie', skin: '#f0c9a4', hair: '#2a1d14', top: '#c0262d', legs: '#c0262d', longHair: true, dress: true, wide: 1.5, mess: true, cans: true, cough: true, lines: ['TRANSAKCIONNN'] },
+    22: { name: 'Gordon', skin: '#e2ad82', hair: '#e3b23c', top: '#5c6b7a', legs: '#2b2f38', wide: 1.95, eat: true, noTag: true },
+    12: { name: 'Alan', skin: '#e8b98f', hair: '#1d1712', top: '#f6f5f1', legs: '#3a3f47', wide: 0.82, buttons: true, truck: true },
+    11: { name: 'Thibaud', skin: '#f6dccb', hair: '#f2f2ee', top: '#a9cdea', legs: '#f1efea', shoes: '#f7f6f2', spiky: true, polo: true, cards: true },
+    7: { name: 'Yuya', skin: '#f0c9a4', hair: '#0f0d0c', top: '#d9cfbd', legs: '#3a3f47', bowl: true, word: 'MUJI', wordMany: true, mint: true, lines: ['Arigatoooo'] },
   };
   const bodyMat = mk({ vertexColors: true, roughness: 0.85 });
   // Joins captured pieces into one geometry; each piece keeps the colour of the material it was drawn with.
@@ -418,7 +423,11 @@ function buildOffice(signText, midShift = 0, midClear = 0) {
   };
   // Visits: who walks over to whom, what they say, and where they stand (plan x and y from the other person's chair).
   const VISITS = { Nigel: { to: 'Allie', say: 'Allie, clean your f***ing table up!', off: [0.62, -0.62] }, Gordon: { to: 'Yuya', say: 'bla bla bla...', off: [-0.1, 0.95] }, Henry: { to: 'Felix', say: 'so anyway...', off: [-0.15, 1.1] } };
-  const tags = [];
+  const tags = [], talkers = [], coughs = [], glitch = [], snow = [];
+  const tagSprite = (text, ink = '#f3e3b0') => {
+    const t = canvasTexture(256, 72, (g, cw, ch) => { g.clearRect(0, 0, cw, ch); g.fillStyle = 'rgba(12,14,18,0.78)'; g.beginPath(); g.roundRect(4, 6, cw - 8, ch - 12, 28); g.fill(); g.fillStyle = ink; g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = `700 34px ${FONT}`; g.fillText(text, cw / 2, ch / 2 + 3, cw - 30); });
+    return new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthWrite: false }));
+  };
   const EMPTY = new Set([28, 33, 35]); // desks nobody is at
   const worker = (idx, gap, ry, deskH, stand, deskDepth, chair) => {
     if (EMPTY.has(idx)) return;
@@ -447,7 +456,13 @@ function buildOffice(signText, midShift = 0, midClear = 0) {
       const hw = w > 1 ? 1.12 : 1;
       box(0.2 * hw, 0.22, 0.21, skin, 0, 1.28 + up2, 0.03);
       if (L.glasses && !lie) { const blk = col('#0c0d0f', 0.4); box(0.21 * hw, 0.012, 0.012, blk, 0, 1.31 + up2, -0.08); [-1, 1].forEach((k) => { box(0.075, 0.05, 0.012, blk, k * 0.05, 1.3 + up2, -0.08); box(0.01, 0.012, 0.12, blk, k * 0.103 * hw, 1.31 + up2, -0.02); }); }
-      box(0.215 * hw, 0.07, 0.225, hair, 0, 1.4 + up2, 0.035);
+      if (L.recede) box(0.215 * hw, 0.07, 0.13, hair, 0, 1.4 + up2, 0.085); else box(0.215 * hw, 0.07, 0.225, hair, 0, 1.4 + up2, 0.035);
+      if (L.sideHair) [-1, 1].forEach((k) => box(0.03, 0.12, 0.17, hair, k * 0.108 * hw, 1.33 + up2, 0.05));
+      if (L.burns) [-1, 1].forEach((k) => box(0.022, 0.1, 0.045, hair, k * 0.104 * hw, 1.29 + up2, -0.015));
+      if (L.lush) { box(0.3, 0.62, 0.11, hair, 0, 1.1 + up2, 0.18); [-1, 1].forEach((k) => { box(0.07, 0.5, 0.2, hair, k * 0.135, 1.14 + up2, 0.08); box(0.06, 0.12, 0.1, hair, k * 0.1, 1.42 + up2, 0.04); }); box(0.24, 0.05, 0.23, hair, 0, 1.445 + up2, 0.04); }
+      if (L.zip) { box(0.37, 0.44, 0.03, col(L.vest), 0, 0.87 + up2, -0.045); box(0.012, 0.44, 0.008, col('#8a8d90', 0.4), 0, 0.87 + up2, -0.062); }
+      if (L.polo) { const pc = col('#8fb9dd'); box(0.19, 0.03, 0.15, pc, 0, 1.115 + up2, 0.05); [-1, 1].forEach((k) => box(0.07, 0.05, 0.02, pc, k * 0.045, 1.09 + up2, -0.045, true, 0, 0.3)); box(0.012, 0.1, 0.006, col('#f4f3ef'), 0, 1.03 + up2, -0.042); }
+      if (L.buttons) for (let n = 0; n < 5; n++) box(0.016, 0.016, 0.008, col('#aab0b6', 0.4), 0, 0.68 + n * 0.085 + up2, -0.042);
       box(0.215 * hw, 0.16, 0.05, hair, 0, 1.33 + up2, 0.14);
       if (L.spiky) for (let q = 0; q < 9; q++) { const x = ((q % 3) - 1) * 0.07, z = (Math.floor(q / 3) - 1) * 0.07 + 0.035; box(0.035, 0.09, 0.035, hair, x, 1.46 + up2, z, true, q * 0.7, ((q % 3) - 1) * 0.25); }
       if (L.bowl) { box(0.235, 0.1, 0.245, hair, 0, 1.385 + up2, 0.03); box(0.235, 0.05, 0.03, hair, 0, 1.345 + up2, -0.085); [-1, 1].forEach((k) => box(0.025, 0.11, 0.2, hair, k * 0.108, 1.33 + up2, 0.045)); box(0.235, 0.12, 0.03, hair, 0, 1.32 + up2, 0.15); }
@@ -470,9 +485,9 @@ function buildOffice(signText, midShift = 0, midClear = 0) {
     seatMesh.applyMatrix4(frame);
     group.add(seatMesh);
     if (L.word) { // the word on the back and the chest of the shirt
-      const t = canvasTexture(256, 96, (g, cw, ch) => { g.fillStyle = L.top; g.fillRect(0, 0, cw, ch); g.fillStyle = '#7a1f1f'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = `700 64px ${FONT}`; g.fillText(L.word, cw / 2, ch / 2 + 4); });
+      const t = canvasTexture(256, 96, (g, cw, ch) => { g.fillStyle = L.top; g.fillRect(0, 0, cw, ch); g.fillStyle = '#7a1f1f'; g.textAlign = 'center'; g.textBaseline = 'middle'; if (L.wordMany) { g.font = `700 26px ${FONT}`; for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) g.fillText(L.word, 44 + c * 84, 18 + r * 31); } else { g.font = `700 64px ${FONT}`; g.fillText(L.word, cw / 2, ch / 2 + 4); } });
       const wm = mk({ map: t, roughness: 0.85 });
-      [[0.1615, 0], [-0.0415, Math.PI]].forEach(([z, r]) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(0.24, 0.09), wm); m.applyMatrix4(at(0, 0.95 + up, z, r)); seatMesh.add(m); });
+      [[0.1615, 0], [-0.0415, Math.PI]].forEach(([z, r]) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(L.wordMany ? 0.32 : 0.24, L.wordMany ? 0.26 : 0.09), wm); m.applyMatrix4(at(0, 0.95 + up, z, r)); seatMesh.add(m); });
     }
     [-1, 1].forEach((k) => { // the hands tap on the keys
       const m = new THREE.Mesh(handGeo, skin);
@@ -521,10 +536,14 @@ function buildOffice(signText, midShift = 0, midClear = 0) {
         cyl(0.039, 0.034, 0.05, 12, band, x, dy + h * 0.5, z, false);
         cyl(0.043, 0.043, 0.012, 12, lid, x, dy + h + 0.006, z, false);
       });
+      for (let n = 0; n < 16; n++) { const a = r2() * 6.3, d = 0.45 + r2() * 0.75, x = Math.cos(a) * d, z = Math.sin(a) * d * 0.8 + 0.25; cyl(0.04, 0.03, 0.13, 12, cup, x, 0.065, z, false); cyl(0.039, 0.034, 0.05, 12, band, x, 0.065, z, false); cyl(0.043, 0.043, 0.012, 12, lid, x, 0.136, z, false); } // and more cups on the floor round him
       return;
     }
     const far = -(gap + deskDepth - 0.15); // where the screens stand
-    if (L.postits) { const blue = col('#4aa3e8', 0.9); [0.47, 0.39].forEach((x, n) => box(0.07, 0.07, 0.004, blue, x, dy + 0.215 + n * 0.012, far + 0.03 + n * 0.004, false, 0, n ? 0.06 : -0.04)); }
+    if (L.postits) { // two blue post-its on the screen; they glitch
+      const hold = new THREE.Group(); hold.applyMatrix4(frame); group.add(hold);
+      [0.47, 0.39].forEach((x, n) => { const m = new THREE.Mesh(unitBox, new THREE.MeshBasicMaterial({ color: '#4aa3e8' })); m.scale.set(0.07, 0.07, 0.004); m.position.set(x, dy + 0.215 + n * 0.012, far + 0.03 + n * 0.004); hold.add(m); glitch.push({ m, x, y: m.position.y }); });
+    }
     if (L.goose) { // a goose on the desk
       const white = col('#f7f6f2', 0.7), orange = col('#f08a1c', 0.6);
       [[-0.45, 0.3], [-0.6, 0.1], [0.5, 0.3]].forEach(([gx, gb]) => { const gz = -gap - gb;
@@ -554,8 +573,33 @@ function buildOffice(signText, midShift = 0, midClear = 0) {
       const fx = 0.34, fz = -gap - 0.36, steel = mk({ color: '#c9ced3', roughness: 0.25, metalness: 0.85 }), blue = mk({ color: '#3d9fd0', roughness: 0.3, metalness: 0.6 });
       cyl(0.03, 0.034, 0.15, 16, blue, fx, dy + 0.075, fz); cyl(0.017, 0.03, 0.06, 16, blue, fx, dy + 0.18, fz, false); cyl(0.019, 0.019, 0.032, 16, steel, fx, dy + 0.226, fz, false);
     }
-    if (L.says) { const sp = bubble(L.says); sp.position.set(0.22, L.name ? 1.9 : 1.72, 0); seatMesh.add(sp); } // mutters over the head
-    if (L.name) { // a small name tag over the head, also while walking
+    if (L.lines) talkers.push({ holder: seatMesh, lines: L.lines, rare: L.rare || 1, cache: {}, on: null, until: 0 });
+    if (L.cough) { const sp = tagSprite('*cough cough*', '#ffffff'); sp.position.set(-0.3, 1.42, -0.12); sp.scale.set(0.3, 0.085, 1); seatMesh.add(sp); coughs.push(sp); }
+    const plate = (text, w, h, x, y, z, ry, rx, bg, fg) => { // a small flat label
+      const t = canvasTexture(256, Math.max(24, Math.round(256 * h / w)), (g, cw, ch) => { g.fillStyle = bg; g.fillRect(0, 0, cw, ch); g.fillStyle = fg; g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = `700 ${Math.round(ch * 0.5)}px ${FONT}`; g.fillText(text, cw / 2, ch / 2 + 2, cw - 14); });
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mk({ map: t, roughness: 0.8 })); m.applyMatrix4(at(x, y, z, ry, rx)); m.applyMatrix4(frame); group.add(m);
+    };
+    if (L.cup) { const x = 0.42, z = -gap - 0.16; cyl(0.04, 0.032, 0.11, 14, col('#f7f6f2', 0.6), x, dy + 0.055, z); cyl(0.043, 0.043, 0.014, 14, col('#111316', 0.5), x, dy + 0.117, z, false); plate(L.cup, 0.07, 0.03, x, dy + 0.06, z + 0.041, 0, 0, '#f7f6f2', '#111316'); }
+    if (L.mint) { const x = -0.4, z = -gap - 0.1; box(0.06, 0.012, 0.036, col('#d3202a', 0.4), x, dy + 0.006, z, false); plate('MINTIA', 0.05, 0.02, x, dy + 0.0125, z, 0, -Math.PI / 2, '#d3202a', '#ffffff'); }
+    if (L.tea) { // a cup of tea, and two used teabags lying beside it
+      const x = -0.3, z = -gap - 0.3; cyl(0.042, 0.034, 0.08, 14, col('#f7f6f2', 0.5), x, dy + 0.04, z); cyl(0.037, 0.037, 0.004, 14, col('#8a4b1c', 0.3), x, dy + 0.079, z, false); box(0.012, 0.045, 0.03, col('#f7f6f2', 0.5), x + 0.05, dy + 0.04, z, false);
+      [[0.1, 0.02, 0.4], [0.16, -0.05, -0.5]].forEach(([ox, oz, r]) => { box(0.045, 0.01, 0.055, col('#b08a5a', 0.95), x + ox, dy + 0.005, z + oz, false, r); box(0.003, 0.003, 0.07, col('#f1efea'), x + ox + 0.02, dy + 0.004, z + oz + 0.05, false, r + 0.5); box(0.02, 0.003, 0.02, col('#e8c531'), x + ox + 0.04, dy + 0.003, z + oz + 0.085, false, r); });
+    }
+    if (L.cans) { const can = col('#141416', 0.35), red = col('#d3202a', 0.4), r5 = rng(51); for (let n = 0; n < 10; n++) { const x = (r5() - 0.5) * 1.2, z = -gap - 0.08 - r5() * 0.45; if (Math.abs(x) < 0.27 && z > -gap - 0.24) continue; cyl(0.022, 0.022, 0.075, 10, can, x, dy + 0.0375, z, false); cyl(0.0225, 0.0225, 0.02, 10, red, x, dy + 0.04, z, false); } } // small cans of zero sugar cola
+    if (L.truck) { // a colourful toy truck in a small clear box
+      const x = 0.42, z = -gap - 0.3, y = dy;
+      box(0.2, 0.008, 0.09, col('#1b1d21', 0.6), x, y + 0.004, z, false); box(0.06, 0.05, 0.05, col('#d6312b', 0.4), x - 0.05, y + 0.045, z); box(0.1, 0.035, 0.052, col('#2f6fd0', 0.4), x + 0.035, y + 0.04, z); box(0.1, 0.012, 0.054, col('#f2c21a', 0.4), x + 0.035, y + 0.064, z, false); box(0.03, 0.02, 0.046, col('#cfe3ee', 0.3), x - 0.062, y + 0.055, z, false);
+      [-0.055, 0.01, 0.06].forEach((ox) => [-1, 1].forEach((k) => box(0.022, 0.022, 0.01, col('#2aa66a', 0.6), x + ox, y + 0.019, z + k * 0.028, false)));
+      box(0.21, 0.1, 0.1, (M.clearBox ||= mk({ color: '#eaf4fa', transparent: true, opacity: 0.22, roughness: 0.1, depthWrite: false })), x, y + 0.058, z, false);
+    }
+    if (L.cards) { // name cards all over the desk and the floor, and cartons of them
+      const r6 = rng(61), white = col('#fbfaf6', 0.9), carton = col('#b88a55', 0.95);
+      for (let n = 0; n < 46; n++) { const x = (r6() - 0.5) * 1.3, z = -gap - 0.04 - r6() * 0.5; if (Math.abs(x) < 0.27 && z > -gap - 0.22) continue; box(0.05, 0.002, 0.03, white, x, dy + 0.002 + (n % 3) * 0.002, z, false, r6() * 3); }
+      for (let n = 0; n < 70; n++) { const a = r6() * 6.3, d = 0.35 + r6() * 1.0; box(0.05, 0.002, 0.03, white, Math.cos(a) * d, 0.003, Math.sin(a) * d * 0.8 + 0.3, false, r6() * 3); }
+      [[0.75, 0.35, 0.3], [-0.7, 0.6, -0.4], [0.5, 0.95, 1.1]].forEach(([x, z, r]) => { box(0.3, 0.2, 0.22, carton, x, 0.1, z, true, r); box(0.26, 0.012, 0.18, white, x, 0.203, z, false, r); });
+      box(0.2, 0.12, 0.15, carton, -0.5, dy + 0.06, -gap - 0.36, true, 0.3); box(0.17, 0.01, 0.12, white, -0.5, dy + 0.122, -gap - 0.36, false, 0.3);
+    }
+    if (L.name && !L.noTag) { // a small name tag over the head, also while walking
       const t = canvasTexture(256, 72, (g, cw, ch) => {
         g.clearRect(0, 0, cw, ch); g.fillStyle = 'rgba(12,14,18,0.78)'; g.beginPath(); g.roundRect(4, 6, cw - 8, ch - 12, 28); g.fill();
         g.fillStyle = '#f3e3b0'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = `700 40px ${FONT}`; g.fillText(L.name, cw / 2, ch / 2 + 3, cw - 30);
@@ -571,7 +615,7 @@ function buildOffice(signText, midShift = 0, midClear = 0) {
       box(0.06, 0.025, 0.1, M.leg, 0.31, dy + 0.0125, -reach, false);
       return;
     }
-    box(0.42, 0.018, 0.14, L.whiteKeys ? col('#f4f3ef', 0.5) : M.leg, 0, dy + 0.009, -reach - 0.01, false);
+    box(0.42, 0.018, 0.14, L.whiteKeys ? col('#f4f3ef', 0.5) : L.pinkKeys ? col('#f29ac0', 0.5) : M.leg, 0, dy + 0.009, -reach - 0.01, false);
     box(0.06, 0.025, 0.1, M.leg, 0.31, dy + 0.0125, -reach, false);
   };
   D.chairs.filter((c) => !c.stool).forEach((c) => {
@@ -585,7 +629,7 @@ function buildOffice(signText, midShift = 0, midClear = 0) {
     if (best && desks.includes(best)) worker(D0.chairs.findIndex((q) => q.cy === c.cy && (q.cx === c.cx || (q.mid && c.mid && Math.abs(q.cx + midShift - c.cx) < 1e-6))), Math.sqrt(bd), ry, best.hh || Hh.desk, c.stand, Math.abs(Math.sin(ry)) > 0.7 ? best.w : best.d, c);
     parent = null;
   });
-  let nextTrip = 0, dbgTrip = null;
+  let nextTrip = 0, dbgTrip = null, nextTalk = 0, snowAt = 0;
   group.userData.trip = (who, kind) => { dbgTrip = [who, kind]; };
   const startVisit = (q, v, o) => {
     const spot = [o.chair.cx + v.off[0], o.chair.cy + v.off[1]], lane = Math.abs(spot[1] - A1) < Math.abs(spot[1] - A2) ? A1 : A2;
@@ -597,6 +641,17 @@ function buildOffice(signText, midShift = 0, midClear = 0) {
   group.userData.tick = (now) => {
     for (const h of typing) { if (h.glow) { h.glow.forEach((m, n) => { m.emissiveIntensity = 0.55 + 0.35 * Math.sin(now * 0.004 + n * 1.2); }); continue; } h.m.position.y = h.y + Math.max(0, Math.sin(now * h.sp + h.ph)) * h.amp; }
     for (const t of tags) t.sp.position.y = t.y + Math.sin(now * 0.002 + t.ph) * 0.02; // name tags hover
+    // Somebody says a line every few seconds; it shows for a moment and goes.
+    if (!nextTalk) nextTalk = now + 3000;
+    if (now > nextTalk) {
+      const c = talkers.filter((t) => t.holder.visible && !t.on), t = c[Math.floor(Math.random() * c.length)];
+      if (t && Math.random() < t.rare) { const text = t.lines[Math.floor(Math.random() * t.lines.length)]; const sp = (t.cache[text] ||= (() => { const q = bubble(text); q.position.set(0.22, 1.9, 0); t.holder.add(q); return q; })()); sp.visible = true; t.on = sp; t.until = now + 3400; }
+      nextTalk = now + 2200 + Math.random() * 3200;
+    }
+    for (const t of talkers) if (t.on && now > t.until) { t.on.visible = false; t.on = null; }
+    for (const sp of coughs) sp.visible = now % 2600 < 900;
+    for (const q of glitch) { const on = Math.random() < 0.12; q.m.position.x = q.x + (on ? (Math.random() - 0.5) * 0.03 : 0); q.m.position.y = q.y + (on ? (Math.random() - 0.5) * 0.02 : 0); q.m.visible = Math.random() > 0.06; q.m.material.color.set(on ? (Math.random() < 0.5 ? '#ff3df2' : '#3dfff2') : '#4aa3e8'); }
+    { const dt = Math.min(0.2, (now - (snowAt || now)) / 1000); snowAt = now; for (const f of snow) { const a = f.pts.geometry.attributes.position; for (let i = 0; i < a.count; i++) { let y = a.getY(i) - (0.22 + (i % 5) * 0.05) * dt; if (y < 0) y = 2.6; a.setY(i, y); a.setX(i, a.getX(i) + Math.sin(now * 0.001 + i) * 0.03 * dt); } a.needsUpdate = true; } }
     // Now and then somebody gets up, walks out of the main door with a coffee, and comes back to their desk.
     if (dbgTrip) { const [who, kind] = dbgTrip; dbgTrip = null; const q = walkers.find((w) => w.name === who && w.state === 'sit'); if (q) { const v = VISITS[who], o = v && walkers.find((w) => w.name === v.to); q.sleep = kind === 'nap'; if (q.sleep) { q.path = q.nap.path; q.talk = null; } else if (kind === 'visit' && o) startVisit(q, v, o); else { q.path = q.route; q.talk = null; } q.state = 'go'; q.i = 0; q.d = 0; q.last = now; q.seat.visible = false; q.wg.visible = true; } }
     if (!nextTrip) nextTrip = now + 6000 + Math.random() * 8000;
@@ -604,7 +659,7 @@ function buildOffice(signText, midShift = 0, midClear = 0) {
       const free = walkers.filter((q) => q.state === 'sit');
       // Half of the trips are a visit to a colleague's desk; the rest are coffee runs out of the door.
       const callers = free.filter((q) => VISITS[q.name] && walkers.some((o) => o.name === VISITS[q.name].to && o.state === 'sit'));
-      const q = callers.length && Math.random() < 0.5 ? callers[Math.floor(Math.random() * callers.length)] : free[Math.floor(Math.random() * free.length)];
+      const q = callers.length && Math.random() < 0.5 ? callers[Math.floor(Math.random() * callers.length)] : (() => { const cf = free.filter((w) => !w.nap); return cf[Math.floor(Math.random() * cf.length)]; })();
       const jeff = free.find((w) => w.nap);
       if (jeff && Math.random() < 0.18) { jeff.path = jeff.nap.path; jeff.talk = null; jeff.sleep = true; jeff.state = 'go'; jeff.i = 0; jeff.d = 0; jeff.last = now; jeff.seat.visible = false; jeff.wg.visible = true; }
       else if (q) {
@@ -637,10 +692,29 @@ function buildOffice(signText, midShift = 0, midClear = 0) {
       q.wg.rotation.y = Math.atan2(-(to.x - from.x), -(to.z - from.z));
       const stepA = Math.floor(now / 300) % 2 === 0; q.wa.visible = stepA; q.wb.visible = !stepA;
     }
+    return walkers.some((q) => q.state === 'go' || q.state === 'back');
   };
   { // A dark bottle of hand sanitizer with a pump, on the round table.
     const t = D.furniture.find((f) => f.id === 't3');
     if (t) { const x = -(t.cx - 0.12), z = -(t.cy + 0.08), y = Hh.desk; cyl(0.032, 0.034, 0.13, 14, col('#2a1a12', 0.35), x, y + 0.065, z); cyl(0.014, 0.02, 0.025, 10, col('#111316', 0.5), x, y + 0.1425, z, false); cyl(0.005, 0.005, 0.04, 6, col('#111316', 0.5), x, y + 0.175, z, false); box(0.045, 0.012, 0.016, col('#111316', 0.5), x + 0.015, y + 0.198, z, false); box(0.04, 0.05, 0.002, col('#e9e6df', 0.8), x, y + 0.06, z + 0.034, false); }
+  }
+  ['smallBoard', 'securities'].forEach((id) => { // these two rooms are always freezing: it snows inside
+    const r = D.rooms.find((q) => q.id === id); if (!r) return;
+    const n = 260, pos = new Float32Array(n * 3), r7 = rng(id.length);
+    for (let i = 0; i < n; i++) { pos[i * 3] = -(r.x + 0.1 + r7() * (r.width - 0.2)); pos[i * 3 + 1] = r7() * 2.6; pos[i * 3 + 2] = -(r.y + 0.1 + r7() * (r.depth - 0.2)); }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const pts = new THREE.Points(g, (M.snow ||= new THREE.PointsMaterial({ color: 0xffffff, size: 0.05, sizeAttenuation: true, transparent: true, opacity: 0.95, depthWrite: false })));
+    pts.frustumCulled = false; group.add(pts); snow.push({ pts });
+    for (let i = 0; i < 26; i++) box(0.25 + r7() * 0.3, 0.012, 0.25 + r7() * 0.3, col('#f4f7fa', 1), -(r.x + 0.3 + r7() * (r.width - 0.6)), 0.006, -(r.y + 0.3 + r7() * (r.depth - 0.6)), false, r7() * 3); // a little snow on the floor
+  });
+  group.userData.snowMat = () => M.snow;
+  { // The empty PITCHBOOK desk: envelopes and two staplers. The empty desk beside David: a long mouse pad.
+    const c1 = D.furniture.find((f) => f.id === 'c1'), c6 = D.furniture.find((f) => f.id === 'c6'), r8 = rng(88), y = Hh.desk;
+    if (c1) {
+      for (let n = 0; n < 22; n++) box(0.22, 0.004, 0.11, col(n % 3 ? '#f4f1e8' : '#e3d3ad', 0.9), -(c1.cx + (r8() - 0.5) * 1.05), y + 0.003 + (n % 6) * 0.004, -(c1.cy - 0.04 - r8() * 0.24), false, r8() * 3);
+      [[0.35, '#111316'], [-0.2, '#c0262d']].forEach(([ox, c2]) => { box(0.15, 0.03, 0.04, col(c2, 0.5), -(c1.cx + ox), y + 0.04, -(c1.cy - 0.3), true, 0.4); box(0.16, 0.014, 0.045, col('#8a8d90', 0.4), -(c1.cx + ox), y + 0.014, -(c1.cy - 0.3), false, 0.4); });
+    }
+    if (c6) box(0.85, 0.005, 0.32, col('#17181b', 0.9), -c6.cx, y + 0.003, -(c6.cy + 0.14), false);
   }
   { // A roll of kitchen paper, standing upright on the eating table.
     const t = D.furniture.find((f) => f.id === 'et1');
@@ -656,18 +730,50 @@ function buildOffice(signText, midShift = 0, midClear = 0) {
       const b0 = [px + (h - 0.46) * 0.04, h, pz], b1 = [b0[0] + dx * out * 0.6, h + 0.12, b0[2] + dz * out * 0.6], b2 = [b0[0] + dx * out, h - 0.28 - r4() * 0.3, b0[2] + dz * out];
       limb(b0, b1, 0.022, dark); limb(b1, b2, 0.09, n % 3 ? grey : pale); limb(b2, [b2[0] + dx * 0.04, b2[1] - 0.2, b2[2] + dz * 0.04], 0.04, n % 2 ? grey : dark);
     }
+    { const sp = tagSprite('Very Dead Plant', '#d8d8d2'); sp.position.set(px, 0.62, pz + 0.36); sp.scale.set(0.5, 0.14, 1); group.add(sp); }
     for (let n = 0; n < 9; n++) box(0.1, 0.006, 0.05, n % 2 ? grey : pale, px + (r4() - 0.5) * 1.1, 0.004, pz + (r4() - 0.3) * 0.7, false, r4() * 3); // fallen leaves
   }
   // One desk has card games on its two screens: poker on one, blackjack on the other.
   const gameScreen = (k) => (M['game' + k] ||= new THREE.MeshBasicMaterial({ map: canvasTexture(512, 300, (g, cw, ch) => {
-    g.fillStyle = '#0f5a3c'; g.fillRect(0, 0, cw, ch);
-    g.fillStyle = '#0b4630'; g.beginPath(); g.ellipse(cw / 2, ch / 2 + 16, 220, 104, 0, 0, Math.PI * 2); g.fill(); g.strokeStyle = '#d9b45a'; g.lineWidth = 5; g.stroke();
+    if (k > 0) g.fillStyle = '#e9e6e1'; else g.fillStyle = '#0f5a3c';
+    g.fillRect(0, 0, cw, ch);
+    if (k < 0) { g.fillStyle = '#0b4630'; g.beginPath(); g.ellipse(cw / 2, ch / 2 + 16, 220, 104, 0, 0, Math.PI * 2); g.fill(); g.strokeStyle = '#d9b45a'; g.lineWidth = 5; g.stroke(); }
     const card = (x, y, t, red) => { g.fillStyle = '#fff'; g.beginPath(); g.roundRect(x, y, 46, 64, 6); g.fill(); g.fillStyle = red ? '#c8202a' : '#111'; g.font = `700 26px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(t, x + 23, y + 34); };
     const chip = (x, y, c) => { g.fillStyle = c; g.beginPath(); g.arc(x, y, 13, 0, Math.PI * 2); g.fill(); g.strokeStyle = '#fff'; g.lineWidth = 3; g.setLineDash([5, 4]); g.stroke(); g.setLineDash([]); };
-    g.fillStyle = '#f2e3b0'; g.font = `700 30px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(k < 0 ? 'POKER' : 'BLACKJACK', cw / 2, 30);
-    if (k < 0) { ['A♠', 'K♥', '7♦', '7♣', '2♠'].forEach((t, n) => card(126 + n * 54, 118, t, /[♥♦]/.test(t))); card(196, 216, 'Q♥', true); card(250, 216, 'Q♠', false); [[90, 150, '#c8202a'], [420, 160, '#2f7fd1'], [402, 190, '#111']].forEach(([x, y, c]) => chip(x, y, c)); }
-    else { card(206, 70, '10♣', false); card(260, 70, '6♦', true); card(180, 190, 'A♠', false); card(234, 190, 'K♥', true); card(330, 190, '9♠', false); card(384, 190, '9♦', true); [[130, 230, '#c8202a'], [150, 246, '#1f6b45'], [450, 236, '#2f7fd1']].forEach(([x, y, c]) => chip(x, y, c)); }
+    g.fillStyle = '#f2e3b0'; g.font = `700 30px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle'; if (k < 0) g.fillText('POKER', cw / 2, 30);
+    if (k < 0) { ['A♠', 'A♥', 'A♦', 'A♣', 'K♠'].forEach((t, n) => card(126 + n * 54, 118, t, /[♥♦]/.test(t))); card(196, 216, '7♥', true); card(250, 216, '2♠', false); g.fillStyle = '#ffd24a'; g.font = `700 30px ${FONT}`; g.fillText('ALL IN', 400, 250); [[90, 150, '#c8202a'], [420, 160, '#2f7fd1'], [402, 190, '#111']].forEach(([x, y, c]) => chip(x, y, c)); }
+    else { // a slide deck being edited
+      g.fillStyle = '#b7472a'; g.fillRect(0, 0, cw, 34); g.fillStyle = '#fff'; g.font = `700 18px ${FONT}`; g.textAlign = 'left'; g.fillText('Deck_v37_FINAL_final2.pptx', 12, 18);
+      g.fillStyle = '#e9e6e1'; g.fillRect(0, 34, cw, ch - 34); g.fillStyle = '#d6d2cb'; g.fillRect(0, 34, 92, ch - 34);
+      for (let n = 0; n < 4; n++) { g.fillStyle = '#fff'; g.fillRect(12, 46 + n * 62, 68, 44); g.fillStyle = '#b7472a'; g.fillRect(16, 50 + n * 62, 30, 5); }
+      g.fillStyle = '#fff'; g.fillRect(112, 52, 380, 226); g.fillStyle = '#222'; g.font = `700 24px ${FONT}`; g.fillText('Investment highlights', 130, 82);
+      g.fillStyle = '#b7472a'; g.fillRect(130, 98, 340, 3); [0, 1, 2].forEach((n) => { g.fillStyle = '#555'; g.fillRect(140, 122 + n * 30, 150 - n * 20, 8); }); [60, 95, 75, 120].forEach((h2, n) => { g.fillStyle = n === 3 ? '#b7472a' : '#9aa3ad'; g.fillRect(330 + n * 36, 250 - h2, 26, h2); });
+    }
   }) }));
+  const pic = (key, w, h, draw) => (M['pic' + key] ||= new THREE.MeshBasicMaterial({ map: canvasTexture(w, h, draw) }));
+  const T = (g, text, x, y, size, c = '#fff', al = 'left') => { g.fillStyle = c; g.textAlign = al; g.textBaseline = 'middle'; g.font = `700 ${size}px ${FONT}`; g.fillText(text, x, y); };
+  const person = (g, x, y, r, c) => { g.fillStyle = c; g.beginPath(); g.arc(x, y - r * 0.5, r * 0.55, 0, 7); g.fill(); g.beginPath(); g.ellipse(x, y + r * 0.9, r, r * 0.8, 0, Math.PI, 0); g.fill(); };
+  const gooseDraw = (g, x, y, k) => { g.fillStyle = '#fff'; g.beginPath(); g.ellipse(x, y, 34 * k, 22 * k, 0, 0, 7); g.fill(); g.fillRect(x + 18 * k, y - 52 * k, 12 * k, 44 * k); g.beginPath(); g.arc(x + 26 * k, y - 56 * k, 12 * k, 0, 7); g.fill(); g.fillStyle = '#f08a1c'; g.fillRect(x + 34 * k, y - 60 * k, 16 * k, 7 * k); g.fillRect(x - 6 * k, y + 20 * k, 5 * k, 14 * k); g.fillRect(x + 8 * k, y + 20 * k, 5 * k, 14 * k); g.fillStyle = '#111'; g.fillRect(x + 27 * k, y - 62 * k, 4 * k, 4 * k); };
+  const SCREENS = {
+    dC: (k) => k < 0 ? pic('call', 512, 300, (g, cw, ch) => { // a video call that never ends
+      g.fillStyle = '#17191d'; g.fillRect(0, 0, cw, ch); [['#3b4a5c', '#f0c9a4'], ['#4c3b52', '#e2ad82'], ['#3d5245', '#e8b98f'], ['#52463b', '#d9a377']].forEach(([bg, sk], n) => { const x = 8 + (n % 2) * 252, y = 8 + Math.floor(n / 2) * 126; g.fillStyle = bg; g.fillRect(x, y, 244, 118); person(g, x + 122, y + 62, 34, sk); });
+      g.fillStyle = '#d3202a'; g.beginPath(); g.roundRect(216, 264, 80, 28, 14); g.fill(); T(g, 'END', 256, 279, 16, '#fff', 'center'); T(g, '● REC 07:42:13', 12, 280, 14, '#ff5a5a');
+    }) : pic('cal', 512, 300, (g, cw, ch) => { // her calendar: full, red, packed
+      g.fillStyle = '#fff'; g.fillRect(0, 0, cw, ch); T(g, 'Calendar: this week', 10, 14, 16, '#222'); const r9 = rng(9);
+      for (let d = 0; d < 5; d++) { T(g, ['MON', 'TUE', 'WED', 'THU', 'FRI'][d], 12 + d * 100 + 44, 38, 13, '#555', 'center'); let y = 50; while (y < ch - 4) { const h2 = 14 + Math.floor(r9() * 30); g.fillStyle = ['#d3202a', '#b3141d', '#e5484f', '#8f0f16'][Math.floor(r9() * 4)]; g.fillRect(10 + d * 100, y, 94, Math.min(h2, ch - 4 - y)); g.fillStyle = 'rgba(255,255,255,0.75)'; g.fillRect(14 + d * 100, y + 4, 40 + r9() * 40, 3); y += h2 + 2; } }
+    }),
+    dS: (k) => k < 0 ? pic('shop', 512, 300, (g, cw, ch) => { // a MUJI shopping page
+      g.fillStyle = '#f6f3ee'; g.fillRect(0, 0, cw, ch); g.fillStyle = '#7f0019'; g.fillRect(0, 0, cw, 44); T(g, 'MUJI  online store', 14, 23, 24, '#fff'); T(g, 'Cart (37)', cw - 14, 23, 16, '#fff', 'right');
+      for (let n = 0; n < 8; n++) { const x = 14 + (n % 4) * 124, y = 56 + Math.floor(n / 4) * 120; g.fillStyle = '#fff'; g.fillRect(x, y, 112, 108); g.fillStyle = ['#d9cfbd', '#c9c2b4', '#e6ddcc', '#b9b0a0'][n % 4]; g.fillRect(x + 16, y + 10, 80, 54); T(g, 'MUJI', x + 56, y + 78, 14, '#7f0019', 'center'); T(g, '¥' + (490 + n * 300), x + 56, y + 96, 13, '#333', 'center'); }
+    }) : pic('flag', 512, 300, (g, cw, ch) => { g.fillStyle = '#fff'; g.fillRect(0, 0, cw, ch); g.fillStyle = '#bc002d'; g.beginPath(); g.arc(cw / 2, ch / 2, 90, 0, 7); g.fill(); }),
+    c6: () => M.screen, c8: () => M.screen,
+  };
+  const weibo = (g, cw, ch) => { // a Weibo style feed
+    g.fillStyle = '#f2f2f5'; g.fillRect(0, 0, cw, ch); g.fillStyle = '#ff8200'; g.fillRect(0, 0, cw, 40); T(g, '微博 Weibo', 14, 21, 24, '#fff'); T(g, '热搜', cw - 14, 21, 18, '#fff', 'right');
+    for (let n = 0; n < 6; n++) { const x = 14 + (n % 3) * (cw / 3), y = 52 + Math.floor(n / 3) * 124, w = cw / 3 - 26; g.fillStyle = '#fff'; g.fillRect(x, y, w, 112); g.fillStyle = '#ffb35c'; g.beginPath(); g.arc(x + 22, y + 22, 13, 0, 7); g.fill(); g.fillStyle = '#333'; g.fillRect(x + 44, y + 14, w * 0.4, 7); g.fillStyle = '#999'; [0, 1, 2].forEach((q) => g.fillRect(x + 12, y + 48 + q * 16, w - 24 - q * 30, 6)); T(g, '♡ ' + (n * 317 + 88), x + 12, y + 100, 13, '#ff8200'); }
+  };
+  const geese = (g, cw, ch) => { g.fillStyle = '#8fc7e8'; g.fillRect(0, 0, cw, ch); g.fillStyle = '#6fae5a'; g.fillRect(0, ch * 0.66, cw, ch * 0.34); const n = Math.max(2, Math.round(cw / 260)); for (let q = 0; q < n; q++) gooseDraw(g, (q + 0.45) * (cw / n), ch * 0.62, ch / 300 * (1.3 + (q % 2) * 0.4)); T(g, 'BRUCE', cw / 2, 30, 26, '#fff', 'center'); };
+  const WIDE = { c4: weibo, c7: geese }; // a wide curved screen in the middle, and an upright screen to its left
   // Two screens on every desk, at the edge away from the nearest chair and facing it.
   desks.forEach((f) => {
     let best = null, bd = 1e9;
@@ -675,12 +781,26 @@ function buildOffice(signText, midShift = 0, midClear = 0) {
     const dx = best ? best.cx - f.cx : 0, dy = best ? best.cy - f.cy : 1, alongX = Math.abs(dx) > Math.abs(dy);
     const sgn = alongX ? Math.sign(dx) : Math.sign(dy), half = alongX ? f.w / 2 : f.d / 2, sp = alongX ? f.d : f.w;
     const back = -sgn * (half - 0.15), gap = Math.min(0.29, sp / 2 - 0.27);
+    if (WIDE[f.id]) {
+      const draw = WIDE[f.id], fx = -(alongX ? sgn : 0), fz = -(alongX ? 0 : sgn);
+      parent = at(-(f.cx + (alongX ? back : 0)), f.hh || Hh.desk, -(f.cy + (alongX ? 0 : back)), Math.atan2(fx, fz) + Math.PI);
+      [-1, 0, 1].forEach((q) => { // three panels make the curve
+        const m = pic(f.id + 'w' + q, 384, 420, (g, cw, ch) => { g.save(); g.translate(-(q + 1) * cw, 0); draw(g, cw * 3, ch); g.restore(); });
+        const x = -0.1 - q * 0.272, z = q ? -0.03 : 0, ry = -q * 0.22;
+        box(0.285, 0.36, 0.025, M.screen, x, 0.36, z, true, ry); box(0.272, 0.34, 0.003, m, x, 0.36, z - 0.0128, false, ry);
+      });
+      box(0.05, 0.2, 0.03, M.leg, -0.1, 0.1, 0.03); box(0.3, 0.012, 0.2, M.leg, -0.1, 0, 0.03, false);
+      const up = pic(f.id + 'v', 300, 512, (g, cw, ch) => { if (draw === geese) { geese(g, cw, ch); gooseDraw(g, cw / 2, ch * 0.4, 1.6); } else { g.fillStyle = '#16181c'; g.fillRect(0, 0, cw, ch); for (let n = 0; n < 9; n++) { g.fillStyle = n % 2 ? '#2b3038' : '#23272e'; g.fillRect(10, 12 + n * 55, cw - 20, 47); g.fillStyle = '#ffb35c'; g.beginPath(); g.arc(34, 35 + n * 55, 14, 0, 7); g.fill(); g.fillStyle = '#c9ced3'; g.fillRect(60, 24 + n * 55, 120 + (n * 37) % 90, 7); g.fillStyle = '#7d848c'; g.fillRect(60, 40 + n * 55, 180 - (n * 23) % 80, 5); } } });
+      box(0.36, 0.62, 0.025, M.screen, 0.52, 0.42, -0.04, true, -0.3); box(0.34, 0.6, 0.003, up, 0.52, 0.42, -0.0528, false, -0.3); box(0.04, 0.2, 0.03, M.leg, 0.52, 0.1, 0.0); box(0.2, 0.012, 0.16, M.leg, 0.52, 0, 0.0, false);
+      parent = null;
+      return;
+    }
     [-1, 1].forEach((k) => {
       let px = f.cx, py = f.cy;
       if (alongX) { px += back; py += k * gap; } else { py += back; px += k * gap; }
       const fx = -(alongX ? sgn : 0), fz = -(alongX ? 0 : sgn);
       parent = at(-px, f.hh || Hh.desk, -py, Math.atan2(fx, fz) + Math.PI + k * 0.12 * (alongX ? 1 : -1) * sgn);
-      box(0.54, 0.33, 0.025, M.screen, 0, 0.33, 0); box(0.51, 0.3, 0.003, f.id === 'c3' ? gameScreen(k) : f.id === 'c1' ? (M.pitch ||= new THREE.MeshBasicMaterial({ map: canvasTexture(512, 300, (g, cw, ch) => { g.fillStyle = '#0d0f12'; g.fillRect(0, 0, cw, ch); g.fillStyle = '#ffffff'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = `700 78px ${FONT}`; g.fillText('PITCHBOOK', cw / 2, ch / 2 + 4, cw - 40); }) })) : M.logo, 0, 0.33, -0.0125, false); box(0.04, 0.2, 0.03, M.leg, 0, 0.1, 0.03); box(0.22, 0.012, 0.18, M.leg, 0, 0, 0.03, false);
+      box(0.54, 0.33, 0.025, M.screen, 0, 0.33, 0); box(0.51, 0.3, 0.003, SCREENS[f.id] ? SCREENS[f.id](k) : f.id === 'c3' ? gameScreen(k) : f.id === 'c1' ? (M.pitch ||= new THREE.MeshBasicMaterial({ map: canvasTexture(512, 300, (g, cw, ch) => { g.fillStyle = '#0d0f12'; g.fillRect(0, 0, cw, ch); g.fillStyle = '#ffffff'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = `700 78px ${FONT}`; g.fillText('PITCHBOOK', cw / 2, ch / 2 + 4, cw - 40); }) })) : M.logo, 0, 0.33, -0.0125, false); box(0.04, 0.2, 0.03, M.leg, 0, 0.1, 0.03); box(0.22, 0.012, 0.18, M.leg, 0, 0, 0.03, false);
       parent = null;
     });
   });
@@ -713,7 +833,7 @@ function buildStorefront() {
     lamp: lam('#c8161d', 0.6), bulb: lit('#ffe9a8'), red: lit('#c8161d'), gold: lit('#f4c542'), wood: lam('#7a5234', 0.35),
     glass: new THREE.MeshBasicMaterial({ color: '#dff3f7', transparent: true, opacity: 0.13, depthWrite: false }),
     awning: new THREE.MeshBasicMaterial({ map: canvasTexture(512, 64, (g, w, h) => { for (let i = 0; i < 16; i++) { g.fillStyle = i % 2 ? '#fff6e6' : '#f08a1c'; g.fillRect((i * w) / 16, 0, w / 16 + 1, h); } }), side: THREE.DoubleSide }),
-    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261120zzk') }),
+    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261120zzm') }),
     menu: new THREE.MeshBasicMaterial({ map: canvasTexture(256, 384, (g, w, h) => {
       g.fillStyle = '#c8161d'; g.fillRect(0, 0, w, h); g.fillStyle = '#f4c542'; g.fillRect(14, 14, w - 28, 44);
       const r = rng(11); g.fillStyle = '#fff3d6';
@@ -896,6 +1016,7 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
   const midShift = Math.max(0, Math.min(1.19, dealerEnd - 4.276));
   const office = buildOffice(OFFICE_SIGN, midShift, dealerEnd - 0.02);
   office.scale.setScalar(S);
+  { const sm = office.userData.snowMat?.(); if (sm) sm.size = 0.026 * S; }
   // Turned a quarter: plan x runs away from the players (toward the dealer and the desks), plan y to their right.
   office.rotation.y = -Math.PI / 2;
   office.position.set(-OFFICE_AT.y * S, FLOOR, OFFICE_AT.x * S);
@@ -1361,8 +1482,8 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
   container.addEventListener('pointerdown', (e) => {
     if ((e.button > 0 && e.button !== 2) || e.target.closest(interactive)) return;
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    // Left button (or one finger) turns the view. Right button slides the view across the room.
-    if (pointers.size === 1) drag = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: false, pan: (e.button === 2) !== walking }; // walking: a plain drag moves you, the right button turns
+    // Mouse: the left button drags you across the room, the right button turns the view. One finger turns the view.
+    if (pointers.size === 1) drag = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: false, pan: e.pointerType === 'mouse' ? e.button !== 2 : (e.button === 2) !== walking, mouse: e.pointerType === 'mouse' && e.button === 0, onUi: false }; // walking: a plain drag moves you, the right button turns
     else if (pointers.size === 2) { const [a, b] = [...pointers.values()]; pinch = Math.hypot(a.x - b.x, a.y - b.y); mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }; drag = null; container.classList.remove('dragging'); }
   });
   // The room follows the hand: drag right and the table moves right, drag down and it comes nearer.
@@ -1414,6 +1535,10 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     if (twoFinger && !pointers.size) { twoFinger = false; container.classList.add('was-drag'); setTimeout(() => container.classList.remove('was-drag'), 60); }
     if (drag && drag.id === e.pointerId) {
       if (drag.moved) { container.classList.add('was-drag'); setTimeout(() => container.classList.remove('was-drag'), 60); }
+      else if (walking && drag.mouse && e.type === 'pointerup') { // a plain click while walking: a step forward, like a street view
+        rate = 6; panR.set(1, 0, 0).applyQuaternion(camera.quaternion); panR.y = 0; panR.normalize(); panF.set(-panR.z, 0, panR.x).multiplyScalar(-1);
+        goal.t.addScaledVector(panF, 1.4 * S); keepIn(goal.t); touch();
+      }
       drag = null; container.classList.remove('dragging');
     }
   };
@@ -1473,13 +1598,14 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
 
   let running = true, last = performance.now(), frames = 0, fpsAt = last, fps = 0;
   const near = (a, b, eps) => Math.abs(a - b) < eps;
-  let dbgCam = null;
+  let dbgCam = null, ambAt = 0;
   const loop = (now) => {
     if (!running) return;
     requestAnimationFrame(loop);
     const dt = Math.min(0.05, (now - last) / 1000); last = now;
     frames++;
-    office.userData.tick?.(now);
+    // The office is alive: redraw every frame while somebody walks, and about 12 times a second otherwise.
+    if (office.userData.tick?.(now) || now - ambAt > 80) { ambAt = now; dirty = Math.max(dirty, 1); }
     if (now - fpsAt >= 1000) { fps = Math.round((frames * 1000) / (now - fpsAt)); frames = 0; fpsAt = now; }
     const k = 1 - Math.exp(-dt * rate);
     const settled = near(cur.theta, goal.theta, 2e-4) && near(cur.phi, goal.phi, 2e-4) && near(cur.r, goal.r, 0.05) && near(cur.yaw, goal.yaw, 2e-4) && near(cur.pitch, goal.pitch, 2e-4) && cur.t.distanceToSquared(goal.t) < 0.01;

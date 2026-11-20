@@ -6,7 +6,7 @@ export const RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q
 
 export const DEFAULT_SETTINGS = {
   seats: 7,              // player seats at the table (any whole number from 1 up)
-  decks: 20,             // 1, 2, 6, 8, 20, or 'csm' (randomized: full reshuffle before every round)
+  decks: 8,              // 1, 2, 6, 8, 20, or 'csm' (randomized: full reshuffle before every round)
   shuffleMode: 'penetration', // 'penetration' or 'rounds'
   penetration: 85,       // reshuffle once this % of the shoe has been dealt
   shuffleEvery: 5,       // or reshuffle every N rounds
