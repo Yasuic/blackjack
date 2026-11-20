@@ -1,13 +1,13 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120y';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261120y';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120y';
-import { tickSound, winSound } from './fx.js?v=20261120y';
-import * as HX from './history.js?v=20261120y';
-import { webglOK, initRoom } from './room3d.js?v=20261120y';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120y';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120z';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261120z';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120z';
+import { tickSound, winSound } from './fx.js?v=20261120z';
+import * as HX from './history.js?v=20261120z';
+import { webglOK, initRoom } from './room3d.js?v=20261120z';
+import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120z';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -2568,7 +2568,6 @@ function renderHostPanel(st) {
     </div>`, true)}
     ${fold('set-rules', '📏 Rules', `<div class="settings-grid">
       <label class="check full"><input id="set-h17" type="checkbox" ${s.dealerHitsSoft17 ? 'checked' : ''} ${dis} /> Dealer hits soft 17</label>
-      <label class="check full"><input id="set-count" type="checkbox" ${s.countTraining ? 'checked' : ''} ${dis} /> 🧮 Count training for everyone (shows the card count)</label>
       <label class="check full"><input id="set-sur" type="checkbox" ${s.allowSurrender ? 'checked' : ''} ${dis} /> Allow surrender (get half your bet back)</label>
       <button class="btn full" data-act="h-strip" ${dis}>Reset to Las Vegas Strip rules</button>
     </div>`, true)}
@@ -2822,6 +2821,7 @@ function runAct(el) {
         });
         break;
       }
+      if (!bet.main) { toast('Put chips on your circle first. A side bet needs a main bet.'); break; }
       const put = fitBet(S.chip, k);
       if (!put) break;
       S.undo.push(structuredClone(seat.bet));
@@ -2970,7 +2970,7 @@ function runAct(el) {
       proposeSettings({
         seats, decks, shuffleMode: v('set-mode'), penetration: Number(v('set-pen')), shuffleEvery: Number(v('set-every')),
         startChips: Number(v('set-start')), minBet: Number(v('set-min')), maxBet: Number(v('set-max')), maxSideBet: Number(v('set-maxside')),
-        dealerHitsSoft17: $('#set-h17').checked, countTraining: $('#set-count').checked, allowSurrender: $('#set-sur').checked, autoDeal: $('#set-auto').checked,
+        dealerHitsSoft17: $('#set-h17').checked, countTraining: false, allowSurrender: $('#set-sur').checked, autoDeal: $('#set-auto').checked,
         betTimer: Number(v('set-bettimer')), turnTimer: Number(v('set-turntimer')),
         sideBets: [...document.querySelectorAll('[data-sidebet]')].filter((x) => x.checked).map((x) => x.dataset.sidebet),
       });

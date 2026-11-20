@@ -27,6 +27,8 @@ export const DEFAULT_SETTINGS = {
 
 // ---------- Side bets ----------
 // Payouts are "to one": a 25 means a $10 bet wins $250 and you also get your $10 back.
+// The largest buy-in. Far above any real game, and small enough that sums of chips stay exact.
+export const MAX_CHIPS = 1e9;
 export const SIDE_BETS = {
   hot3: {
     name: 'Hot 3',
@@ -388,15 +390,22 @@ export class Table {
     if (this.phase !== 'betting' && this.phase !== 'settled') throw new Error('Change settings between rounds.');
     const old = this.settings;
     const s = { ...old, ...patch };
-    s.penetration = clamp(Number(s.penetration), 20, 95);
-    s.shuffleEvery = clamp(Math.round(Number(s.shuffleEvery)), 1, 50);
-    s.minBet = Math.max(1, Math.round(Number(s.minBet)));
-    s.maxBet = Math.max(s.minBet, Math.round(Number(s.maxBet)));
-    s.maxSideBet = Math.max(0, Math.round(Number(s.maxSideBet)));
-    s.startChips = Math.max(1, Math.round(Number(s.startChips)));
-    s.betTimer = Number(s.betTimer) > 0 ? clamp(Math.round(Number(s.betTimer)), 5, 300) : 0;
-    s.turnTimer = Number(s.turnTimer) > 0 ? clamp(Math.round(Number(s.turnTimer)), 5, 300) : 0;
-    if (![1, 2, 6, 8, 'csm'].includes(s.decks)) s.decks = Number(s.decks) || 'csm';
+    // A value that is not a number keeps the old setting, so a bad entry can never turn chips into "not a number".
+    const num = (k, lo, hi = MAX_CHIPS, round = true) => { let v = Number(s[k]); if (!Number.isFinite(v) || typeof s[k] === 'boolean' || s[k] === null || s[k] === '') v = Number(old[k]); if (!Number.isFinite(v)) v = DEFAULT_SETTINGS[k]; s[k] = clamp(round ? Math.round(v) : v, lo, hi); };
+    num('penetration', 20, 95, false);
+    num('shuffleEvery', 1, 50);
+    num('minBet', 1);
+    num('maxBet', 1); s.maxBet = Math.max(s.minBet, s.maxBet);
+    num('maxSideBet', 0);
+    num('startChips', 1);
+    num('peekCost', 0);
+    for (const k of ['betTimer', 'turnTimer']) { const v = Number(s[k]); s[k] = Number.isFinite(v) && v > 0 ? clamp(Math.round(v), 5, 300) : 0; }
+    if (![1, 2, 6, 8, 'csm'].includes(s.decks)) s.decks = [1, 2, 6, 8].includes(Number(s.decks)) ? Number(s.decks) : 'csm';
+    if (![1.5, 1.2, 1].includes(s.blackjackPays)) s.blackjackPays = [1.5, 1.2, 1].includes(Number(s.blackjackPays)) ? Number(s.blackjackPays) : (Number.isFinite(old.blackjackPays) ? old.blackjackPays : 1.5);
+    s.sideBets = Array.isArray(s.sideBets) ? [...new Set(s.sideBets)].filter((k) => SIDE_KEYS.includes(k)) : (Array.isArray(old.sideBets) ? old.sideBets : DEFAULT_SETTINGS.sideBets);
+    if (s.shuffleMode !== 'rounds') s.shuffleMode = 'penetration';
+    for (const k of ['dealerHitsSoft17', 'allowSurrender', 'autoDeal']) s[k] = !!s[k];
+    s.countTraining = false; // no card count is ever shown at this table
     s.seats = seatCount(s.seats, this.seats.length);
     this.checkSeatCount(s.seats);
     this.settings = s;
@@ -471,7 +480,7 @@ export class Table {
       return p;
     }
     // Each player says how much they buy in for when they arrive. Any positive amount is fine.
-    const start = Math.round(Number(buyIn)) > 0 ? Math.min(Number.MAX_SAFE_INTEGER, Math.round(Number(buyIn))) : this.settings.startChips;
+    const start = Math.round(Number(buyIn)) > 0 ? Math.min(MAX_CHIPS, Math.round(Number(buyIn))) : this.settings.startChips;
     p = { id: clientId, name, chips: start, seat: null, connected: true, lastBet: null, totalIn: start, look: lk };
     this.players[clientId] = p;
     if (this.frozen && this.frozenSnap) this.frozenSnap[clientId] = this.snapOf(p);
@@ -683,7 +692,8 @@ export class Table {
   requestBuyIn(clientId, amount) {
     const p = this.mustPlayer(clientId);
     amount = Math.round(Number(amount) || 0);
-    if (!(amount >= 1) || amount > Number.MAX_SAFE_INTEGER) throw new Error('Pick an amount of at least 1.');
+    if (!(amount >= 1)) throw new Error('Pick an amount of at least 1.');
+    if (amount > MAX_CHIPS) throw new Error('The most you can buy in at once is 1,000,000,000.');
     this.buyIns = this.buyIns || [];
     if (this.buyIns.some((b) => b.playerId === clientId)) throw new Error('You already have a buy-in waiting for the host.');
     this.buyInSeq = (this.buyInSeq || 0) + 1;
@@ -781,6 +791,7 @@ export class Table {
     try { return this.setBetInner(clientId, bet); } finally { this.dealerAutoBuy(); }
   }
   setBetInner(clientId, bet) {
+    if (!bet || typeof bet !== 'object') throw new Error('That bet could not be read.');
     if (this.phase !== 'betting' && this.phase !== 'settled') throw new Error('Bets are closed.');
     if (this.phase === 'settled') this.startBetting();
     const { p, seat, idx } = this.mustSeat(clientId, bet.seat);
@@ -1361,6 +1372,7 @@ export class Table {
     if (!Array.isArray(t.seats) || !t.seats.length) t.seats = Array(seatCount(obj.settings?.seats)).fill(null);
     t.settings = { ...DEFAULT_SETTINGS, ...obj.settings, seats: t.seats.length };
     // The bet between players was taken out of the game: a saved table no longer offers it.
+    t.settings.countTraining = false;
     if (Array.isArray(t.settings.sideBets)) t.settings.sideBets = t.settings.sideBets.filter((k) => SIDE_BETS[k]);
     if (t.phase === 'betting' || t.phase === 'settled') for (const seat of t.seats) if (seat?.bet?.sides?.friendBust) { delete seat.bet.sides.friendBust; delete seat.bet.target; }
     Object.values(t.players).forEach((p) => (p.connected = false));
