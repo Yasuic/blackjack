@@ -670,7 +670,8 @@ export class Table {
   // with frozen balances nobody's chips move, so it is free.
   peek(clientId) {
     const p = this.mustPlayer(clientId);
-    if (this.inRound()) throw new Error('The next card can be shown between rounds, not while a hand is being played.');
+    if (this.inRound()) throw new Error('The next card can be shown once the round is over, not while a hand is being played.');
+    if (!this.rabbit) throw new Error('The next card can be shown right after a round, before anyone bets on the next one.');
     if (!this.shoe.length) throw new Error('The shoe is empty. It is reshuffled before the next card.');
     const cost = this.settings.peekCost ?? 10;
     if (this.banker && this.banker !== clientId) {
@@ -679,9 +680,10 @@ export class Table {
       this.players[this.banker].chips += cost;
       this.addLog(`${p.name} paid ${cost} to see the next card.`);
     } else this.addLog(`${p.name} looked at the next card.`);
-    // The card is picked now and set aside face up. It is the next card dealt.
-    this.pendingCard = this.pendingCard || this.pick();
-    return this.pendingCard;
+    // Like a rabbit hunt in poker: the card that would have come next is shown to all and then leaves
+    // the shoe, so nobody can size the next bet on a card they already know. One look per round.
+    this.rabbit = false;
+    return this.pick();
   }
 
   // ---- Betting ----
@@ -714,6 +716,7 @@ export class Table {
     const total = main + sumValues(sides);
     if (total > p.chips) throw new Error('Not enough chips.');
     seat.bet = target === null ? { main, sides } : { main, sides, target };
+    if (main || Object.values(sides).some(Boolean)) this.rabbit = false; // a new round has begun: the look at the next card is over
     seat.ready = main > 0 && !!bet.ready;
     // The number the player's browser gave this bet. It comes back in their state, so the browser
     // knows which of its own taps the table has already counted.
@@ -1093,6 +1096,7 @@ export class Table {
     }
     this.practiceRound = !this.banker;
     this.phase = 'settled';
+    this.rabbit = true; // the next card can be shown until the first bet of the next round
     if (this.pendingBanker) this.applyDealer(this.pendingBanker);
     if (this.pendingSettings) this.applySettings(this.pendingSettings);
     this.turn = null;
@@ -1135,6 +1139,7 @@ export class Table {
       frozen: !this.banker && !!this.frozen,
       noDealer: !this.banker && !this.frozen,
       bankShort: this.bankShort(),
+      canPeek: !!this.rabbit && !this.inRound(),
       banker: this.banker && this.players[this.banker] ? { id: this.banker, name: this.players[this.banker].name, chips: this.players[this.banker].chips, connected: this.players[this.banker].connected, net: this.phase === 'settled' ? this.bankerNet : null } : null,
       seats: this.seats.map((s) => {
         if (!s) return null;

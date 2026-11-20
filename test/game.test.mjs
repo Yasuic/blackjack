@@ -156,10 +156,16 @@ import { bestMove } from '../js/strategy.js';
   assert.equal(fb.win, G.handTotal(t.seats[1].hands[0].cards).total > 21);
   // Peek costs 10 and goes to the dealer.
 const da = t.players.a.chips, dd = t.players.d.chips;
+  // Right after a round: one look, shown card leaves the shoe, 10 goes to the dealer.
+  assert.equal(t.phase, 'settled');
+  assert.equal(t.publicState('a').canPeek, true);
+  const left = t.shoe.length;
   const top = t.peek('a');
-  assert.deepEqual(t.peek('a'), top);
-  assert.equal(t.players.a.chips, da - 20); assert.equal(t.players.d.chips, dd + 20);
-  assert.deepEqual(t.draw(), top);
+  assert.ok(top && top.r);
+  assert.equal(t.shoe.length, left - 1);
+  assert.throws(() => t.peek('a'), 'one look per round');
+  assert.equal(t.players.a.chips, da - 10); assert.equal(t.players.d.chips, dd + 10);
+  assert.equal(t.publicState('a').canPeek, false);
   console.log('hot 3, friend bust and peek tests passed');
 }
 {
@@ -268,6 +274,13 @@ const da = t.players.a.chips, dd = t.players.d.chips;
     t.deal();
   }
   assert.ok(!(t.phase === 'betting' || t.phase === 'settled'), 'a hand is being played');
+  assert.throws(() => t.peek('a'));
+  // Once the round is over it is allowed, and the first bet of the next round ends it.
+  let g2 = 0; while (t.phase !== 'settled' && g2++ < 80) { if (t.phase === 'insurance') t.insurance('a', false); else if (t.phase === 'playing') t.action(t.seats[t.turn.seat].playerId, 'stand'); else if (t.phase === 'dealer') t.dealerStep(); }
+  assert.equal(t.publicState('a').canPeek, true);
+  t.players.d.chips = 1000;
+  t.setBet('a', { main: 20, sides: {} });
+  assert.equal(t.publicState('a').canPeek, false);
   assert.throws(() => t.peek('a'));
   console.log('dealer bank limit tests passed');
 }

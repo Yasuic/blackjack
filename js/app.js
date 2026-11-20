@@ -1,11 +1,11 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120a';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120a';
-import { tickSound, winSound } from './fx.js?v=20261120a';
-import { webglOK, initRoom } from './room3d.js?v=20261120a';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120a';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120b';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120b';
+import { tickSound, winSound } from './fx.js?v=20261120b';
+import { webglOK, initRoom } from './room3d.js?v=20261120b';
+import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120b';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -365,7 +365,7 @@ function fresh(countFn, fn) {
   })).catch(() => {});
 }
 function gotNonce(msg, from) { S.nonceWait?.[msg.rid]?.(msg.keys, from); }
-const moveCount = (msg) => (t) => (msg.t === 'action' ? { hit: 1, double: 1, split: 2 }[msg.a] || 0 : msg.t === 'peek' ? (t.pendingCard ? 0 : 1) : 0);
+const moveCount = (msg) => (t) => (msg.t === 'action' ? { hit: 1, double: 1, split: 2 }[msg.a] || 0 : msg.t === 'peek' ? 1 : 0);
 // The guest's side of the guard. Keys go out strictly in order and only as many as the step on the
 // table can use: a deal needs two cards per seat plus two for the dealer, a move needs one or two.
 // A host that asks for a key twice, skips ahead, or asks for too many gets nothing, and the badge turns red.
@@ -1724,7 +1724,7 @@ function trayHTML(st) {
     const queued = S.rebetWhenOpen === st.round;
     const rb = st.rebet ? `<button class="btn gold rebet-btn ${queued ? 'on' : ''}" data-act="rebet" title="Bet the same as last round (B)">${queued ? `✓ Rebet ${money(betTotal(st.rebet))} goes down when betting opens. Tap to cancel` : `↻ Rebet ${money(betTotal(st.rebet))}`}</button>` : '';
     return `<div class="tray-msg round-result"><b class="${seat.net > 0 ? 'up' : seat.net < 0 ? 'down' : ''}">${head}</b>${parts.length ? `<div class="rr-parts">${parts.join('')}</div>` : ''}</div>
-      <div class="actions">${rb}<span class="hint">Betting opens when the cards are cleared.</span></div>`;
+      <div class="actions">${rb}${peekBtnHTML(st)}<span class="hint">Betting opens when the cards are cleared.</span></div>`;
   }
   if (ph === 'betting') {
     const b = seat.bet;
@@ -2536,10 +2536,10 @@ function renderGuide(st) {
 
 // "See the next card" button and the private look at it.
 function peekBtnHTML(st) {
-  if (st.phase !== 'betting' && st.phase !== 'settled') return ''; // the next card can be shown between rounds only
+  if (!st.canPeek) return ''; // only right after a round, until the first bet of the next one
   const cost = st.settings.peekCost ?? 10;
   const free = !st.banker || st.banker.id === S.myId;
-  return `<button class="btn peek-btn" data-act="peek" title="Everyone at the table sees the card">👁 Show next card to all${free ? '' : ` · ${money(cost)}`}</button>`;
+  return `<button class="btn peek-btn" data-act="peek" title="Everyone sees the card that would have come next. It then leaves the shoe.">👁 Show next card to all${free ? '' : ` · ${money(cost)}`}</button>`;
 }
 function showPeek(card, by) {
   if (!card) return;
@@ -2547,7 +2547,7 @@ function showPeek(card, by) {
   const box = document.createElement('div');
   box.id = 'peek-pop';
   box.className = 'peek-pop';
-  box.innerHTML = `<div class="peek-title">👁 Next card in the shoe</div>${cardHTML(card, true)}<div class="hint">${esc(by || 'Someone')} asked to see it. Everyone at the table sees this card.</div>`;
+  box.innerHTML = `<div class="peek-title">👁 The card that would have come next</div>${cardHTML(card, true)}<div class="hint">${esc(by || 'Someone')} asked to see it. Everyone sees it, and it is out of the shoe now.</div>`;
   document.body.appendChild(box);
   cardSound();
   setTimeout(() => box.classList.add('out'), 3200);
