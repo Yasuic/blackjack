@@ -1,11 +1,12 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120g';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120g';
-import { tickSound, winSound } from './fx.js?v=20261120g';
-import { webglOK, initRoom } from './room3d.js?v=20261120g';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120g';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120h';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120h';
+import { tickSound, winSound } from './fx.js?v=20261120h';
+import * as HX from './history.js?v=20261120h';
+import { webglOK, initRoom } from './room3d.js?v=20261120h';
+import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120h';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -180,6 +181,9 @@ function startHost(resume) {
   }
   S.table.join(S.myId, S.name, S.buyIn, S.look);
   S.table.hostId = S.myId;
+  // The table's secret id for its hand history. It stays in this browser and is never sent to players.
+  if (!S.table.created?.id) S.table.created = { id: HX.newTableId(), at: Date.now() };
+  HX.openTable({ id: S.table.created.id, code: S.code, created: S.table.created.at, host: S.name });
   // After the host reloads nobody is connected yet. Give everyone the usual time to come back.
   if (resume) Object.values(S.table.players).forEach((p) => { if (!p.connected && !p.kicked && p.id !== S.myId) awayClock(p.id); });
   history.replaceState(null, '', location.pathname + '?' + new URLSearchParams({ ...Object.fromEntries(params), host: S.code }).toString());
@@ -246,7 +250,7 @@ function onHostMessage(conn, msg) {
   if (!conn.clientId) return;
   if (msg.t === 'throw') { relayThrow(conn.clientId, msg); return; }
   if (msg.t === 'keys') { gotNonce(msg, conn.clientId); return; }
-  if (msg.t === 'hist-get') { conn.send({ t: 'hist', list: S.table.hist || [] }); return; }
+  if (msg.t === 'hist-get') return; // hand history is for the host only and is never sent to players
   fresh(moveCount(msg), () => runAction(conn.clientId, msg, (err) => conn.open && conn.send({ t: 'error', msg: err, bet: msg.t === 'bet' })));
 }
 
@@ -275,16 +279,59 @@ function showNote(msg) {
   }
 }
 
+// A word for one player only (a short note at the bottom of their screen).
+function sayTo(id, text) {
+  if (id === S.myId) toast(text);
+  else if (S.conns[id]?.open) S.conns[id].send({ t: 'say', msg: text });
+}
+// Someone who is watching asks a seated player to sit out. One ask a minute per watcher; the seated
+// player gets a small note they can ignore.
+function askOut(from, to) {
+  const t = S.table, a = t.players[from], b = t.players[to];
+  if (!a || !b || from === to) return;
+  if (a.seat !== null || t.banker === from) throw new Error('Only someone who is watching can ask for a seat.');
+  if (b.seat === null) throw new Error(`${b.name} is not seated.`);
+  S.askAt ||= {}; S.askFor ||= {};
+  const wait = 60000 - (Date.now() - (S.askAt[from] || 0));
+  if (wait > 0) throw new Error(`You can ask again in ${Math.ceil(wait / 1000)} seconds.`);
+  S.askAt[from] = Date.now();
+  S.askFor[to] = from;
+  const msg = { t: 'ask-out', name: a.name };
+  if (to === S.myId) showAsk(msg); else if (S.conns[to]?.open) S.conns[to].send(msg);
+  sayTo(from, `${b.name} was asked to sit out.`);
+}
+function showAsk(msg) {
+  $('#ask-note')?.remove();
+  const el = document.createElement('div');
+  el.id = 'ask-note'; el.className = 'ask-note';
+  el.innerHTML = `<span><b>${esc(String(msg.name || 'Someone').slice(0, 16))}</b> is watching and asks for a seat.</span><button class="btn small" data-ask="yes">Sit out after this hand</button><button class="btn small ghost" data-ask="no" aria-label="Ignore">✕</button>`;
+  el.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-ask]');
+    if (!b) return;
+    if (b.dataset.ask === 'yes') send({ t: 'ask-out-yes' });
+    el.remove();
+  });
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 25000);
+}
+
 // Moves any player (including the host as a player) can make.
 function runAction(id, msg, onError) {
   const t = S.table;
   try {
     switch (msg.t) {
-      case 'sit': t.sit(id, Number(msg.seat)); break;
-      case 'stand-up': t.standUp(id); break;
+      case 'sit': t.sit(id, Number(msg.seat), !!msg.add); break;
+      case 'stand-up': t.standUp(id, Number.isInteger(msg.seat) ? msg.seat : undefined); break;
       case 'bet': t.setBet(id, msg); break;
-      case 'insurance': t.insurance(id, !!msg.take); break;
-      case 'action': t.action(id, String(msg.a)); break;
+      case 'insurance': t.insurance(id, !!msg.take, Number.isInteger(msg.seat) ? msg.seat : undefined); break;
+      case 'action': t.action(id, String(msg.a), !!msg.auto); break;
+      case 'ask-out': askOut(id, String(msg.to)); break;
+      case 'ask-out-yes': {
+        const left = t.leaveAfter(id), me = t.players[id];
+        const asker = S.askFor?.[id];
+        if (left && asker) { delete S.askFor[id]; sayTo(asker, me.leaving ? `${me.name} will sit out when this hand ends.` : `${me.name} sat out. The seat is free.`); }
+        break;
+      }
       case 'sit-dealer': {
         const voteId = t.requestDealer(id);
         if (voteId) setTimeout(() => hostDo((tb) => tb.expireVote(voteId)), VOTE_SECONDS * 1000);
@@ -435,6 +482,9 @@ function hostChanged() {
   setState({ ...mine, timer, voteEndsIn });
   setTimerFromState(S.state);
   safeSet('bj-host', JSON.stringify({ code: S.code, table: t }));
+  // Finished rounds go to this browser's own database (and from there to the online backup).
+  const lastRound = t.hist?.length ? t.hist[t.hist.length - 1].round : 0;
+  if (t.created?.id && lastRound && lastRound !== S.histSaved) { const from = S.histSaved ?? -1; S.histSaved = lastRound; HX.saveRounds(t.created.id, t.hist.filter((h) => h.round > from)); }
   render();
 }
 
@@ -590,7 +640,8 @@ function connectToHost() {
     if (msg.t === 'ping') { try { conn.send({ t: 'pong' }); } catch {} return; }
     if (msg.t === 'state') { setState(msg.state); render(); setTimerFromState(msg.state); }
     else if (msg.t === 'error') { toast(msg.msg); if (msg.bet) dropPend(); }
-    else if (msg.t === 'hist') { S.hist = msg.list || []; S.histN = S.hist.length; if ($('#hist-list')) showHistory(false); }
+    else if (msg.t === 'say') toast(String(msg.msg || '').slice(0, 200));
+    else if (msg.t === 'ask-out') showAsk(msg);
     else if (msg.t === 'note') showNote(msg);
     else if (msg.t === 'fx') showThrow(msg);
     else if (msg.t === 'peek') showPeek(msg.card, msg.by);
@@ -629,25 +680,54 @@ function send(msg) {
 // it only when it is the answer to the last bet I sent (the table sends my bet's number back),
 // when the round moves on, or when the table said no. So quick taps add up, and a state that
 // was already on its way cannot put my bet back to an older amount.
+// A person can hold two or more seats. One of them is the seat in hand: the one the tray, the chips
+// and the move buttons work on. It follows the turn while cards are played, and the player's own
+// choice (S.aim) while betting. The rest of the page reads it as me.seat.
+function aimSeat(st) {
+  const me = st.players.find((p) => p.id === S.myId);
+  if (!me) return;
+  const mine = me.seats || (me.seat !== null && me.seat !== undefined ? [me.seat] : []);
+  me.seats = mine;
+  let a = mine.includes(S.aim) ? S.aim : mine.length ? mine[0] : null;
+  if (st.phase === 'playing' && st.turn && mine.includes(st.turn.seat)) a = st.turn.seat;
+  else if (st.phase === 'insurance') { const w = mine.find((i) => st.seats[i]?.hands.length && !st.seats[i].insuranceDecided); if (w !== undefined) a = w; }
+  S.aim = a;
+  me.seat = a;
+  if (st.rebets) st.rebet = a !== null ? st.rebets[a] || null : null;
+}
+function pickSeat(i) {
+  const st = S.state;
+  if (!st) return;
+  S.aim = i; S.undo = [];
+  aimSeat(st);
+  render();
+}
 function setState(state) {
   S.state = state;
-  const { seat } = myInfo(state);
+  aimSeat(state);
+  const me = state.players.find((p) => p.id === S.myId);
   const between = state.phase === 'betting' || state.phase === 'settled';
-  S.serverBet = seat ? { bet: seat.bet, ready: seat.ready } : null;
-  if (S.pend && (!seat || !between || state.round !== S.pend.round || seat.betSeq === S.pend.seq || Date.now() - S.pend.at > 4000)) S.pend = null;
+  // The table's own copy of each of my bets, kept so a bet of mine that is still on its way can be laid over it.
+  S.serverBet = {};
+  for (const i of me?.seats || []) if (state.seats[i]) S.serverBet[i] = { bet: state.seats[i].bet, ready: state.seats[i].ready };
+  const seat = S.pend ? state.seats[S.pend.seat] : null;
+  if (S.pend && (!seat || seat.playerId !== S.myId || !between || state.round !== S.pend.round || seat.betSeq === S.pend.seq || Date.now() - S.pend.at > 4000)) S.pend = null;
   overlayBet();
   // A rebet asked for while the results were showing goes down as soon as the cards are cleared.
-  if (S.rebetWhenOpen != null && (S.rebetWhenOpen !== state.round || !seat || !between)) S.rebetWhenOpen = null;
+  if (S.rebetWhenOpen != null && (S.rebetWhenOpen !== state.round || !myInfo(state).seat || !between)) S.rebetWhenOpen = null;
   if (S.rebetWhenOpen != null && state.phase === 'betting') { S.rebetWhenOpen = null; setTimeout(doRebet, 0); }
+  autoStep();
 }
 function overlayBet() {
   const st = S.state;
   if (!st || !S.serverBet) return;
-  const { seat } = myInfo(st);
-  if (!seat) return;
-  const src = S.pend || S.serverBet;
-  seat.bet = structuredClone(src.bet);
-  seat.ready = src.ready;
+  for (const [k, srv] of Object.entries(S.serverBet)) {
+    const seat = st.seats[k];
+    if (!seat) continue;
+    const src = S.pend && S.pend.seat === Number(k) ? S.pend : srv;
+    seat.bet = structuredClone(src.bet);
+    seat.ready = src.ready;
+  }
 }
 function dropPend() {
   if (!S.pend) return;
@@ -660,9 +740,13 @@ function placeBet(bet, ready = false) {
   const b = { main: bet.main, sides: { ...bet.sides } };
   if (!b.main) b.sides = {};
   if (b.sides.friendBust && bet.target != null) b.target = bet.target;
-  S.pend = { bet: b, ready: b.main > 0 && !!ready, seq: ++S.betSeq, round: st.round, at: Date.now() };
+  const { me } = myInfo(st);
+  const at = me.seat;
+  S.pend = { bet: b, ready: b.main > 0 && !!ready, seq: ++S.betSeq, round: st.round, at: Date.now(), seat: at };
   overlayBet();
-  send({ t: 'bet', main: b.main, sides: b.sides, target: b.target, ready, seq: S.pend.seq });
+  send({ t: 'bet', main: b.main, sides: b.sides, target: b.target, ready, seq: S.pend.seq, seat: at, auto: !!S.auto?.on });
+  // Ready on one seat: the next of my seats that still needs a bet comes into hand.
+  if (S.pend.ready) { const nx = (me.seats || []).find((i) => i !== at && st.seats[i] && !st.seats[i].ready); if (nx !== undefined) { S.aim = nx; S.undo = []; aimSeat(st); } }
   render();
 }
 // Put last round's bet down again. Only ever called from the Rebet button or the B key.
@@ -700,8 +784,10 @@ function buildLayout() {
             <div class="share"><input id="share" readonly /><button class="btn small" data-act="copy">Copy</button></div>
           </div>
           ${fold('m-table', '📜 Table rules and payouts', `
-            <button class="menu-item" data-act="rules">💰 Side bet payouts</button>
-            <button class="menu-item" data-act="history">🕘 Hand history</button>`)}
+            <button class="menu-item" data-act="rules">💰 Side bet payouts</button>`)}
+          ${fold('m-cheat', '🛡️ Game Cheating Detection', `
+            <button class="menu-item" data-act="fair">🔐 Provably fair</button>
+            ${host ? '<button class="menu-item" data-act="history">🕘 Hand history</button><button class="menu-item" data-act="export">📤 Export hand history</button>' : ''}`)}
           ${fold('m-view', '🎛️ My view and sound', `
             <button class="menu-item" data-act="four">🎨 Four colour cards</button>
             <button class="menu-item" data-act="chart">📊 Basic strategy chart</button>
@@ -920,13 +1006,59 @@ function histHTML(list) {
   }
   return `<h2 style="margin-top:0">Hand history</h2><p class="hint">Newest round first. A gold line marks where each new shuffle starts.</p><div id="hist-list" class="hist-list">${rows.join('')}</div>`;
 }
-function showHistory(ask = true) {
+// Hand history is for the host only. It is read from this browser's database, so it holds every round
+// of the table, also from before a refresh. S.histScope: 'all' or 'shoe' (since the last shuffle).
+async function hostRounds(id = S.table.created?.id) {
+  let list = id ? await HX.getRounds(id) : [];
+  if (id === S.table.created?.id) { const have = new Set(list.map((r) => r.round)); list = list.concat((S.table.hist || []).filter((r) => !have.has(r.round))).sort((a, b) => a.round - b.round); }
+  return list;
+}
+const scopeHTML = () => `<div class="hx-scope"><button class="seat-tab ${S.histScope !== 'shoe' ? 'on' : ''}" data-hx="scope" data-v="all">All hands</button><button class="seat-tab ${S.histScope === 'shoe' ? 'on' : ''}" data-hx="scope" data-v="shoe">Since last shuffle</button></div>`;
+async function showHistory() {
+  if (S.role !== 'host') return;
   S.histShown = S.state?.histN;
-  if (S.role === 'host') S.hist = S.table.hist || [];
-  else if (ask) send({ t: 'hist-get' });
-  $('#modal-body').innerHTML = histHTML(S.hist || []) + (S.role !== 'host' && ask && !(S.hist || []).length ? '<p class="hint" id="hist-list">Loading...</p>' : '');
+  const all = await hostRounds();
+  const list = S.histScope === 'shoe' ? HX.sinceLastShuffle(all) : all;
+  $('#modal-body').innerHTML = histHTML(list).replace('</h2>', `</h2>${scopeHTML()}<div class="hx-row"><button class="btn small" data-hx="export">📤 Export</button><span class="hint">${list.length} of ${all.length} rounds shown. Only the host can see this.</span></div>`);
+  $('#modal-body').dataset.hx = 'history';
   if (!$('#modal').open) $('#modal').showModal();
 }
+async function showExport() {
+  if (S.role !== 'host') return;
+  const tables = await HX.listTables();
+  const cur = S.table.created?.id;
+  const when = (t) => { const d = new Date(t); return isNaN(d) ? '' : d.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }); };
+  const row = (t) => `<div class="hx-table"><div><b>Table ${esc(t.code || '')}</b>${t.id === cur ? ' <span class="role-tag host">this table</span>' : ''}<br><span class="hint">Opened ${when(t.created)} · ${t.id === cur ? Math.max(t.rounds, (S.table.hist || []).length) : t.rounds} rounds</span></div>
+    <div class="hx-btns"><button class="btn small" data-hx="dl" data-id="${t.id}" data-f="txt">Text file</button><button class="btn small" data-hx="dl" data-id="${t.id}" data-f="csv">Spreadsheet (.csv)</button><button class="btn small" data-hx="dl" data-id="${t.id}" data-f="txt" data-src="online" title="Read this table back from the online backup">From backup</button></div></div>`;
+  $('#modal-body').innerHTML = `<h2 style="margin-top:0">Export hand history</h2>
+    <p class="hint">Every round with its time, shuffle number, bets, side bets, cards, each move in order and the result, plus who joined, left or reconnected. Only the host can export. Players never receive this.</p>
+    ${scopeHTML()}
+    <div class="hx-tables">${tables.map(row).join('') || '<p class="hint">No table has been saved on this browser yet.</p>'}</div>
+    <p class="hint">This browser keeps its last 5 tables, also after it is closed. A sixth table drops the oldest. Each round is also saved to an online backup that only this browser can read back.${HX.backupState.last ? ' ' + esc(HX.backupState.last) + ' It will try again after the next round.' : ''}</p>`;
+  $('#modal-body').dataset.hx = 'export';
+  if (!$('#modal').open) $('#modal').showModal();
+}
+async function exportTable(id, fmt, online) {
+  if (S.role !== 'host') return;
+  const meta = (await HX.listTables()).find((t) => t.id === id) || { id, code: S.code, created: S.table.created?.at };
+  let all;
+  try { all = online ? await HX.fetchBackup(id) : await hostRounds(id); } catch (e) { toast(e.message || 'The online backup could not be reached.'); return; }
+  const list = S.histScope === 'shoe' ? HX.sinceLastShuffle(all) : all;
+  if (!list.length) { toast(online ? 'The online backup has no rounds for this table yet.' : 'This table has no finished rounds yet.'); return; }
+  const scope = S.histScope === 'shoe' ? 'Since last shuffle' : 'All hands';
+  const d = new Date(), name = `blackjack-${meta.code || 'table'}-${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}-${S.histScope === 'shoe' ? 'last-shuffle' : 'all'}${online ? '-backup' : ''}`;
+  if (fmt === 'csv') HX.download(name + '.csv', HX.toCSV(meta, list), 'text/csv;charset=utf-8');
+  else HX.download(name + '.txt', HX.toText(meta, list, scope, id === S.table.created?.id && !online ? S.table.evts || [] : []), 'text/plain;charset=utf-8');
+  toast(`Saved ${list.length} ${list.length === 1 ? 'round' : 'rounds'} to your downloads.`);
+}
+document.addEventListener('click', (e) => {
+  const el = e.target.closest('[data-hx]');
+  if (!el || el.id === 'modal-body' || S.role !== 'host') return;
+  const again = () => ($('#modal-body').dataset.hx === 'export' ? showExport() : showHistory());
+  if (el.dataset.hx === 'scope') { S.histScope = el.dataset.v; again(); }
+  else if (el.dataset.hx === 'export') showExport();
+  else if (el.dataset.hx === 'dl') exportTable(el.dataset.id, el.dataset.f, el.dataset.src === 'online');
+});
 
 // Running tally of buy-ins and results for everyone at the table.
 function renderGuestPlayers(st) {
@@ -951,7 +1083,7 @@ function renderLedger(st) {
       ${rows.map((r) => `<tr class="${r.id === S.myId ? 'me' : ''}"><td>${r.id === st.hostId ? '♛ ' : ''}${esc(r.name)}${r.kicked ? ' (left)' : r.connected ? '' : ' (away)'}${st.banker?.id === r.id ? ' (dealer)' : ''}</td><td>${money(r.totalIn)}</td><td>${money(r.chips)}</td><td>${pl(net(r))}</td></tr>`).join('')}
       <tr class="tot"><td>Table</td><td>${money(sumIn)}</td><td>${money(sumChips)}</td><td>${pl(rows.reduce((a, r) => a + net(r), 0))}</td></tr>
     </table>
-    <button class="btn small" data-act="history" style="margin:6px 0">🕘 Hand history</button>
+    ${S.role === 'host' ? '<button class="btn small" data-act="history" style="margin:6px 0">🕘 Hand history</button>' : ''}
     <div class="hint">Bought in counts starting chips, buy-ins and chips the host gives or takes. The +/- column counts only hands played with a player as the dealer, so it always adds up to zero. Hands against the house are practice and are left out.</div></div>`;
 }
 
@@ -973,7 +1105,7 @@ function setHTML(el, html) {
 }
 
 function render(note) {
-  if ($('#modal')?.open && $('#hist-list') && S.state && S.state.histN !== S.histShown) showHistory();
+  if (S.role === 'host' && $('#modal')?.open && $('#hist-list') && S.state && S.state.histN !== S.histShown) showHistory();
   if (!S.role) return;
   const st = S.state;
   const pill = $('#conn-pill');
@@ -1031,8 +1163,9 @@ function render(note) {
   const between = st.phase === 'betting' || st.phase === 'settled';
   // Flat view: the tray under the table always holds your buttons, so nothing sits on the cards. The 3D room keeps its floating panel.
   // Move buttons wait until the cards being dealt have landed.
-  const inTray = between || !S.room;
-  setHTML(tray, inTray ? (between || !S.dealing ? trayHTML(st) : '') + sideResultsHTML(st) : '');
+  const watching = !myInfo(st).seat && !myInfo(st).isBanker; // someone watching always keeps their line and the ask for a seat
+  const inTray = between || !S.room || watching;
+  setHTML(tray, autoBarHTML(st) + (inTray ? (between || !S.dealing || watching ? trayHTML(st) : '') + sideResultsHTML(st) : ''));
   setHTML($('#felt-actions'), inTray || S.dealing ? '' : trayHTML(st));
   // The round result stays up until the cards are cleared.
   if (st.phase !== 'settled') { clearTimeout(S.resultTimer); $('#result-pop')?.remove(); }
@@ -1425,7 +1558,7 @@ function feltHTML(st) {
   const r = st.round;
   const { me, isBanker } = myInfo(st);
   const shoeTxt = st.settings.decks === 'csm' ? 'Randomized: shuffled every round' :
-    `${st.settings.decks} deck${st.settings.decks > 1 ? 's' : ''} · ${st.shoe.left} cards left · ` +
+    `${st.settings.decks} deck${st.settings.decks > 1 ? 's' : ''} · ${st.shoe.left}/${st.shoe.size} cards left · ` +
     (st.settings.shuffleMode === 'rounds' ? `shuffle every ${st.settings.shuffleEvery} rounds` : `shuffle at ${st.settings.penetration}%`);
   const dealerBusy = inFlight(d.cards.map((c, i) => `${r}-d-${i}`));
   const dealerTotal = d.cards.length && !dealerBusy ? `<span class="total">${d.total > 21 ? 'Bust ' + d.total : d.total + (d.soft && d.total < 21 ? ' soft' : '')}</span>` : '';
@@ -1505,7 +1638,7 @@ function frozenHTML(st) {
   const host = S.role === 'host';
   const between = st.phase === 'betting' || st.phase === 'settled';
   if (st.frozen) {
-    return `<div class="frozen-banner on"><b>Frozen ledger</b> House dealer. Chips move, but nothing counts in the ledger.
+    return `<div class="frozen-banner on"><b>Frozen ledger</b> Practice with the house dealer. Chips and buy-ins go back when it stops.
       ${host && between ? '<button class="btn small" data-act="h-frozen" data-on="0">Stop</button>' : ''}</div>`;
   }
   return `<div class="frozen-banner wait"><b>Waiting for a dealer</b> ${host
@@ -1630,8 +1763,9 @@ function seatHTML(st, s, i, focus, spot) {
   const place = spot.x === undefined ? '' : `style="${spotStyle(spot)}${Math.abs(lean0) > 28 ? `;--pr:${(Math.sign(lean0) * 28 - lean0).toFixed(1)}deg` : ''}"`;
   const cls = `${mode === 'zoom' ? 'zoomed' : mode === 'seat' ? 'std' : mode}${spot.phone ? ' pfocus' : ''}`;
   if (!s) {
-    const canSit = me && me.seat === null && !isBanker;
-    return `<div class="seat empty ${cls}" id="seat-${i}" ${place}>${mini ? '' : `<div class="hands"></div>${spotAreaHTML(st, null, i, false, 0)}`}${canSit ? `<button class="btn small" data-act="sit" data-seat="${i}">Sit here</button>` : `<span class="seat-no">Seat ${i + 1}</span>`}</div>`;
+    const canSit = me && !isBanker;
+    const more = canSit && me.seat !== null;
+    return `<div class="seat empty ${cls}" id="seat-${i}" ${place}>${mini ? '' : `<div class="hands"></div>${spotAreaHTML(st, null, i, false, 0)}`}${canSit ? `<button class="btn small ${more ? 'add-seat' : ''}" data-act="sit" data-seat="${i}" ${more ? 'data-add="1" title="Play this seat as well. Each seat has its own bet and hand."' : ''}>${more ? '+ Seat' : 'Sit here'}</button>` : `<span class="seat-no">Seat ${i + 1}</span>`}</div>`;
   }
   const isMe = s.playerId === S.myId;
   // Whose turn it is shows once the deal is finished, not while the first cards are still going round.
@@ -1787,7 +1921,64 @@ function openChart() {
   pop.onclick = (e) => { if (e.target === pop || e.target.closest('[data-chart=close]')) pop.hidden = true; };
 }
 
-function trayHTML(st) {
+// For someone who is watching: ask a seated player for their seat.
+function askOutHTML(st) {
+  const seen = new Set(), list = [];
+  for (const x of st.seats) if (x && x.playerId !== S.myId && !seen.has(x.playerId)) { seen.add(x.playerId); list.push(x); }
+  if (!list.length) return '';
+  return `<div class="ask-row"><span class="hint">Ask for a seat:</span>${list.map((x) => `<button class="btn small" data-act="ask-out" data-id="${x.playerId}">${esc(x.name)}</button>`).join('')}</div>`;
+}
+// Practice only (frozen ledger): the table can bet and play your seats by itself with basic strategy.
+// It looks at your cards and the dealer's up card, nothing else. It never uses a count.
+const AUTO_SPEEDS = { slow: 2600, normal: 1300, fast: 450 };
+function autoBarHTML(st) {
+  const { seat, isBanker } = myInfo(st);
+  if (!st.frozen || !seat || isBanker) return '';
+  const A = S.auto || {};
+  if (!A.on) return '<div class="auto-bar"><button class="seat-tab" data-act="auto" title="Practice: bets and plays your hands by basic strategy. Only while the ledger is frozen.">🤖 Auto play</button></div>';
+  return `<div class="auto-bar on"><span title="Basic strategy only. It never counts cards.">🤖 Auto</span>${Object.keys(AUTO_SPEEDS).map((k) => `<button class="seat-tab ${(A.speed || 'normal') === k ? 'on' : ''}" data-act="auto-speed" data-v="${k}">${k[0].toUpperCase() + k.slice(1)}</button>`).join('')}<button class="seat-tab stop" data-act="auto">Stop</button></div>`;
+}
+function autoStep() {
+  const st = S.state, A = S.auto;
+  if (!A?.on || !st) return;
+  const { me, seat, isBanker } = myInfo(st);
+  if (!st.frozen || !seat || isBanker) { A.on = false; clearTimeout(A.timer); A.key = null; if (!st.frozen) toast('Auto play stopped: the ledger is no longer frozen.'); return; }
+  const turnMine = st.phase === 'playing' && st.actions?.length && st.turn;
+  const hand = turnMine ? st.seats[st.turn.seat].hands[st.turn.hand] : null;
+  const key = [st.phase, st.round, me.seat, seat.ready, seat.insuranceDecided, turnMine ? `${st.turn.seat}-${st.turn.hand}-${hand.cards.length}` : '', S.dealing ? 1 : 0].join('|');
+  if (A.key === key) return;
+  A.key = key;
+  clearTimeout(A.timer);
+  A.timer = setTimeout(() => {
+    A.key = null;
+    const now = S.state;
+    if (!A.on || !now || !now.frozen) return;
+    const { me: m, seat: x } = myInfo(now);
+    if (!x) return;
+    if (dealingNow()) { autoStep(); return; }
+    if (now.phase === 'betting' && !x.ready) {
+      const min = now.settings.minBet;
+      const bet = betTotal(x.bet) && x.bet.main >= min ? x.bet : now.rebet && now.rebet.main >= min ? now.rebet : { main: min, sides: {} };
+      const others = (m.seats || []).reduce((a, i) => a + (i === m.seat || !now.seats[i] ? 0 : betTotal(now.seats[i].bet)), 0);
+      if (betTotal(bet) + others > m.chips) { A.on = false; toast('Auto play stopped: not enough chips for the next bet.'); render(); return; }
+      placeBet(bet, true);
+    } else if (now.phase === 'insurance' && x.hands.length && !x.insuranceDecided) send({ t: 'insurance', take: false, seat: m.seat });
+    else if (now.phase === 'playing' && now.actions?.length && now.turn) {
+      const h = now.seats[now.turn.seat].hands[now.turn.hand];
+      const a = bestMove(h.cards, now.dealer.cards[0], now.actions, now.settings) || 'stand';
+      send({ t: 'action', a, auto: true });
+    }
+  }, AUTO_SPEEDS[A.speed || 'normal']);
+}
+// With two or more seats: one small tab per seat, above the tray. The seat in hand is lit.
+function seatTabsHTML(st) {
+  const { me } = myInfo(st);
+  if (!me || (me.seats || []).length < 2) return '';
+  const free = st.phase === 'betting' || st.phase === 'settled';
+  return `<div class="seat-tabs">${me.seats.map((i) => { const x = st.seats[i]; const b = x ? betTotal(x.bet) : 0; return `<button class="seat-tab ${i === me.seat ? 'on' : ''}" data-act="pick-seat" data-seat="${i}" ${free ? '' : 'disabled'}>Seat ${i + 1}${free && b ? ` · ${money(b)}${x.ready ? ' ✓' : ''}` : ''}</button>`; }).join('')}</div>`;
+}
+function trayHTML(st) { const h = trayInner(st); return h ? seatTabsHTML(st) + h : h; }
+function trayInner(st) {
   const { me, seat, isBanker } = myInfo(st);
   if (!me) return '';
   const ph = st.phase;
@@ -1797,7 +1988,7 @@ function trayHTML(st) {
       ${st.phase === 'betting' || st.phase === 'settled' ? '<div class="actions"><button class="btn" data-act="leave-dealer">Leave dealer seat</button></div>' : ''}`;
   }
   if (!seat) {
-    return `<div class="tray-msg">${S.role === 'host' ? 'You are hosting. Press "Sit here" to play, or "Ask to be dealer" to be the bank.' : 'Press "Sit here" on an empty seat to play, or "Ask to be dealer" to be the bank.'} You have ${money(me.chips)} chips.</div>`;
+    return `<div class="tray-msg">${S.role === 'host' ? 'You are hosting. Press "Sit here" to play, or "Ask to be dealer" to be the bank.' : 'Press "Sit here" on an empty seat to play, or "Ask to be dealer" to be the bank.'} You have ${money(me.chips)} chips.</div>${askOutHTML(st)}`;
   }
   if (ph === 'settled') {
     // The round is over. Say what it paid; the bets on the table are last round's, not new ones.
@@ -1830,7 +2021,7 @@ function trayHTML(st) {
         ${pvpBtnHTML(st, seat)}
         
         ${rebet || `<button class="btn" data-act="clear" ${betTotal(b) ? '' : 'disabled'}>Clear all</button>`}
-        <button class="btn danger" data-act="stand-up">Leave seat</button>
+        <button class="btn danger" data-act="stand-up">${(myInfo(st).me?.seats || []).length > 1 ? `Leave seat ${myInfo(st).me.seat + 1}` : 'Leave seat'}</button>
       </div>`;
   }
   if (ph === 'insurance') {
@@ -2145,12 +2336,21 @@ function runAct(el) {
     case 'rules': $('#modal-body').innerHTML = rulesHTML(); $('#modal').showModal(); break;
     case 'fair': $('#modal-body').innerHTML = fairHTML(); $('#modal').showModal(); break;
     case 'four': document.body.classList.toggle('four-colour'); safeSet('bj-four', document.body.classList.contains('four-colour') ? '1' : '0'); break;
-    case 'sit': send({ t: 'sit', seat: Number(el.dataset.seat) }); break;
-    case 'stand-up': send({ t: 'stand-up' }); break;
+    case 'sit': send({ t: 'sit', seat: Number(el.dataset.seat), add: el.dataset.add === '1' }); if (el.dataset.add === '1') S.aim = Number(el.dataset.seat); break;
+    case 'stand-up': send({ t: 'stand-up', seat: myInfo(S.state).me?.seat }); break;
+    case 'pick-seat': pickSeat(Number(el.dataset.seat)); break;
+    case 'ask-out': send({ t: 'ask-out', to: el.dataset.id }); break;
+    case 'auto': S.auto = { speed: 'normal', ...(S.auto || {}), on: !S.auto?.on, key: null }; clearTimeout(S.auto.timer); render(); autoStep(); break;
+    case 'auto-speed': if (S.auto) { S.auto.speed = el.dataset.v; S.auto.key = null; clearTimeout(S.auto.timer); render(); autoStep(); } break;
     case 'chip': {
-      // Tapping a chip picks it and bets one on the main circle; each further tap adds one more. Escape or a tap on the empty tray puts the chip down.
-      const v = Number(el.dataset.v);
-      S.chip = v;
+            const v = Number(el.dataset.v);
+      // A tap on another chip only picks it up: nothing is bet. The chip in hand then goes where you tap:
+      // the main circle or a side bet. A tap on the chip already in hand adds one to the main bet.
+      if (S.chip !== v) {
+        S.chip = v;
+        if (seat && !safeGet('bj-chip-tip')) { safeSet('bj-chip-tip', '1'); toast('Chip picked. Tap your circle or a side bet to place it. Tap the same chip again to add it to your main bet.'); }
+        render(); break;
+      }
       if (!seat) { render(); break; }
       const put = fitBet(v, 'main'); // with fewer chips left than the chip is worth, bet what is left
       if (!put) { render(); break; }
@@ -2237,6 +2437,7 @@ function runAct(el) {
     case 'rebet': doRebet(); break;
     case 'keys': $('#modal-body').innerHTML = keysHTML(); $('#modal').showModal(); break;
     case 'history': showHistory(); break;
+    case 'export': showExport(); break;
     case 'double-bet': {
       S.undo.push(structuredClone(seat.bet));
       S.mainChips = S.mainChips.concat(S.mainChips);
@@ -2283,14 +2484,14 @@ function runAct(el) {
     }
     case 'pvp-clear': S.undo.push(structuredClone(seat.bet)); delete bet.sides.friendBust; sendBet(); chipSound(1); break;
     case 'ready': sendBet(!seat.ready); break;
-    case 'ins': send({ t: 'insurance', take: el.dataset.take === '1' }); break;
+    case 'ins': send({ t: 'insurance', take: el.dataset.take === '1', seat: myInfo(S.state).me?.seat }); break;
     case 'play': playMove(el.dataset.a); break;
     // Host only
     case 'h-deal': fresh((t) => t.dealCount(), () => hostDo((t) => t.deal())); break;
     case 'h-frozen': hostDo((t) => {
       if (!(t.phase === 'betting' || t.phase === 'settled')) throw new Error('Change this between rounds.');
-      t.frozen = el.dataset.on === '1';
-      t.addLog(t.frozen ? 'The host froze the ledger: the house deals and those hands are not counted.' : 'The ledger freeze is off. The table waits for a player to be the dealer.');
+      t.setFrozen(el.dataset.on === '1');
+      t.addLog(t.frozen ? 'The host froze the ledger: the house deals and those hands are practice.' : 'The ledger freeze is off. Chips and buy-ins are back to where they were before it.');
     }); break;
     case 'h-ins': hostDo((t) => t.forceInsurance()); break;
     case 'h-skip': fresh(() => 0, () => hostDo((t) => t.skipTurn())); break;
@@ -2381,7 +2582,7 @@ document.addEventListener('keydown', (e) => {
   const { seat } = myInfo(st);
   if (!seat) return;
   if (st.phase === 'insurance' && (k === 'y' || k === 'n')) {
-    if (!wait && seat.hands.length && !seat.insuranceDecided) send({ t: 'insurance', take: k === 'y' });
+    if (!wait && seat.hands.length && !seat.insuranceDecided) send({ t: 'insurance', take: k === 'y', seat: myInfo(st).me?.seat });
     return;
   }
   if (k === 'b' && (st.phase === 'betting' || st.phase === 'settled')) {

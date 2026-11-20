@@ -226,7 +226,7 @@ const da = t.players.a.chips, dd = t.players.d.chips;
   assert.throws(() => t.proposeSettings('h', { seats: 5 }, 'x'), /still taken/);
   assert.equal(t.vote ?? null, null);
   // Shrinking is fine once the seats being removed are empty.
-  t.sit('b', 0); t.sit('a', 1);
+  t.standUp('b'); t.standUp('a'); t.sit('b', 0); t.sit('a', 1);
   t.updateSettings({ seats: 2 });
   assert.equal(t.settings.seats, 2); assert.equal(t.seats.length, 2);
   assert.equal(t.players.a.seat, 1); assert.equal(t.players.b.seat, 0);
@@ -413,4 +413,59 @@ const da = t.players.a.chips, dd = t.players.d.chips;
   assert.ok(t.hist[0].seats[0].hands[0].cards.split(' ').length >= 2, 'cards are stored');
   assert.equal(G.Table.fromJSON(JSON.parse(JSON.stringify(t))).hist.length, 5, 'history is saved with the table');
   console.log('ok hand history');
+}
+
+// One person, two seats: separate bets and hands, one shared balance.
+{
+  const t = new G.Table({ startChips: 1000 });
+  t.hostId = 'h'; t.frozen = true;
+  t.join('a', 'Ann', 1000); t.join('b', 'Bob', 1000);
+  t.sit('a', 2); t.sit('a', 4, true); t.sit('b', 3);
+  assert.deepEqual(t.seatsOf('a'), [2, 4]); assert.equal(t.players.a.seat, 2);
+  t.setBet('a', { main: 600, sides: {}, ready: true, seat: 2 });
+  assert.throws(() => t.setBet('a', { main: 500, sides: {}, ready: true, seat: 4 }), /Not enough chips/);
+  t.setBet('a', { main: 100, sides: {}, ready: true, seat: 4 });
+  t.setBet('b', { main: 50, sides: {}, ready: true });
+  assert.equal(t.seats[2].bet.main, 600); assert.equal(t.seats[4].bet.main, 100);
+  t.deal();
+  assert.equal(t.players.a.chips, 300);
+  let guard = 0;
+  while (t.phase !== 'settled' && guard++ < 200) {
+    if (t.phase === 'insurance') { t.forceInsurance(); continue; }
+    if (t.phase === 'playing') { const id = t.seats[t.turn.seat].playerId; assert.ok(t.allowedActions(id).includes('stand')); assert.deepEqual(t.allowedActions(id === 'a' ? 'b' : 'a'), []); t.action(id, 'stand'); continue; }
+    if (t.phase === 'dealer') { t.dealerStep(); continue; }
+  }
+  assert.equal(t.phase, 'settled');
+  const h = t.hist[t.hist.length - 1];
+  assert.deepEqual(h.seats.map((x) => x.seat), [3, 4, 5]);
+  assert.equal(t.rebetFor('a', 2).main, Math.min(600, t.players.a.chips)); assert.ok(t.players.lastBets === undefined && t.players.a.lastBets[4].main === 100);
+  t.startBetting();
+  t.standUp('a', 4);
+  assert.deepEqual(t.seatsOf('a'), [2]);
+  t.standUp('a'); assert.equal(t.players.a.seat, null);
+  console.log('ok two seats');
+}
+
+// Frozen ledger: chips and buy-ins go back when it stops; the shoe carries on; rounds stay in history.
+{
+  const t = new G.Table({ startChips: 1000 });
+  t.hostId = 'a';
+  t.join('a', 'Ann', 1000); t.sit('a', 0);
+  t.setFrozen(true);
+  const r = t.requestBuyIn('a', 650000); t.answerBuyIn(r.id, true);
+  assert.equal(t.players.a.chips, 651000);
+  t.join('b', 'Bob', 500); t.sit('b', 1);
+  t.setBet('a', { main: 100, sides: {}, ready: true, auto: true }); t.setBet('b', { main: 50, sides: {}, ready: true });
+  t.deal();
+  let g = 0;
+  while (t.phase !== 'settled' && g++ < 200) { if (t.phase === 'insurance') t.forceInsurance(); else if (t.phase === 'playing') t.action(t.seats[t.turn.seat].playerId, 'stand', t.turn.seat === 0); else if (t.phase === 'dealer') t.dealerStep(); }
+  const left = t.shoe.length, n = t.hist.length;
+  assert.throws(() => t.action('a', 'stand', true));
+  t.setFrozen(false);
+  assert.equal(t.players.a.chips, 1000); assert.equal(t.players.a.totalIn, 1000); assert.equal(t.players.a.boughtIn || 0, 0);
+  assert.equal(t.players.b.chips, 500); assert.equal(t.shoe.length, left); assert.equal(t.hist.length, n);
+  const h = t.hist[n - 1];
+  assert.equal(h.frozen, true); assert.equal(h.seats[0].auto, true); assert.equal(h.seats[1].auto, undefined);
+  assert.ok(h.events.some((e) => /auto play/.test(e.k)));
+  console.log('ok frozen reset');
 }
