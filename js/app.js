@@ -1,13 +1,13 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120t';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261120t';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120t';
-import { tickSound, winSound } from './fx.js?v=20261120t';
-import * as HX from './history.js?v=20261120t';
-import { webglOK, initRoom } from './room3d.js?v=20261120t';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120t';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120u';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261120u';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120u';
+import { tickSound, winSound } from './fx.js?v=20261120u';
+import * as HX from './history.js?v=20261120u';
+import { webglOK, initRoom } from './room3d.js?v=20261120u';
+import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120u';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -1016,6 +1016,8 @@ function buildLayout() {
     document.body.classList.add('room3d');
     try { S.room = initRoom($('#room'), $('#felt'), { phone: innerWidth < 700, pixel: pixelOn(), hud: $('#hud3d'), size: innerWidth < 700 ? { W: Math.max(320, Math.min(460, innerWidth - 16)), H: 600 } : FELT }); }
     catch (e) { console.error(e); safeSet('bj-3d', '0'); toast('The 3D room could not start on this device.'); }
+    // The first time you get to a table: a short walk round the office before your chair.
+    if (S.room && S.code && S.tourFor !== S.code) { S.tourFor = S.code; S.room.tour(2000); }
     if (params.has('roomdebug')) window.__room = S.room; // lets a test read the camera and the frame rate
     if (S.room && !S.roomHint) { S.roomHint = true; setTimeout(() => toast(matchMedia('(pointer: coarse)').matches ? 'One finger turns the view. Two fingers slide it, and a pinch moves you in or out.' : 'Drag to look around. Scroll or pinch out to walk around the table.'), 1200); }
   }

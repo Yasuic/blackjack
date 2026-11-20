@@ -146,7 +146,7 @@ function buildOffice(signText) {
     chrome: mk({ color: '#b9bec4', roughness: 0.25, metalness: 0.9 }),
     screen: mk({ color: '#0d0f12', roughness: 0.25, metalness: 0.2 }),
     // What the office screens show: the ARC Group logo, from the photo of it, lit like a screen that is on.
-    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261120t'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
+    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261120u'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
     dark: mk({ color: '#30353c', roughness: 0.6 }),
   };
   const group = new THREE.Group();
@@ -385,7 +385,7 @@ function buildStorefront() {
     lamp: lam('#c8161d', 0.6), bulb: lit('#ffe9a8'), red: lit('#c8161d'), gold: lit('#f4c542'), wood: lam('#7a5234', 0.35),
     glass: new THREE.MeshBasicMaterial({ color: '#dff3f7', transparent: true, opacity: 0.13, depthWrite: false }),
     awning: new THREE.MeshBasicMaterial({ map: canvasTexture(512, 64, (g, w, h) => { for (let i = 0; i < 16; i++) { g.fillStyle = i % 2 ? '#fff6e6' : '#f08a1c'; g.fillRect((i * w) / 16, 0, w / 16 + 1, h); } }), side: THREE.DoubleSide }),
-    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261120t') }),
+    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261120u') }),
     menu: new THREE.MeshBasicMaterial({ map: canvasTexture(256, 384, (g, w, h) => {
       g.fillStyle = '#c8161d'; g.fillRect(0, 0, w, h); g.fillStyle = '#f4c542'; g.fillRect(14, 14, w - 28, 44);
       const r = rng(11); g.fillStyle = '#fff3d6';
@@ -877,6 +877,10 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
   // The limits are the outer walls of the office: nobody walks out to the street.
   const ALL = (() => { const m = 0.35; return { x0: (OFFICE_AT.x - OFFICE.width + m) * S, x1: (OFFICE_AT.x - OFFICE.bump.x - m) * S, z0: (OFFICE_AT.y - OFFICE.depth + m) * S, z1: (OFFICE_AT.y - m) * S }; })();
   let walking = false;
+  // The tour on joining: one fast walk round the whole office that ends in your own chair.
+  let tour = null, tourW = 1;
+  const OFFC = new THREE.Vector3((ALL.x0 + ALL.x1) / 2, 150 * U, (ALL.z0 + ALL.z1) / 2);
+  const ease = (x) => { x = Math.max(0, Math.min(1, x)); return x * x * (3 - 2 * x); };
   // The office is not a plain rectangle: beside the big board room, past the wall, is outdoors. Keep out of that corner too.
   const CORNER = { x: (OFFICE_AT.x - 0.35) * S, z: (OFFICE_AT.y - OFFICE.bump.d + 0.35) * S };
   const keepIn = (p) => {
@@ -1017,6 +1021,7 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
   container.addEventListener('contextmenu', (e) => { if (!e.target.closest('input, textarea')) e.preventDefault(); });
   let drag = null, pinch = 0, mid = null, twoFinger = false;
   const interactive = 'button, a, input, select, textarea, label, [data-act], [data-throw-at], [data-vote]';
+  for (const ev of ['pointerdown', 'wheel']) container.addEventListener(ev, () => { tour = null; tourW = 1; }, { capture: true, passive: true });
   container.addEventListener('pointerdown', (e) => {
     if ((e.button > 0 && e.button !== 2) || e.target.closest(interactive)) return;
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -1140,7 +1145,16 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     if (now - fpsAt >= 1000) { fps = Math.round((frames * 1000) / (now - fpsAt)); frames = 0; fpsAt = now; }
     const k = 1 - Math.exp(-dt * rate);
     const settled = near(cur.theta, goal.theta, 2e-4) && near(cur.phi, goal.phi, 2e-4) && near(cur.r, goal.r, 0.05) && near(cur.yaw, goal.yaw, 2e-4) && near(cur.pitch, goal.pitch, 2e-4) && cur.t.distanceToSquared(goal.t) < 0.01;
-    if (!settled) {
+    if (tour) {
+      // Once round the office, looking in at its middle, then down into the chair for the last part.
+      const q = Math.min(1, (now - tour.t0) / tour.ms), wv = ease((q - 0.5) / 0.5), mix = (a, b) => a + (b - a) * wv;
+      tourW = wv;
+      cur.theta = goal.theta + Math.PI * 2 * (1 - ease(q));
+      cur.phi = mix(1.2, goal.phi); cur.r = mix(tour.r, goal.r); cur.yaw = goal.yaw * wv; cur.pitch = goal.pitch * wv;
+      cur.t.lerpVectors(OFFC, goal.t, wv);
+      dirty = Math.max(dirty, 2);
+      if (q >= 1) { tour = null; tourW = 1; }
+    } else if (!settled) {
       for (const key of ['theta', 'phi', 'r', 'yaw', 'pitch']) cur[key] += (goal[key] - cur[key]) * k;
       cur.t.lerp(goal.t, k);
       dirty = Math.max(dirty, 2);
@@ -1167,15 +1181,16 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     dirty--;
     posFor(cur, camera.position);
     // Never under the table top, the floor or outside the walls, whatever the numbers above say.
-    camera.position.y = Math.max(seated ? 120 * U : EYE, Math.min(FLOOR + 7.5 * S, camera.position.y));
+    camera.position.y = Math.max(tour ? EYE + (120 * U - EYE) * tourW : seated ? 120 * U : EYE, Math.min(FLOOR + 7.5 * S, camera.position.y));
     const lim = walking ? ALL : BOUND;
-    if (walking) keepIn(camera.position);
+    if (tour) { keepIn(tmp.copy(camera.position)); camera.position.x += (tmp.x - camera.position.x) * (1 - tourW); camera.position.z += (tmp.z - camera.position.z) * (1 - tourW); }
+    else if (walking) keepIn(camera.position);
     else { camera.position.x = Math.max(lim.x0, Math.min(lim.x1, camera.position.x)); camera.position.z = Math.max(lim.z0, Math.min(lim.z1, camera.position.z)); }
     tmp.copy(cur.t).sub(camera.position);
     const yaw0 = Math.atan2(-tmp.x, -tmp.z), pitch0 = Math.atan2(tmp.y, Math.hypot(tmp.x, tmp.z));
     camera.rotation.set(Math.max(-1.5, Math.min(0.6, pitch0 + cur.pitch)), yaw0 + cur.yaw, 0, 'YXZ');
     // In your own chair you see your body, arms and stool when you look down, but no head in front of your eyes.
-    if (myFig) for (const part of myFig.userData.headParts) part.visible = !seated;
+    if (myFig) for (const part of myFig.userData.headParts) part.visible = !seated || !!tour;
     // On an upright phone your own body would cover your cards and your name, so it is left out.
     if (myFig) myFig.visible = !(seated && container.clientWidth < 600 && container.clientHeight > container.clientWidth * 1.2);
     // From your chair, anything that would be drawn in the bottom quarter of the screen is in your way:
@@ -1188,7 +1203,7 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     // A neighbour whose chest would be drawn at the far left or right edge shows only as arms cut off by
     // the screen, so it is left out as well until you turn your head towards it.
     const edge = (o) => { tmp.setFromMatrixPosition(o.matrixWorld); tmp.y += 110 * U; tmp.project(camera); return Math.abs(tmp.x) > 0.72 || tmp.y < -0.6; };
-    for (const f of others) { f.updateMatrixWorld(); f.visible = !seated || !(low(f, 0.35) || edge(f)); }
+    for (const f of others) { f.updateMatrixWorld(); f.visible = !seated || !!tour || !(low(f, 0.35) || edge(f)); }
     for (const r of racks) r.visible = true;
     if (myRack) myRack.visible = true;
     gl.render(scene, camera);
@@ -1225,6 +1240,14 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
       home(true);
     },
     home: () => home(true),
+    // Played once when you join a table. A tap, a drag or the wheel ends it early.
+    tour(ms = 2000) {
+      if (!homeFit || walking || matchMedia('(prefers-reduced-motion: reduce)').matches) return false;
+      tour = { t0: performance.now(), ms, r: Math.max(ALL.x1 - ALL.x0, ALL.z1 - ALL.z0) * 0.45 };
+      touch();
+      return true;
+    },
+    touring: () => !!tour,
     zoomBy(d) { zoom(d > 0 ? 0.86 : 1.16); },
     look,
     setPeople,
