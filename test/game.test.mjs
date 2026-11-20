@@ -143,17 +143,17 @@ import { bestMove } from '../js/strategy.js';
   t.join('a', 'A', 500); t.join('b', 'B', 700); t.join('d', 'D', 5000);
   assert.equal(t.players.a.chips, 500);
   t.sit('a', 0); t.sit('b', 1); t.sitDealer('d');
-  assert.throws(() => t.setBet('a', { main: 10, sides: { friendBust: 10 }, target: 0 }));
+  // The bet between players is gone: it is ignored if a browser still sends it.
   t.setBet('a', { main: 10, sides: { friendBust: 10 }, target: 1 });
+  assert.equal(t.seats[0].bet.sides.friendBust, undefined);
+  assert.ok(!G.SIDE_KEYS.includes('friendBust') && !t.settings.sideBets.includes('friendBust'));
   t.setBet('b', { main: 10, sides: {} });
   const total = () => Object.values(t.players).reduce((x, p) => x + p.chips, 0);
   const before = total();
   t.deal();
   let g = 0; while (t.phase !== 'settled' && g++ < 80) { if (t.phase === 'insurance') { t.insurance('a', false); t.insurance('b', false); } else if (t.phase === 'playing') { const id = t.seats[t.turn.seat].playerId; t.action(id, id === 'b' ? 'hit' : 'stand'); } else if (t.phase === 'dealer') t.dealerStep(); }
   assert.equal(total(), before);
-  const fb = t.seats[0].sideResults.find((r) => r.key === 'friendBust');
-  assert.ok(fb);
-  assert.equal(fb.win, G.handTotal(t.seats[1].hands[0].cards).total > 21);
+  assert.ok(!t.seats[0].sideResults.some((r) => r.key === 'friendBust'));
   // Peek costs 10 and goes to the dealer.
 const da = t.players.a.chips, dd = t.players.d.chips;
   // Right after a round: one look, shown card leaves the shoe, 10 goes to the dealer.
@@ -273,7 +273,7 @@ const da = t.players.a.chips, dd = t.players.d.chips;
       for (let i = 0; i < 40 && u.phase !== 'settled'; i++) { if (u.phase === 'insurance') { u.insurance('a', false); continue; } if (u.phase === 'playing') { u.action('a', 'stand'); continue; } if (u.dealerStep) u.dealerStep(); else break; }
       assert.ok(u.players.d.chips >= 0, 'dealer never owes');
     }
-    assert.equal(u.players.a.chips + u.players.d.chips, 5000 + 100 + u.players.d.boughtIn);
+    assert.equal(u.players.a.chips + u.players.d.chips, 5000 + 100 + (u.players.d.boughtIn || 0));
   }
   t.setBet('a', { main: 20, sides: {} });
   assert.equal(t.canDeal(), true);
@@ -302,7 +302,7 @@ const da = t.players.a.chips, dd = t.players.d.chips;
   t.join('a', 'A', 1000); t.join('b', 'B', 1000); t.sit('a', 0); t.sit('b', 2);
   assert.equal(t.rebetFor('a'), null);
   assert.equal(t.publicState('a').rebet, null);
-  t.setBet('a', { main: 50, sides: { hot3: 10, bustIt: 5, friendBust: 5 }, target: 2, seq: 7 });
+  t.setBet('a', { main: 50, sides: { hot3: 10, bustIt: 5 }, seq: 7 });
   assert.equal(t.seats[0].betSeq, 7);
   assert.equal(t.publicState('a').seats[0].betSeq, 7);
   assert.throws(() => t.setBet('a', { main: 5000, sides: {}, seq: 8 }));
@@ -314,16 +314,9 @@ const da = t.players.a.chips, dd = t.players.d.chips;
   t.startBetting();
   assert.deepEqual(t.seats[0].bet, { main: 0, sides: {} }); // nothing is bet again by itself
   t.players.a.chips = 1000;
-  assert.deepEqual(t.rebetFor('a'), { main: 50, sides: { hot3: 10, friendBust: 5, bustIt: 5 }, target: 2 });
+  assert.deepEqual(t.rebetFor('a'), { main: 50, sides: { hot3: 10, bustIt: 5 } });
   assert.deepEqual(t.publicState('a').rebet, t.rebetFor('a'));
   assert.equal(t.publicState('b').rebet.main, 25);
-  // The friend moved to another seat: the PvP bet follows the person, not the chair.
-  t.sit('b', 4);
-  assert.equal(t.rebetFor('a').target, 4);
-  // The friend left: the PvP part is dropped.
-  t.standUp('b');
-  assert.equal(t.rebetFor('a').sides.friendBust, undefined);
-  assert.equal(t.rebetFor('a').target, undefined);
   // A side bet the table no longer offers is dropped, and limits apply.
   t.updateSettings({ sideBets: ['hot3'], maxSideBet: 4, maxBet: 40 });
   assert.deepEqual(t.rebetFor('a'), { main: 40, sides: { hot3: 4 } });

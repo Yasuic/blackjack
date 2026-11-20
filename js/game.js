@@ -22,7 +22,7 @@ export const DEFAULT_SETTINGS = {
   betTimer: 20,          // seconds for betting before the dealer deals on its own (0 = off)
   turnTimer: 30,
   peekCost: 10,          // price to see the next card in the shoe
-  sideBets: ['hot3', 'bustIt', 'twentyOnePlus3', 'friendBust'], // side bets offered at this table         // seconds per decision before the dealer stands for you (0 = off)
+  sideBets: ['hot3', 'bustIt', 'twentyOnePlus3'], // side bets offered at this table         // seconds per decision before the dealer stands for you (0 = off)
 };
 
 // ---------- Side bets ----------
@@ -34,14 +34,6 @@ export const SIDE_BETS = {
     icon: '🔥',
     about: 'Your first two cards plus the dealer up card total 19, 20 or 21.',
     table: [['Suited 7-7-7', 100], ['Suited 21', 20], ['Any other 21', 4], ['20', 2], ['19', 1]],
-  },
-  friendBust: {
-    name: 'PvP: friend busts',
-    short: 'PvP',
-    icon: '⚔️',
-    pvp: true, // a bet about another player, not about your own cards
-    about: 'A bet on a friend, not on your own cards. Pick someone at the table. It pays 5 to 1 if their first hand busts. You cannot pick yourself. The most that counts is one fifth of what your friend bet on their own hand, and anything over that comes back to you. If they are not dealt in, you get your bet back.',
-    table: [["Your friend's first hand busts", 5]],
   },
   perfectPairs: {
     name: 'Perfect Pairs',
@@ -1191,7 +1183,7 @@ export class Table {
           // The friend was not dealt in: the bet comes back.
           const stake = seat.bet.sides.friendBust;
           p.chips += stake; seat.returned += stake;
-          seat.sideResults.push({ key: 'friendBust', name: SIDE_BETS.friendBust.name, label: `${name} was not dealt in`, win: false, push: true, stake, pay: stake });
+          seat.sideResults.push({ key: 'friendBust', name: 'PvP: friend busts', label: `${name} was not dealt in`, win: false, push: true, stake, pay: stake });
         } else {
           // Only one fifth of the friend's own bet counts, so two players cannot make chips by one of
           // them busting on purpose. The rest of the stake goes back.
@@ -1201,7 +1193,7 @@ export class Table {
           if (back > 0) { p.chips += back; seat.returned += back; }
           const bust = handTotal(fh.cards).total > 21;
           if (counts > 0) this.settleSide(seat, 'friendBust', bust ? { win: true, label: `${name} busted`, mult: PVP_BUST_PAYS } : { win: false, label: `${name} did not bust` }, counts);
-          else seat.sideResults.push({ key: 'friendBust', name: SIDE_BETS.friendBust.name, label: `${name} bet too little for this to count`, win: false, push: true, stake, pay: back });
+          else seat.sideResults.push({ key: 'friendBust', name: 'PvP: friend busts', label: `${name} bet too little for this to count`, win: false, push: true, stake, pay: back });
         }
       }
       for (const h of seat.hands) {
@@ -1368,6 +1360,9 @@ export class Table {
     // Tables saved before the seat count was a setting keep the seats they had.
     if (!Array.isArray(t.seats) || !t.seats.length) t.seats = Array(seatCount(obj.settings?.seats)).fill(null);
     t.settings = { ...DEFAULT_SETTINGS, ...obj.settings, seats: t.seats.length };
+    // The bet between players was taken out of the game: a saved table no longer offers it.
+    if (Array.isArray(t.settings.sideBets)) t.settings.sideBets = t.settings.sideBets.filter((k) => SIDE_BETS[k]);
+    if (t.phase === 'betting' || t.phase === 'settled') for (const seat of t.seats) if (seat?.bet?.sides?.friendBust) { delete seat.bet.sides.friendBust; delete seat.bet.target; }
     Object.values(t.players).forEach((p) => (p.connected = false));
     // Nobody is here straight after a reload. They get the usual short while to come back.
     Object.values(t.players).forEach((p) => (p.gone = false));
