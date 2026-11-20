@@ -1,13 +1,13 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120zzo';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261120zzo';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120zzo';
-import { tickSound, winSound } from './fx.js?v=20261120zzo';
-import * as HX from './history.js?v=20261120zzo';
-import { webglOK, initRoom } from './room3d.js?v=20261120zzo';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120zzo';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120zzp';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261120zzp';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120zzp';
+import { tickSound, winSound } from './fx.js?v=20261120zzp';
+import * as HX from './history.js?v=20261120zzp';
+import { webglOK, initRoom } from './room3d.js?v=20261120zzp';
+import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120zzp';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -3144,7 +3144,7 @@ function playMove(a) {
 // Keyboard play: H hit, S stand, D double, P split, U surrender, Y and N answer insurance,
 // R type a bet (Enter confirms), B rebet, Space deal me in.
 const KEY_HELP = [['H', 'Hit'], ['S', 'Stand'], ['D', 'Double'], ['P', 'Split'], ['U', 'Surrender'], ['Y / N', 'Take insurance, or say no'],
-  ['R', 'Type your bet, then Enter'], ['B', 'Rebet: the same bet as last round'], ['Space / Enter', 'Deal me in'], ['?', 'Show this list'], ['Esc', 'Put the picked chip down']];
+  ['R', 'Type your bet, then Enter'], ['B', 'Rebet: the same bet as last round'], ['Space / Enter', 'Deal me in'], ['?', 'Show this list'], ['Esc', 'Put the picked chip down'], ['W / A / S / D', 'Move freely through the office (the arrow keys work too). On your turn S and D play your hand'], ['Esc', 'After moving: back to your seat']];
 function keysHTML() {
   return `<h2 style="margin-top:0">Keyboard keys</h2><table class="keys-help">${KEY_HELP.map(([k, what]) => `<tr><td>${k.split(' / ').map((x) => `<kbd>${x}</kbd>`).join(' ')}</td><td>${what}</td></tr>`).join('')}</table>
     <p class="hint">Keys work when you are not typing in a box.</p>`;
@@ -3159,7 +3159,7 @@ document.addEventListener('keydown', (e) => {
   const map = { h: 'hit', s: 'stand', d: 'double', p: 'split', u: 'surrender' };
   // While the first cards are still being dealt there is nothing to decide yet.
   const wait = dealingNow() && S.dealMany;
-  if (map[k] && (st.actions?.includes(map[k]) || shortFor(map[k]))) { if (!wait) playMove(map[k]); return; }
+  if (map[k] && (st.actions?.includes(map[k]) || shortFor(map[k]))) { e.stopPropagation(); if (!wait) playMove(map[k]); return; } // on your turn S and D play the hand; otherwise they move the camera
   const { seat } = myInfo(st);
   if (!seat) return;
   if (st.phase === 'insurance' && (k === 'y' || k === 'n')) {

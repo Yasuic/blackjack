@@ -151,7 +151,7 @@ function buildOffice(signText, midShift = 0, midScale = 1) {
     chrome: mk({ color: '#b9bec4', roughness: 0.25, metalness: 0.9 }),
     screen: mk({ color: '#0d0f12', roughness: 0.25, metalness: 0.2 }),
     // What the office screens show: the ARC Group logo, from the photo of it, lit like a screen that is on.
-    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261120zzo'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
+    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261120zzp'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
     dark: mk({ color: '#30353c', roughness: 0.6 }),
   };
   const group = new THREE.Group();
@@ -831,7 +831,7 @@ function buildStorefront() {
     lamp: lam('#c8161d', 0.6), bulb: lit('#ffe9a8'), red: lit('#c8161d'), gold: lit('#f4c542'), wood: lam('#7a5234', 0.35),
     glass: new THREE.MeshBasicMaterial({ color: '#dff3f7', transparent: true, opacity: 0.13, depthWrite: false }),
     awning: new THREE.MeshBasicMaterial({ map: canvasTexture(512, 64, (g, w, h) => { for (let i = 0; i < 16; i++) { g.fillStyle = i % 2 ? '#fff6e6' : '#f08a1c'; g.fillRect((i * w) / 16, 0, w / 16 + 1, h); } }), side: THREE.DoubleSide }),
-    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261120zzo') }),
+    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261120zzp') }),
     menu: new THREE.MeshBasicMaterial({ map: canvasTexture(256, 384, (g, w, h) => {
       g.fillStyle = '#c8161d'; g.fillRect(0, 0, w, h); g.fillStyle = '#f4c542'; g.fillRect(14, 14, w - 28, 44);
       const r = rng(11); g.fillStyle = '#fff3d6';
@@ -1492,8 +1492,7 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     panF.set(-panR.z, 0, panR.x).multiplyScalar(-1); // straight ahead along the floor
     goal.t.addScaledVector(panR, -dx * kp).addScaledVector(panF, dy * kp);
     if (walking) { keepIn(goal.t); touch(); return; }
-    const lim = homeFit.r * (seated ? 0.45 : 1);
-    goal.t.x = Math.max(-lim, Math.min(lim, goal.t.x)); goal.t.z = Math.max(-lim, Math.min(lim, goal.t.z));
+    keepIn(goal.t); // the view may slide anywhere inside the outer walls, through furniture and inner walls
     touch();
   }
   container.addEventListener('pointermove', (e) => {
@@ -1541,6 +1540,18 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     }
   };
   container.addEventListener('pointerup', endPointer);
+  // Free camera on a keyboard: W A S D or the arrow keys move you through the office, Escape takes you back to your seat.
+  const moveKeys = new Set(), KEYMAP = { w: 'f', arrowup: 'f', s: 'b', arrowdown: 'b', a: 'l', arrowleft: 'l', d: 'r', arrowright: 'r' };
+  const typingNow = (e) => e.target?.matches?.('input, select, textarea') || e.ctrlKey || e.metaKey || e.altKey || document.querySelector('dialog[open]');
+  const onKeyDown = (e) => {
+    if (!running || typingNow(e)) return;
+    const k = KEYMAP[e.key.toLowerCase()];
+    if (k) { moveKeys.add(k); tour = null; tourW = 1; if (e.key.startsWith('Arrow')) e.preventDefault(); touch(); }
+    else if (e.key === 'Escape' && walking) home(true);
+  };
+  const onKeyUp = (e) => { const k = KEYMAP[e.key.toLowerCase()]; if (k) moveKeys.delete(k); };
+  const onBlur = () => moveKeys.clear();
+  window.addEventListener('keydown', onKeyDown); window.addEventListener('keyup', onKeyUp); window.addEventListener('blur', onBlur);
   container.addEventListener('pointercancel', endPointer);
   container.addEventListener('wheel', (e) => {
     e.preventDefault();
@@ -1605,6 +1616,12 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     // The office is alive: redraw every frame while somebody walks, and about 12 times a second otherwise.
     if (office.userData.tick?.(now) || now - ambAt > 80) { ambAt = now; dirty = Math.max(dirty, 1); }
     if (now - fpsAt >= 1000) { fps = Math.round((frames * 1000) / (now - fpsAt)); frames = 0; fpsAt = now; }
+    if (moveKeys.size) {
+      if (!walking) { standUp(); walking = true; container.classList.add('walking'); goal.r = homeFit.r * 0.7; goal.phi = 1.05; clampGoal(); }
+      const f = (moveKeys.has('f') ? 1 : 0) - (moveKeys.has('b') ? 1 : 0), r = (moveKeys.has('r') ? 1 : 0) - (moveKeys.has('l') ? 1 : 0);
+      panR.set(1, 0, 0).applyQuaternion(camera.quaternion); panR.y = 0; panR.normalize(); panF.set(-panR.z, 0, panR.x).multiplyScalar(-1);
+      goal.t.addScaledVector(panF, f * 2.4 * S * dt).addScaledVector(panR, r * 2.4 * S * dt); keepIn(goal.t); rate = 12; dirty = Math.max(dirty, 2);
+    }
     const k = 1 - Math.exp(-dt * rate);
     const settled = near(cur.theta, goal.theta, 2e-4) && near(cur.phi, goal.phi, 2e-4) && near(cur.r, goal.r, 0.05) && near(cur.yaw, goal.yaw, 2e-4) && near(cur.pitch, goal.pitch, 2e-4) && cur.t.distanceToSquared(goal.t) < 0.01;
     if (tour) {
@@ -1644,7 +1661,7 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     posFor(cur, camera.position);
     // Never under the table top, the floor or outside the walls, whatever the numbers above say.
     camera.position.y = Math.max(tour ? EYE + (120 * U - EYE) * tourW : seated ? 120 * U : EYE, Math.min(FLOOR + 7.5 * S, camera.position.y));
-    const lim = walking ? ALL : BOUND, ix = camera.position.x, iz = camera.position.z; // where the camera would be without the walls
+    const lim = ALL, ix = camera.position.x, iz = camera.position.z; // where the camera would be without the walls
     if (tour) { keepIn(tmp.copy(camera.position)); camera.position.x += (tmp.x - camera.position.x) * (1 - tourW); camera.position.z += (tmp.z - camera.position.z) * (1 - tourW); }
     else if (walking) keepIn(camera.position);
     else { camera.position.x = Math.max(lim.x0, Math.min(lim.x1, camera.position.x)); camera.position.z = Math.max(lim.z0, Math.min(lim.z1, camera.position.z)); }
