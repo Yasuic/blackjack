@@ -414,6 +414,30 @@ export class Table {
     if (old.decks !== s.decks) this.newShoe();
   }
 
+  // The player who is the dealer pays every winner, so the dealer may set the largest main bet. Between rounds only.
+  setDealerMax(clientId, amount, sideAmount) {
+    if (this.banker !== clientId) throw new Error('Only the dealer sets the maximum bets.');
+    if (this.phase !== 'betting' && this.phase !== 'settled') throw new Error('Change the maximum bets between rounds.');
+    const min = this.settings.minBet;
+    const max = amount === undefined || amount === null ? this.settings.maxBet : Math.round(Number(amount));
+    const side = sideAmount === undefined || sideAmount === null ? this.settings.maxSideBet : Math.round(Number(sideAmount));
+    if (!(max >= min)) throw new Error(`The maximum bet cannot be below the minimum bet of ${min}.`);
+    if (!(side >= 0)) throw new Error('The maximum side bet cannot be below 0.');
+    if (max > 1e9 || side > 1e9) throw new Error('That maximum is too large.');
+    const was = this.settings;
+    this.settings = { ...was, maxBet: max, maxSideBet: side };
+    // Bets already on the table that are now too large are cut to the new maximum.
+    for (const seat of this.seats) {
+      if (!seat || seat.hands.length) continue;
+      const sides = {};
+      for (const [k, v] of Object.entries(seat.bet.sides || {})) if (Math.min(v, side) > 0) sides[k] = Math.min(v, side);
+      seat.bet = { ...seat.bet, main: Math.min(seat.bet.main, max), sides };
+    }
+    const name = this.players[clientId].name;
+    if (max !== was.maxBet) { this.addLog(`${name}, the dealer, set the maximum bet to ${max}.`); this.ev('dealer set maximum bet', clientId, String(max)); }
+    if (side !== was.maxSideBet) { this.addLog(`${name}, the dealer, set the maximum side bet to ${side}.`); this.ev('dealer set maximum side bet', clientId, String(side)); }
+  }
+
   // The table can only lose seats that nobody is sitting in.
   checkSeatCount(n) {
     if (n === undefined || n === null) return;

@@ -1469,3 +1469,7 @@ body.room3d:has(.room.walking) .hud3d .tray:has(.chip-rack), body.room3d:has(.ro
 .seat.out .hands, .seat.out .spot-area, .seat.out .mini-bet { opacity: .45; }
 /* More than one seat: nothing moves when the turn changes. The seat being played gets a bright ring. */
 .seat.inhand .who { box-shadow: 0 0 0 2px var(--gold), 0 0 16px rgba(242,201,76,.75); }
+/* The dealer's own control for the largest bet. */
+.dealer-max { align-items: center; flex-wrap: wrap; }
+.dealer-max label { font-weight: 700; font-size: 13px; color: var(--muted, #9aa3ad); }
+.dealer-max input { width: 96px; padding: 7px 8px; border-radius: 10px; border: 1px solid var(--line); background: #0d1117; color: var(--text); font: inherit; font-weight: 700; }

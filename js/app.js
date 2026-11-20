@@ -1,12 +1,12 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120n';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120n';
-import { tickSound, winSound } from './fx.js?v=20261120n';
-import * as HX from './history.js?v=20261120n';
-import { webglOK, initRoom } from './room3d.js?v=20261120n';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120n';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120o';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120o';
+import { tickSound, winSound } from './fx.js?v=20261120o';
+import * as HX from './history.js?v=20261120o';
+import { webglOK, initRoom } from './room3d.js?v=20261120o';
+import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120o';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -446,6 +446,7 @@ function runAction(id, msg, onError) {
         break;
       }
       case 'leave-dealer': t.leaveDealer(id); break;
+      case 'dealer-max': t.setDealerMax(id, msg.amount, msg.side); break;
       case 'seed': t.setClientSeed(id, msg.seed); return; // nothing on the table changes, so no update is sent
       default: return;
     }
@@ -2116,7 +2117,7 @@ function trayInner(st) {
   if (isBanker) {
     if (!(ph === 'betting' || ph === 'settled')) return '';
     return `<div class="tray-msg">${st.banker.chips < 0 ? `You are the dealer and you owe ${money(-st.banker.chips)} chips. Tap your balance to buy in.` : 'You are the dealer. Your chips pay winners and collect losing bets.'}</div>
-      ${st.phase === 'betting' || st.phase === 'settled' ? '<div class="actions"><button class="btn" data-act="leave-dealer">Leave dealer seat</button></div>' : ''}`;
+      <div class="actions dealer-max"><label for="dealer-max">Max bet</label><input id="dealer-max" type="number" inputmode="numeric" min="${st.settings.minBet}" step="1" value="${st.settings.maxBet}" /><label for="dealer-max-side">Max side bet</label><input id="dealer-max-side" type="number" inputmode="numeric" min="0" step="1" value="${st.settings.maxSideBet}" /><button class="btn small" data-act="dealer-max">Set</button><button class="btn" data-act="leave-dealer">Leave dealer seat</button></div>`;
   }
   if (!seat) {
     return `<div class="tray-msg">${S.role === 'host' ? 'You are hosting. Press "Sit here" to play, or "Ask to be dealer" to be the bank.' : 'Press "Sit here" on an empty seat to play, or "Ask to be dealer" to be the bank.'} You have ${money(me.chips)} chips.</div>${askOutHTML(st)}`;
@@ -2597,6 +2598,14 @@ function runAct(el) {
     case 'mute': setMuted(!isMuted()); el.textContent = isMuted() ? '🔇 Sound: off' : '🔊 Sound: on'; if (!isMuted()) chipSound(); break;
     case 'sit-dealer': send({ t: 'sit-dealer' }); break;
     case 'leave-dealer': send({ t: 'leave-dealer' }); break;
+    case 'dealer-max': {
+      const v = Math.round(Number($('#dealer-max')?.value)), sv = Math.round(Number($('#dealer-max-side')?.value));
+      if (!(v >= st.settings.minBet)) { toast(`The maximum bet cannot be below the minimum bet of ${money(st.settings.minBet)}.`); break; }
+      if (!(sv >= 0)) { toast('The maximum side bet cannot be below 0.'); break; }
+      send({ t: 'dealer-max', amount: v, side: sv });
+      toast(`Maximum bet ${money(v)}, side bets up to ${money(sv)}.`);
+      break;
+    }
     case 'side-clear': delete bet.sides[el.dataset.k]; sendBet(); break;
     case 'clear': S.mainChips = []; S.undo.push(structuredClone(seat.bet)); bet.main = 0; bet.sides = {}; sendBet(); chipSound(2); break;
     case 'pvp': {

@@ -470,3 +470,24 @@ const da = t.players.a.chips, dd = t.players.d.chips;
   assert.ok(h.events.every((e) => e.who !== 'Ann' || !/^(hit|stand|double|split)/.test(e.k) || /auto play/.test(e.k)));
   console.log('ok frozen reset');
 }
+
+// The dealer sets the maximum bet; nobody else can.
+{
+  const t = new G.Table({});
+  t.join('h', 'Hal', 1000); t.join('a', 'Ann', 1000);
+  t.sit('a', 0); t.applyDealer('h');
+  t.startBetting?.();
+  t.setBet('a', { main: 400, sides: {} });
+  let err = null; try { t.setDealerMax('a', 100); } catch (e) { err = e; }
+  if (!err) throw new Error('a player who is not the dealer set the maximum bet');
+  t.setDealerMax('h', 100);
+  if (t.settings.maxBet !== 100 || t.seats[0].bet.main !== 100) throw new Error('dealer max not applied: ' + t.settings.maxBet + ' ' + t.seats[0].bet.main);
+  err = null; try { t.setBet('a', { main: 150, sides: {} }); } catch (e) { err = e; }
+  if (!err) throw new Error('a bet over the dealer max went through');
+  err = null; try { t.setDealerMax('h', 1); } catch (e) { err = e; }
+  if (!err) throw new Error('max below min went through');
+  t.setBet('a', { main: 100, sides: { hot3: 50 } });
+  t.setDealerMax('h', undefined, 20);
+  if (t.settings.maxBet !== 100 || t.settings.maxSideBet !== 20 || t.seats[0].bet.sides.hot3 !== 20) throw new Error('dealer side max not applied');
+  console.log('ok dealer max');
+}
