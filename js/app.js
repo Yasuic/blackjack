@@ -1,13 +1,13 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120zzc';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261120zzc';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120zzc';
-import { tickSound, winSound } from './fx.js?v=20261120zzc';
-import * as HX from './history.js?v=20261120zzc';
-import { webglOK, initRoom } from './room3d.js?v=20261120zzc';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120zzc';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120zzd';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261120zzd';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120zzd';
+import { tickSound, winSound } from './fx.js?v=20261120zzd';
+import * as HX from './history.js?v=20261120zzd';
+import { webglOK, initRoom } from './room3d.js?v=20261120zzd';
+import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120zzd';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -1028,9 +1028,6 @@ function buildLayout() {
           <button class="menu-item" data-act="view-pad" title="Look left, Look right, Reset view, Walk around and zoom buttons">🎥 View buttons: ${viewPadOn() ? 'on' : 'off'}</button>
           ${fold('m-table', '📜 Table rules and payouts', `
             <button class="menu-item" data-act="rules">💰 Side bet payouts</button>`)}
-          ${fold('m-cheat', '🛡️ Game Cheating Detection', `
-            <button class="menu-item" data-act="fair">🔐 Provably fair</button>
-            ${host ? `<button class="menu-item" data-act="hist-panel" title="A small list of the hands at the left of the screen. Only you see it.">🕘 Hand history: ${histOn() ? 'on' : 'off'}</button>` : ''}${host ? '<button class="menu-item" data-act="export">📤 Export hand history</button>' : ''}`)}
           ${fold('m-view', '🎛️ My view and sound', `
             <button class="menu-item" data-act="four">🎨 Four colour cards</button>
             <button class="menu-item" data-act="hints" id="hints-btn">${hintsOn() ? '💡 Strategy hints: on' : '💡 Strategy hints: off'}</button>
@@ -1047,6 +1044,9 @@ function buildLayout() {
           ${fold('m-log', '📝 Table log', '<div id="host-log" class="log"></div>')}` : `
           ${fold('m-players', '👥 Players', '<div id="guest-players" class="player-list"></div>')}
           <div class="menu-note hint">Only the host can propose new settings, and everyone votes on them.</div>`}
+          ${fold('m-cheat', '✅ Game Cheating Detection', `
+            <button class="menu-item" data-act="fair">🔐 Provably fair</button>
+            ${host ? `<button class="menu-item" data-act="hist-panel" title="A small list of the hands at the left of the screen. Only you see it.">🕘 Hand history: ${histOn() ? 'on' : 'off'}</button>` : ''}`)}
         </div>
       </div>
     </div>
@@ -1293,7 +1293,7 @@ async function showHistory() {
   S.histShown = S.state?.histN;
   const all = await hostRounds();
   const list = S.histScope === 'shoe' ? HX.sinceLastShuffle(all) : all;
-  $('#modal-body').innerHTML = histHTML(list).replace('</h2>', `</h2>${scopeHTML()}<div class="hx-row"><button class="btn small" data-hx="export">📤 Export</button><span class="hint">${list.length} of ${all.length} rounds shown. Only the host can see this.</span></div>`);
+  $('#modal-body').innerHTML = histHTML(list).replace('</h2>', `</h2>${scopeHTML()}<div class="hx-row"><span class="hint">${list.length} of ${all.length} rounds shown. Only the host can see this.</span></div>`);
   $('#modal-body').dataset.hx = 'history';
   if (!$('#modal').open) $('#modal').showModal();
 }
@@ -1357,7 +1357,6 @@ function renderLedger(st) {
       ${rows.map((r) => `<tr class="${r.id === S.myId ? 'me' : ''}"><td>${r.id === st.hostId ? '♛ ' : ''}${esc(r.name)}${r.kicked ? ' (left)' : r.connected ? '' : ' (away)'}${st.banker?.id === r.id ? ' (dealer)' : ''}</td><td>${money(r.totalIn)}</td><td>${money(r.chips)}</td><td>${pl(net(r))}</td></tr>`).join('')}
       <tr class="tot"><td>Table</td><td>${money(sumIn)}</td><td>${money(sumChips)}</td><td>${pl(rows.reduce((a, r) => a + net(r), 0))}</td></tr>
     </table>
-    ${S.role === 'host' ? '<button class="btn small" data-act="history" style="margin:6px 0">🕘 Hand history</button>' : ''}
     <div class="hint">Bought in counts starting chips, buy-ins and chips the host gives or takes. The +/- column counts only hands played with a player as the dealer, so it always adds up to zero. Hands against the house are practice and are left out.</div></div>`;
 }
 
