@@ -1592,3 +1592,6 @@ body.view-hidden .zoom-ctl { display: none !important; }
 .spot-amt.spot-net.down { border-color: #ff8a8a; color: #ff8a8a; }
 .felt.in3d .spot-amt.spot-net { font-size: 17px; bottom: -20px; }
 .seat.mini .spot-amt.spot-net { font-size: 12px; padding: 1px 6px; }
+
+#hist-panel .hp-sides { opacity: .85; font-size: .92em; padding-left: 8px; white-space: normal; }
+#hist-panel .hp-sides b.up { color: #7ef0b6; } #hist-panel .hp-sides b.down { color: #ff9b9b; }

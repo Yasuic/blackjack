@@ -1,13 +1,13 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120zy';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261120zy';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120zy';
-import { tickSound, winSound } from './fx.js?v=20261120zy';
-import * as HX from './history.js?v=20261120zy';
-import { webglOK, initRoom } from './room3d.js?v=20261120zy';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120zy';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120zz';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261120zz';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120zz';
+import { tickSound, winSound } from './fx.js?v=20261120zz';
+import * as HX from './history.js?v=20261120zz';
+import { webglOK, initRoom } from './room3d.js?v=20261120zz';
+import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120zz';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -1268,8 +1268,15 @@ async function drawHistPanel(force) {
   // The round in play is the top entry and grows with every card. The dealer's face down card stays hidden.
   const st0 = S.state;
   const cs = (cards) => cards.map((c) => (c.hidden || !c.r ? '??' : c.r + c.s)).join(' ');
+  // Side bets of the round in play: the stake while it is open, the result once it is known.
+  const liveSides = (x) => {
+    const done = new Map((x.sideResults || []).map((r) => [r.key, r]));
+    const parts = Object.entries(x.bet?.sides || {}).filter(([k, v]) => v > 0 && SIDE_BETS[k]).map(([k, v]) => { const r = done.get(k); return `${esc(SIDE_BETS[k].name)} ${r ? (r.win ? '<b class="up">+' + money(r.pay - r.stake) + '</b>' : r.push ? 'back' : '<b class="down">-' + money(r.stake) + '</b>') : money(v)}`; });
+    if (x.insurance) parts.push(`Insurance ${money(x.insurance)}`);
+    return parts.length ? `<div class="hp-sides">${parts.join(', ')}</div>` : '';
+  };
   const liveSeats = st0.phase !== 'betting' && st0.phase !== 'settled' ? st0.seats.filter((x) => x && x.hands.length) : [];
-  const live = liveSeats.length ? `<div class="hp-round hp-live"><div class="hp-top"><b>#${st0.round}</b> ${esc(st0.banker?.name || 'House')} ${esc(cs(st0.dealer.cards))}${st0.dealer.cards.some((c) => c.hidden || !c.r) ? '' : ' = ' + (st0.dealer.total > 21 ? 'bust' : st0.dealer.total)} <i>live</i></div>${liveSeats.map((x) => `<div class="hp-seat"><span>${esc(st0.players.find((q) => q.id === x.playerId)?.name || 'Player')}: ${x.hands.map((y) => `${esc(cs(y.cards))} = ${y.total > 21 ? 'bust' : y.total}`).join(' | ')}</span></div>`).join('')}</div>` : '';
+  const live = liveSeats.length ? `<div class="hp-round hp-live"><div class="hp-top"><b>#${st0.round}</b> ${esc(st0.banker?.name || 'House')} ${esc(cs(st0.dealer.cards))}${st0.dealer.cards.some((c) => c.hidden || !c.r) ? '' : ' = ' + (st0.dealer.total > 21 ? 'bust' : st0.dealer.total)} <i>live</i></div>${liveSeats.map((x) => `<div class="hp-seat"><span>${esc(st0.players.find((q) => q.id === x.playerId)?.name || 'Player')}: ${x.hands.map((y) => `${esc(cs(y.cards))} = ${y.total > 21 ? 'bust' : y.total}`).join(' | ')}</span></div>${liveSides(x)}`).join('')}</div>` : '';
   const sig = S.state.histN + '|' + live;
   if (el && el.isConnected && !force && S.histPanelN === sig) return;
   S.histPanelN = sig;
@@ -1278,7 +1285,7 @@ async function drawHistPanel(force) {
   el = $('#hist-panel');
   if (!el || !el.isConnected) { el = document.createElement('div'); el.id = 'hist-panel'; app.appendChild(el); }
   const net = (n) => `<b class="${n > 0 ? 'up' : n < 0 ? 'down' : ''}">${n > 0 ? '+' : n < 0 ? '-' : ''}${money(Math.abs(n))}</b>`;
-  const rows = all.slice(-30).reverse().map((h) => `<div class="hp-round"><div class="hp-top"><b>#${h.round}</b> ${esc(h.dealerName)} ${esc(h.dealer)} = ${h.dealerTotal > 21 ? 'bust' : h.dealerTotal}</div>${h.seats.map((x) => `<div class="hp-seat"><span>${esc(x.name)}: ${x.hands.map((y) => `${esc(y.cards)} = ${y.total}`).join(' | ')}</span>${net(x.net)}</div>`).join('')}</div>`).join('');
+  const rows = all.slice(-30).reverse().map((h) => `<div class="hp-round"><div class="hp-top"><b>#${h.round}</b> ${esc(h.dealerName)} ${esc(h.dealer)} = ${h.dealerTotal > 21 ? 'bust' : h.dealerTotal}</div>${h.seats.map((x) => `<div class="hp-seat"><span>${esc(x.name)}: ${x.hands.map((y) => `${esc(y.cards)} = ${y.total}`).join(' | ')}</span>${net(x.net)}</div>${(x.sides || []).length ? `<div class="hp-sides">${x.sides.map((z) => `${esc(z.name)} ${z.net > 0 ? '<b class="up">+' + money(z.net) + '</b>' : z.net < 0 ? '<b class="down">-' + money(-z.net) + '</b>' : 'back'}`).join(', ')}</div>` : ''}`).join('')}</div>`).join('');
   el.innerHTML = `<div class="hp-head"><span>Hand history</span><button data-act="history" title="Open the full list">Full</button><button data-act="hist-panel" title="Turn this panel off" aria-label="Turn the hand history panel off">×</button></div><div class="hp-list">${live}${rows || (live ? '' : '<p>No round has been played yet.</p>')}</div>`;
 }
 async function showHistory() {

@@ -1,6 +1,6 @@
 // Basic strategy for 4 to 8 decks, dealer stands on soft 17, double after split, late surrender.
 // Returns the best move among the moves allowed right now.
-import { handTotal, cardValue } from './game.js?v=20261120zy';
+import { handTotal, cardValue } from './game.js?v=20261120zz';
 
 export function bestMove(cards, dealerUp, allowed, opts = {}) {
   if (!cards?.length || !dealerUp || dealerUp.hidden || !allowed?.length) return null;
