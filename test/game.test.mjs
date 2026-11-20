@@ -381,6 +381,13 @@ const da = t.players.a.chips, dd = t.players.d.chips;
   assert.deepEqual(t.turn, { seat: 0, hand: 0 });
   t.action('a', 'stand');
   assert.equal(t.phase, 'dealer');
+  // Away with 11 or less: the table hits for them until the hand is above 11, then stands.
+  t = mk(); deal(t, '5♠ 2♠ 9♦ 7♥ 3♥ 7♣ 4♦ 9♠');
+  t.action('a', 'stand');
+  t.disconnect('b'); t.markGone('b');
+  assert.deepEqual(t.turn, { seat: 1, hand: 0 }, 'the turn waits for the table to hit');
+  { let n = 0; for (;;) { const before = G.handTotal(t.seats[1].hands[0].cards).total; const did = t.awayMove(); if (did === 'hit') { assert.ok(before <= 11); n++; continue; } if (did === 'stand') assert.ok(before > 11); else assert.equal(did, null); break; }
+    assert.ok(n >= 1, 'at least one hit'); assert.equal(t.phase, 'dealer'); }
   // Insurance: a gone player counts as "no", and the round goes on.
   t = mk(); deal(t, '5♠ 6♠ A♦ 7♥ 8♥ 7♣');
   assert.equal(t.phase, 'insurance');

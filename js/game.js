@@ -661,8 +661,9 @@ export class Table {
       live.forEach((x) => { x.insuranceDecided = true; });
       if (this.allInsuranceDecided()) this.afterInsurance();
     } else if (this.phase === 'playing' && this.turn && this.seats[this.turn.seat]?.playerId === clientId) {
-      this.addLog(`${p.name} is away, dealer stands.`);
-      this.skipTurn();
+      // With 11 or less the table hits for them first (awayMove, run by the host's clock); otherwise it stands.
+      const th = this.seats[this.turn.seat].hands[this.turn.hand];
+      if (handTotal(th.cards).total > 11) { this.addLog(`${p.name} is away, dealer stands.`); this.skipTurn(); }
     }
     return true;
   }
@@ -1134,6 +1135,20 @@ export class Table {
     this.advance();
   }
 
+  // The table plays for a player who is away or let the clock run out: hit on 11 or less (no card can
+  // bust that), stand on anything else. One step per call. Returns what it did.
+  awayMove() {
+    if (this.phase !== 'playing' || !this.turn) return null;
+    const seat = this.seats[this.turn.seat], h = seat.hands[this.turn.hand];
+    if (handTotal(h.cards).total <= 11 && this.allowedActions(seat.playerId).includes('hit')) {
+      this.ev('hit (by the table: 11 or less, player is away or out of time)', seat.playerId, `hand ${this.turn.hand + 1}`);
+      this.action(seat.playerId, 'hit');
+      return 'hit';
+    }
+    this.skipTurn();
+    return 'stand';
+  }
+
   advance() {
     for (let i = 0; i < this.seats.length; i++) {
       const seat = this.seats[i];
@@ -1144,7 +1159,11 @@ export class Table {
           // A player who is gone gets an automatic stand. One who only just dropped out still has
           // a little time to come back (see markGone), so the turn waits for them.
           const p = this.players[seat.playerId];
-          if (!p.connected && (p.gone || p.kicked)) { seat.hands[j].done = true; this.ev('stand (by the table: player is away)', seat.playerId, `hand ${j + 1}`); continue; }
+          // With 11 or less no card can bust the hand, so the table hits for them first (see awayMove).
+          if (!p.connected && (p.gone || p.kicked)) {
+            if (handTotal(seat.hands[j].cards).total <= 11) return;
+            seat.hands[j].done = true; this.ev('stand (by the table: player is away)', seat.playerId, `hand ${j + 1}`); continue;
+          }
           return;
         }
       }

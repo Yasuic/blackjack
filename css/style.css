@@ -1543,3 +1543,19 @@ body.room3d:has(.room.walking) .hud3d .tray:has(.chip-rack), body.room3d:has(.ro
 @keyframes hand-lift-3d { from { transform: none; } to { transform: translateZ(26px) scale(1.06); } }
 @keyframes hand-drop-3d { from { transform: translateZ(26px) scale(1.06); } to { transform: none; } }
 @media (prefers-reduced-motion: reduce) { .hand.active.lift, .hand.drop { animation: none !important; } }
+
+/* Sit out: a small plain arrow tag beside your own name plate, at the seat, outside the table's curve. */
+.seat .who .seat-out-tag { position: absolute; left: calc(100% + 3px); top: 50%; transform: translateY(-50%); font: inherit; font-size: 10px; font-weight: 700; line-height: 1; padding: 5px 7px 5px 12px; border: 0; background: rgba(10,13,18,.82); color: #cfd6e0; white-space: nowrap; cursor: pointer; clip-path: polygon(8px 0, 100% 0, 100% 100%, 8px 100%, 0 50%); z-index: 3; pointer-events: auto; }
+.seat .who .seat-out-tag:hover { color: #fff; }
+.seat .who .seat-out-tag.on { color: #f2d58a; }
+@media (max-width: 700px) { .seat .who .seat-out-tag { font-size: 9px; padding: 4px 5px 4px 10px; } }
+.felt.in3d .seat .who .seat-out-tag { transform: translateY(-50%) translateZ(4px); }
+/* Phones: Chat and Voice go under the row of view buttons, not on top of it. */
+@media (max-width: 700px) { body.room3d #sitout-bar, body.room3d.in-room #sitout-bar { top: 136px; } }
+
+/* Everything that is yours is framed in gold: your name plates, and each of your hands with a "YOU" tag. */
+.felt .seat.me .who { border: 2px solid var(--gold); background: rgba(58,43,8,.92); }
+.seat.me .hands:not(.totals-only) .hand { box-shadow: 0 0 0 2px rgba(232,193,90,.95); background: rgba(232,193,90,.12); border-radius: 8px; }
+.seat.me .hands:not(.totals-only) .hand::after { content: 'YOU'; position: absolute; left: -6px; top: -11px; font-size: 9px; font-weight: 800; letter-spacing: .5px; line-height: 13px; padding: 0 5px; border-radius: 7px; background: var(--gold); color: #1b1300; z-index: 4; pointer-events: none; }
+.seat.me.mini .hands:not(.totals-only) .hand::after { font-size: 8px; line-height: 11px; padding: 0 4px; top: -9px; }
+.seat.me .hands:not(.totals-only) .hand.active { box-shadow: 0 0 0 3px #ffe27a, 0 0 0 9px rgba(255,226,122,.2), 0 0 26px rgba(255,226,122,.6), 0 16px 22px rgba(0,0,0,.45); }

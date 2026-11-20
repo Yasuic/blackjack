@@ -1,13 +1,13 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120zd';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261120zd';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120zd';
-import { tickSound, winSound } from './fx.js?v=20261120zd';
-import * as HX from './history.js?v=20261120zd';
-import { webglOK, initRoom } from './room3d.js?v=20261120zd';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120zd';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120zm';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261120zm';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120zm';
+import { tickSound, winSound } from './fx.js?v=20261120zm';
+import * as HX from './history.js?v=20261120zm';
+import { webglOK, initRoom } from './room3d.js?v=20261120zm';
+import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120zm';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -642,9 +642,12 @@ function scheduleTimer() {
     want = { key: `deal-${t.round}`, kind: 'deal', secs: s.betTimer };
   } else if (t.phase === 'insurance' && s.turnTimer > 0) {
     want = { key: `ins-${t.round}`, kind: 'insurance', secs: Math.min(s.turnTimer, 15) };
-  } else if (t.phase === 'playing' && t.turn && s.turnTimer > 0) {
+  } else if (t.phase === 'playing' && t.turn) {
     const h = t.seats[t.turn.seat].hands[t.turn.hand];
-    want = { key: `turn-${t.round}-${t.turn.seat}-${t.turn.hand}-${h.cards.length}`, kind: 'turn', secs: s.turnTimer };
+    const tp = t.players[t.seats[t.turn.seat].playerId];
+    // A player who is away does not get the full clock: the table plays their hand after a moment.
+    const away = tp && !tp.connected && (tp.gone || tp.kicked);
+    if (away || s.turnTimer > 0) want = { key: `turn-${t.round}-${t.turn.seat}-${t.turn.hand}-${h.cards.length}${away ? '-away' : ''}`, kind: 'turn', secs: away ? 1.2 : s.turnTimer };
   }
   if (S.timer && want && S.timer.key === want.key) return;
   if (S.timer) { clearTimeout(S.timer.handle); S.timer = null; }
@@ -659,12 +662,13 @@ function scheduleTimer() {
       hostDo((tb) => tb.forceInsurance());
       if (ids.length) tellAll({ kind: 'ins-timeout', ids });
     });
-    else fresh(() => 0, () => {
+    else fresh(() => 1, () => {
       const t2 = S.table;
       if (t2.phase !== 'playing' || !t2.turn) return;
       const p = t2.players[t2.seats[t2.turn.seat].playerId];
-      hostDo((tb) => { tb.addLog(`Time ran out for ${p.name}, dealer stands.`); tb.skipTurn(); });
-      tellAll({ kind: 'timeout', id: p.id, name: p.name });
+      let did = null;
+      hostDo((tb) => { did = tb.awayMove(); tb.addLog(did === 'hit' ? `${p.name} is away or out of time with 11 or less: the dealer hits for them.` : `Time ran out for ${p.name}, dealer stands.`); });
+      if (did === 'stand') tellAll({ kind: 'timeout', id: p.id, name: p.name });
     });
   };
   // A turn clock starts when the player can act: after the cards that are still being dealt have landed.
@@ -877,10 +881,11 @@ function aimSeat(st) {
   S.seatAim = a;
   me.seat = a;
   // The seat the table is drawn around. It stays put while the turn moves between my seats, so nothing on the table jumps.
-  // While bets go down it is the seat in hand, so that seat has the large circle with its side bets.
-  // From the deal to the end of the round it does not change.
-  const betting = st.phase === 'betting' || st.phase === 'settled';
-  S.home = betting && a !== null ? a : mine.includes(S.home) ? S.home : mine.length ? mine[0] : null;
+  // It never changes while I hold that seat, in any phase: picking a chip, betting on another of my
+  // seats or a new round must not move or resize a single seat.
+  // A phone draws only one seat large enough to bet on, so there the large seat is the seat in hand while bets go down.
+  const phoneBetting = innerWidth < 700 && (st.phase === 'betting' || st.phase === 'settled') && a !== null;
+  S.home = phoneBetting ? a : mine.includes(S.home) ? S.home : mine.length ? mine[0] : null;
   me.home = S.home;
   if (st.rebets) st.rebet = a !== null ? st.rebets[a] || null : null;
 }
@@ -931,9 +936,27 @@ function placeBet(bet, ready = false) {
   if (b.sides.friendBust && bet.target != null) b.target = bet.target;
   const { me } = myInfo(st);
   const at = me.seat;
+  const prev = st.seats[at]?.bet.main || 0; // what this seat held before this tap
   S.pend = { bet: b, ready: b.main > 0 && !!ready, seq: ++S.betSeq, round: st.round, at: Date.now(), seat: at };
   overlayBet();
+  // Several seats: chips added to one seat go on my other seats too, so all my hands carry the same
+  // main bet. It only copies to seats that held the same main bet before (or nothing), and only when
+  // chips are added. Taking chips off one seat changes that seat alone, so the bets can still differ.
+  const copy = [];
+  if (b.main > prev && !ready && (me.seats || []).length > 1) {
+    let left = me.chips - (me.seats || []).reduce((a, i) => a + (i === at ? b.main + Object.values(b.sides).reduce((x, y) => x + y, 0) : betTotal(st.seats[i].bet)), 0);
+    for (const i of me.seats) {
+      const o = st.seats[i];
+      if (i === at || !o || o.out || o.ready || o.hands?.length || (o.bet.main || 0) !== prev) continue;
+      const add = b.main - prev;
+      if (add > left) continue;
+      left -= add;
+      copy.push({ t: 'bet', main: b.main, sides: { ...o.bet.sides }, target: o.bet.target, ready: false, seq: ++S.betSeq, seat: i, auto: !!S.auto?.on });
+      if (S.role !== 'host') o.bet = { ...o.bet, main: b.main }; // shown at once; the table's answer follows
+    }
+  }
   send({ t: 'bet', main: b.main, sides: b.sides, target: b.target, ready, seq: S.pend.seq, seat: at, auto: !!S.auto?.on });
+  for (const m of copy) send(m);
   // Ready on one seat: the next of my seats that still needs a bet comes into hand.
   if (S.pend.ready) { const nx = (me.seats || []).find((i) => i !== at && st.seats[i] && !st.seats[i].ready && !st.seats[i].out); if (nx !== undefined) { S.seatAim = nx; S.undo = []; aimSeat(st); } }
   render();
@@ -1876,7 +1899,10 @@ function dealMeInHTML(st) {
     return `<div class="deal-me-in waiting"><span>Waiting for ${slow.length ? esc(slow.slice(0, 2).join(' and ')) + (slow.length > 2 ? ' and others' : '') : 'the deal'}</span><button class="btn small" data-act="ready">Not ready</button></div>`;
   }
   if (seat.bet.main < st.settings.minBet) return `<div class="deal-me-in waiting"><span class="under-min">Table minimum ${money(st.settings.minBet)}. Add ${money(st.settings.minBet - seat.bet.main)} more to be dealt in.</span></div>`;
-  return `<div class="deal-me-in"><button class="deal-btn" data-act="ready">Deal me in</button></div>`;
+  // One press deals in every seat of mine that has a bet of the minimum or more.
+  const me = st.players.find((p) => p.id === S.myId);
+  const open = (me?.seats || []).filter((i) => st.seats[i] && !st.seats[i].out && !st.seats[i].ready && st.seats[i].bet.main >= st.settings.minBet).length;
+  return `<div class="deal-me-in"><button class="deal-btn" data-act="ready" ${open > 1 ? 'title="Deals in all your seats that have a bet"' : ''}>Deal me in${open > 1 ? ` (${open} hands)` : ''}</button></div>`;
 }
 
 // Table writing that follows the curve of the table, like a casino felt: three arcs around the same
@@ -2007,7 +2033,7 @@ function seatHTML(st, s, i, focus, spot) {
   return `<div class="seat ${cls} ${many ? 'many' : ''} ${hot} ${isMe ? 'me' : ''} ${turn ? 'turn' : ''} ${inHand ? 'inhand' : ''} ${s.out ? 'out' : ''} ${s.connected ? '' : 'away'}" id="seat-${i}" ${place} ${mini || many ? 'title="Tap to see this seat large"' : ''}>
     ${hands}
     ${bets}
-    <div class="who" ${isMe ? '' : `data-throw-at="${s.playerId}" title="Tap to throw something at ${esc(s.name)}"`}><span class="name">${s.streak >= 3 ? `<span class="fire">🔥</span>${s.streak} ` : ''}${s.playerId === st.hostId ? '♛ ' : ''}${esc(s.name)}${isMe ? ' (you)' : ''}${s.connected ? '' : ' (away)'}</span><span class="chips">${money(s.chips)}${net}</span>${ready}</div>
+    <div class="who" ${isMe ? '' : `data-throw-at="${s.playerId}" title="Tap to throw something at ${esc(s.name)}"`}><span class="name">${s.streak >= 3 ? `<span class="fire">🔥</span>${s.streak} ` : ''}${s.playerId === st.hostId ? '♛ ' : ''}${esc(s.name)}${isMe ? ' (you)' : ''}${s.connected ? '' : ' (away)'}</span><span class="chips">${money(s.chips)}${net}</span>${ready}${isMe && st.banker?.id !== S.myId ? `<button class="seat-out-tag ${s.out ? 'on' : ''}" data-act="sit-out" data-seat="${i}" data-on="${s.out ? 0 : 1}" title="${s.out ? 'Play this seat again from the next round' : 'Skip rounds on this seat. You keep the seat, and a hand in play is still finished.'}">${s.out ? 'Sit in' : 'Sit out'}</button>` : ''}</div>
   </div>`;
 }
 
@@ -2357,7 +2383,7 @@ function drawSitOut(st) {
   let el = $('#sitout-bar');
   if (el && !el.isConnected) el = null;
   if (!el) { el = document.createElement('div'); el.id = 'sitout-bar'; app.appendChild(el); }
-  const h = st ? sitOutHTML(st) + `<button class="chat-btn ${S.chatOpen ? 'on' : ''}" data-act="chat" title="Chat with everyone at the table">💬 Chat${S.chatUnread ? `<i>${S.chatUnread > 9 ? '9+' : S.chatUnread}</i>` : ''}</button>`
+  const h = st ? `<button class="chat-btn ${S.chatOpen ? 'on' : ''}" data-act="chat" title="Chat with everyone at the table">💬 Chat${S.chatUnread ? `<i>${S.chatUnread > 9 ? '9+' : S.chatUnread}</i>` : ''}</button>`
     + `<button class="chat-btn ${V.on ? 'on' : ''}" data-act="voice" title="Voice chat with the table">🎧 Voice${V.list.length ? ` (${V.list.length})` : ''}</button>`
     + (V.on ? `<button class="chat-btn mic-btn ${V.mic ? 'live' : ''}" data-act="voice-mic" title="Turn your microphone on or off">${V.mic ? '🎤 Mic on' : '🔇 Mic off'}</button>` : '') : '';
   if (el.dataset.h !== h) { el.dataset.h = h; el.innerHTML = h; }
@@ -2938,7 +2964,17 @@ function runAct(el) {
       break;
     }
     case 'pvp-clear': S.undo.push(structuredClone(seat.bet)); delete bet.sides.friendBust; sendBet(); chipSound(1); break;
-    case 'ready': sendBet(!seat.ready); break;
+    case 'ready': {
+      // Deal me in counts for all my seats with a bet down, not only the seat in hand.
+      if (!seat.ready) for (const i of me.seats || []) {
+        const o = st.seats[i];
+        if (i === me.seat || !o || o.out || o.ready || o.bet.main < st.settings.minBet) continue;
+        send({ t: 'bet', main: o.bet.main, sides: { ...o.bet.sides }, target: o.bet.target, ready: true, seq: ++S.betSeq, seat: i, auto: !!S.auto?.on });
+        if (S.role !== 'host') o.ready = true; // shown at once; the table's answer follows
+      }
+      sendBet(!seat.ready);
+      break;
+    }
     case 'ins': send({ t: 'insurance', take: el.dataset.take === '1', seat: myInfo(S.state).me?.seat }); break;
     case 'play': playMove(el.dataset.a); break;
     // Host only
