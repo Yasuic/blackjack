@@ -1288,6 +1288,12 @@ export class Table {
       });
     });
     if (!seats.length) return;
+    // The table log gets one line per seat: every hand, every side bet, and the seat's net.
+    const sg = (n) => (n > 0 ? '+' : n < 0 ? '-' : '') + Math.abs(n);
+    for (const x of seats) {
+      const bits = x.hands.map((h, j) => `${x.hands.length > 1 ? `hand ${j + 1} ` : ''}${h.result || 'played'}${h.net ? ' ' + sg(h.net) : ''}`).concat(x.sides.map((r) => `${r.name} ${r.net ? sg(r.net) : 'back'}`));
+      this.addLog(`Round ${this.round}, ${x.name} (seat ${x.seat}): ${bits.join(', ')}. Net ${x.net ? sg(x.net) : 'even'}.`);
+    }
     this.hist = this.hist || [];
     this.hist.push({
       round: this.round, shoe: this.fair?.n || 0, midShuffle: !!this.shuffledMidRound, time: Date.now(), events: (this.evts || []).splice(0),

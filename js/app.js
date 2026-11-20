@@ -1,13 +1,13 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120zzd';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261120zzd';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120zzd';
-import { tickSound, winSound } from './fx.js?v=20261120zzd';
-import * as HX from './history.js?v=20261120zzd';
-import { webglOK, initRoom } from './room3d.js?v=20261120zzd';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120zzd';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120zze';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261120zze';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120zze';
+import { tickSound, winSound } from './fx.js?v=20261120zze';
+import * as HX from './history.js?v=20261120zze';
+import { webglOK, initRoom } from './room3d.js?v=20261120zze';
+import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120zze';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -390,7 +390,15 @@ function onHostMessage(conn, msg) {
   if (msg.t === 'chat') { relayChat(conn.clientId, msg); return; }
   if (msg.t === 'voice') { voiceSet(conn.clientId, conn.peer, !!msg.on, !!msg.mic); return; }
   if (msg.t === 'keys') { gotNonce(msg, conn.clientId); return; }
-  if (msg.t === 'hist-get') return; // hand history is for the host only and is never sent to players
+  // Any player may read the finished rounds: cards that were dealt, bets and results. The unplayed
+  // cards of the shoe and the shuffle secret are not part of a round and are never sent.
+  if (msg.t === 'hist-get') {
+    const now = Date.now();
+    if (now - (conn.histAt || 0) < 800) return;
+    conn.histAt = now;
+    hostRounds().then((all) => { try { conn.send({ t: 'hist', n: (S.table.hist || []).length, total: all.length, rounds: all.slice(-80).map(({ events, table, backed, ...r }) => r) }); } catch {} });
+    return;
+  }
   fresh(moveCount(msg), () => runAction(conn.clientId, msg, (err) => conn.open && conn.send({ t: 'error', msg: err, bet: msg.t === 'bet' })));
 }
 
@@ -821,6 +829,7 @@ function wireGuestConn(conn) {
     if (msg.t === 'ping') { try { conn.send({ t: 'pong' }); } catch {} return; }
     if (msg.t === 'state') { setState(msg.state); render(); setTimerFromState(msg.state); }
     else if (msg.t === 'error') { toast(msg.msg); if (msg.bet) dropPend(); }
+    else if (msg.t === 'hist') { S.guestHist = Array.isArray(msg.rounds) ? msg.rounds : []; S.guestHistTotal = msg.total || S.guestHist.length; drawHistPanel(true); if ($('#modal')?.open && $('#hist-list')) showHistory(); }
     else if (msg.t === 'snap') S.snap = String(msg.snap || '').slice(0, 400000);
     else if (msg.t === 'say') toast(String(msg.msg || '').slice(0, 200));
     else if (msg.t === 'chat') gotChat(msg);
@@ -1046,7 +1055,7 @@ function buildLayout() {
           <div class="menu-note hint">Only the host can propose new settings, and everyone votes on them.</div>`}
           ${fold('m-cheat', '✅ Game Cheating Detection', `
             <button class="menu-item" data-act="fair">🔐 Provably fair</button>
-            ${host ? `<button class="menu-item" data-act="hist-panel" title="A small list of the hands at the left of the screen. Only you see it.">🕘 Hand history: ${histOn() ? 'on' : 'off'}</button>` : ''}`)}
+            <button class="menu-item" data-act="hist-panel" title="A small list of the hands at the left of the screen.">🕘 Hand history: ${histOn() ? 'on' : 'off'}</button>`)}
         </div>
       </div>
     </div>
@@ -1253,6 +1262,13 @@ function histHTML(list) {
 }
 // Hand history is for the host only. It is read from this browser's database, so it holds every round
 // of the table, also from before a refresh. S.histScope: 'all' or 'shoe' (since the last shuffle).
+// Finished rounds for the hand history. The host reads its own store; a player asks the host once per new round.
+async function allRounds() {
+  if (S.role === 'host') return hostRounds();
+  const n = S.state?.histN;
+  if (S.guestHistN !== n) { S.guestHistN = n; send({ t: 'hist-get' }); }
+  return S.guestHist || [];
+}
 async function hostRounds(id = S.table.created?.id) {
   let list = id ? await HX.getRounds(id) : [];
   if (id === S.table.created?.id) { const have = new Set(list.map((r) => r.round)); list = list.concat((S.table.hist || []).filter((r) => !have.has(r.round))).sort((a, b) => a.round - b.round); }
@@ -1264,7 +1280,7 @@ const scopeHTML = () => `<div class="hx-scope"><button class="seat-tab ${S.histS
 const histOn = () => safeGet('bj-hist-panel') === '1';
 async function drawHistPanel(force) {
   let el = $('#hist-panel');
-  if (S.role !== 'host' || !histOn() || !S.state) { el?.remove(); S.histPanelN = null; return; }
+  if (!S.role || !histOn() || !S.state) { el?.remove(); S.histPanelN = null; return; }
   // The round in play is the top entry and grows with every card. The dealer's face down card stays hidden.
   const st0 = S.state;
   const cs = (cards) => cards.map((c) => (c.hidden || !c.r ? '??' : c.r + c.s)).join(' ');
@@ -1277,23 +1293,23 @@ async function drawHistPanel(force) {
   };
   const liveSeats = st0.phase !== 'betting' && st0.phase !== 'settled' ? st0.seats.filter((x) => x && x.hands.length) : [];
   const live = liveSeats.length ? `<div class="hp-round hp-live"><div class="hp-top"><b>#${st0.round}</b> ${esc(st0.banker?.name || 'House')} ${esc(cs(st0.dealer.cards))}${st0.dealer.cards.some((c) => c.hidden || !c.r) ? '' : ' = ' + (st0.dealer.total > 21 ? 'bust' : st0.dealer.total)} <i>live</i></div>${liveSeats.map((x) => `<div class="hp-seat"><span>${esc(st0.players.find((q) => q.id === x.playerId)?.name || 'Player')}: ${x.hands.map((y) => `${esc(cs(y.cards))} = ${y.total > 21 ? 'bust' : y.total}`).join(' | ')}</span></div>${liveSides(x)}`).join('')}</div>` : '';
-  const sig = S.state.histN + '|' + live;
+  const sig = S.state.histN + '|' + (S.guestHist || []).length + '|' + live;
   if (el && el.isConnected && !force && S.histPanelN === sig) return;
   S.histPanelN = sig;
-  const all = await hostRounds();
-  if (S.role !== 'host' || !histOn()) return;
+  const all = await allRounds();
+  if (!S.role || !histOn()) return;
   el = $('#hist-panel');
   if (!el || !el.isConnected) { el = document.createElement('div'); el.id = 'hist-panel'; app.appendChild(el); }
   const net = (n) => `<b class="${n > 0 ? 'up' : n < 0 ? 'down' : ''}">${n > 0 ? '+' : n < 0 ? '-' : ''}${money(Math.abs(n))}</b>`;
-  const rows = all.slice(-30).reverse().map((h) => `<div class="hp-round"><div class="hp-top"><b>#${h.round}</b> ${esc(h.dealerName)} ${esc(h.dealer)} = ${h.dealerTotal > 21 ? 'bust' : h.dealerTotal}</div>${h.seats.map((x) => `<div class="hp-seat"><span>${esc(x.name)}: ${x.hands.map((y) => `${esc(y.cards)} = ${y.total}`).join(' | ')}</span>${net(x.net)}</div>${(x.sides || []).length ? `<div class="hp-sides">${x.sides.map((z) => `${esc(z.name)} ${z.net > 0 ? '<b class="up">+' + money(z.net) + '</b>' : z.net < 0 ? '<b class="down">-' + money(-z.net) + '</b>' : 'back'}`).join(', ')}</div>` : ''}`).join('')}</div>`).join('');
+  const rows = all.slice(-30).reverse().map((h) => `<div class="hp-round"><div class="hp-top"><b>#${h.round}</b> ${esc(h.dealerName)} ${esc(h.dealer)} = ${h.dealerTotal > 21 ? 'bust' : h.dealerTotal}</div>${h.seats.map((x) => `<div class="hp-seat"><span>${esc(x.name)}: ${x.hands.map((y) => `${esc(y.cards)} = ${y.total}${y.result ? ` <i class="${y.net > 0 ? 'up' : y.net < 0 ? 'down' : ''}">${esc(y.result)}${y.net ? ' ' + (y.net > 0 ? '+' : '-') + money(Math.abs(y.net)) : ''}</i>` : ''}`).join(' | ')}</span>${net(x.net)}</div>${(x.sides || []).length ? `<div class="hp-sides">${x.sides.map((z) => `${esc(z.name)} ${z.net > 0 ? '<b class="up">+' + money(z.net) + '</b>' : z.net < 0 ? '<b class="down">-' + money(-z.net) + '</b>' : 'back'}`).join(', ')}</div>` : ''}`).join('')}</div>`).join('');
   el.innerHTML = `<div class="hp-head"><span>Hand history</span><button data-act="history" title="Open the full list">Full</button><button data-act="hist-panel" title="Turn this panel off" aria-label="Turn the hand history panel off">×</button></div><div class="hp-list">${live}${rows || (live ? '' : '<p>No round has been played yet.</p>')}</div>`;
 }
 async function showHistory() {
-  if (S.role !== 'host') return;
+  if (!S.role) return;
   S.histShown = S.state?.histN;
-  const all = await hostRounds();
+  const all = await allRounds();
   const list = S.histScope === 'shoe' ? HX.sinceLastShuffle(all) : all;
-  $('#modal-body').innerHTML = histHTML(list).replace('</h2>', `</h2>${scopeHTML()}<div class="hx-row"><span class="hint">${list.length} of ${all.length} rounds shown. Only the host can see this.</span></div>`);
+  $('#modal-body').innerHTML = histHTML(list).replace('</h2>', `</h2>${scopeHTML()}<div class="hx-row"><span class="hint">${list.length} of ${all.length} rounds shown${S.role !== 'host' && (S.guestHistTotal || 0) > all.length ? ` (the last ${all.length} of ${S.guestHistTotal})` : ''}.</span></div>`);
   $('#modal-body').dataset.hx = 'history';
   if (!$('#modal').open) $('#modal').showModal();
 }
@@ -1379,7 +1395,7 @@ function setHTML(el, html) {
 
 function render(note) {
   drawHistPanel();
-  if (S.role === 'host' && $('#modal')?.open && $('#hist-list') && S.state && S.state.histN !== S.histShown) showHistory();
+  if (S.role && $('#modal')?.open && $('#hist-list') && S.state && S.state.histN !== S.histShown) showHistory();
   if (!S.role) return;
   const st = S.state;
   const pill = $('#conn-pill');
@@ -2514,13 +2530,17 @@ function trayInner(st) {
     const parts = seat.hands.map((h, j) => `<span class="rr-part ${handNet(h) > 0 ? 'up' : handNet(h) < 0 ? 'down' : ''}">${seat.hands.length > 1 ? `Hand ${j + 1}: ` : ''}${handResultText(h)}</span>`)
       .concat(seat.hands.length ? seat.sideResults.map((r) => `<span class="rr-part ${r.win ? 'up' : r.push ? '' : 'down'}">${esc(r.name)}: ${sideAmount(r)}</span>`) : []);
     // The headline counts all of my seats in this round together.
-    const ownS = (myInfo(st).me?.seats || []).map((i) => st.seats[i]).filter((x) => x && x.hands.length);
+    const ownIdx = (myInfo(st).me?.seats || []).filter((i) => st.seats[i] && st.seats[i].hands.length);
+    const ownS = ownIdx.map((i) => st.seats[i]);
+    // Several seats: one line per seat with every hand and side bet of that seat.
+    const seatLine = (x, i) => `<div class="rr-seat"><span class="rr-name">Seat ${i + 1} <b class="${x.net > 0 ? 'up' : x.net < 0 ? 'down' : ''}">${x.net ? signed(x.net) : 'even'}</b></span>${x.hands.map((h, j) => `<span class="rr-part ${handNet(h) > 0 ? 'up' : handNet(h) < 0 ? 'down' : ''}">${x.hands.length > 1 ? `Hand ${j + 1}: ` : ''}${handResultText(h)}</span>`).concat(x.sideResults.map((r) => `<span class="rr-part ${r.win ? 'up' : r.push ? '' : 'down'}">${esc(r.name)}: ${sideAmount(r)}</span>`)).join('')}</div>`;
+    const breakdown = ownS.length > 1 ? `<div class="rr-all">${ownIdx.map((i) => seatLine(st.seats[i], i)).join('')}</div>` : parts.length ? `<div class="rr-parts">${parts.join('')}</div>` : '';
     const rnet = ownS.length > 1 ? ownS.reduce((a, x) => a + (x.net || 0), 0) : seat.net;
     const many = ownS.length > 1 ? ` on ${ownS.length} hands` : '';
     const head = !seat.hands.length && ownS.length < 2 ? 'You sat this round out' : rnet > 0 ? `You won ${money(rnet)}${many}` : rnet < 0 ? `You lost ${money(-rnet)}${many}` : 'You broke even';
     const queued = S.rebetWhenOpen === st.round;
     const rb = st.rebet ? `<button class="btn gold rebet-btn ${queued ? 'on' : ''}" data-act="rebet" title="Bet the same as last round (B)">${queued ? `✓ Rebet ${money(rebetSum(st))}${rebetHands(st)} goes down when betting opens. Tap to cancel` : `↻ Rebet ${money(rebetSum(st))}${rebetHands(st)}`}</button>` : '';
-    return `<div class="tray-msg round-result"><b class="${rnet > 0 ? 'up' : rnet < 0 ? 'down' : ''}">${head}</b>${parts.length ? `<div class="rr-parts">${parts.join('')}</div>` : ''}</div>
+    return `<div class="tray-msg round-result"><b class="${rnet > 0 ? 'up' : rnet < 0 ? 'down' : ''}">${head}</b>${breakdown}</div>
       <div class="actions">${rb}<span class="hint">Betting opens when the cards are cleared.</span></div>`;
   }
   if (ph === 'betting') {
