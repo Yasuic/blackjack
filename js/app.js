@@ -1,13 +1,13 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120zs';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261120zs';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120zs';
-import { tickSound, winSound } from './fx.js?v=20261120zs';
-import * as HX from './history.js?v=20261120zs';
-import { webglOK, initRoom } from './room3d.js?v=20261120zs';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120zs';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120zt';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261120zt';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120zt';
+import { tickSound, winSound } from './fx.js?v=20261120zt';
+import * as HX from './history.js?v=20261120zt';
+import { webglOK, initRoom } from './room3d.js?v=20261120zt';
+import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120zt';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -2935,7 +2935,7 @@ function runAct(el) {
     case 'ledger-toggle': { const l = $('#ledger'); l.classList.toggle('closed'); safeSet('bj-ledger', l.classList.contains('closed') ? '0' : '1'); renderLedger(S.state); break; }
     case 'buyin-answer': hostDo((t) => t.answerBuyIn(Number(el.dataset.id), el.dataset.yes === '1')); break;
     case 'throw-open': openThrowPanel(el); break;
-    case 'poop-dealer': send({ t: 'throw', item: 'poop', to: st.banker ? st.banker.id : 'house', paid: true }); el.closest('.badbeat')?.remove(); break;
+    case 'poop-dealer': send({ t: 'throw', item: 'poop', to: st.banker ? st.banker.id : 'house' }); el.closest('.badbeat')?.remove(); break;
     case 'view-reset': S.room?.home(); $('.view-walk')?.classList.remove('on'); break;
     case 'turn': S.room?.look(Number(el.dataset.d)); break;
     case 'walk': if (S.room) { const on = S.room.walk(!S.room.walking()); el.classList.toggle('on', on); if (on) toast(matchMedia('(pointer: coarse)').matches ? 'Walking: drag to move through the office. Two fingers turn and zoom. ⟲ takes you back to your seat.' : 'Walking: drag to move through the office. Right button turns, the wheel zooms. Reset view takes you back to your seat.'); } break;
@@ -3170,13 +3170,7 @@ function relayThrow(from, msg) {
   const now = Date.now();
   if (now - (lastThrow[from] || 0) < 1000) return;
   lastThrow[from] = now;
-  // A bad-beat poop costs half a chip, paid to the player dealer.
-  if (msg.paid && S.table.banker && S.table.banker !== from && S.table.players[from].chips >= 0.5) {
-    S.table.players[from].chips -= 0.5;
-    S.table.players[S.table.banker].chips += 0.5;
-    S.table.addLog(`${S.table.players[from].name} paid 0.5 to throw poop at the dealer.`);
-    setTimeout(hostChanged, 0);
-  }
+  // Throwing poop at the dealer is free for everyone.
   const fx = { t: 'fx', from, to, item };
   for (const conn of Object.values(S.conns)) if (conn.open) conn.send(fx);
   showThrow(fx);
@@ -3417,7 +3411,7 @@ function badBeat(st) {
   if (!seat.hands.some((h) => h.total >= 19 && h.total <= 21 && h.result === 'Lose')) return;
   const el = document.createElement('div');
   el.className = 'badbeat';
-  el.innerHTML = `<b>Bad beat!</b> Dealer made 21 with ${d.cards.length} cards. <button class="btn gold" data-act="poop-dealer">💩 Throw poop at the dealer${st.banker && st.banker.id !== S.myId ? ' · 0.5' : ''}</button>`;
+  el.innerHTML = `<b>Bad beat!</b> Dealer made 21 with ${d.cards.length} cards. <button class="btn gold" data-act="poop-dealer">💩 Throw poop at the dealer</button>`;
   app.appendChild(el);
   setTimeout(() => el.remove(), 9000);
 }
