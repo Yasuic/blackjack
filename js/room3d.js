@@ -151,7 +151,7 @@ function buildOffice(signText, midShift = 0, midScale = 1) {
     chrome: mk({ color: '#b9bec4', roughness: 0.25, metalness: 0.9 }),
     screen: mk({ color: '#0d0f12', roughness: 0.25, metalness: 0.2 }),
     // What the office screens show: the ARC Group logo, from the photo of it, lit like a screen that is on.
-    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261120zzn'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
+    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261120zzo'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
     dark: mk({ color: '#30353c', roughness: 0.6 }),
   };
   const group = new THREE.Group();
@@ -472,7 +472,7 @@ function buildOffice(signText, midShift = 0, midScale = 1) {
       [-1, 1].forEach((k) => {
         const sh = [k * 0.215 * w, 1.05 + up2, 0.05];
         if (!walk) { const el = [k * 0.235 * w, 0.82 + up2, -0.07], hd = [k * 0.11, dy + 0.045, -reach + 0.05]; limb(sh, el, 0.09, sleeve); limb(el, hd, 0.075, fore); ink(el, hd); return; }
-        if (k < 0 || lie) { const el = [k * 0.25 * w, 1.07, 0.05 + st * 0.06], hd = [k * 0.25 * w, 0.84, 0.05 + st * 0.14]; limb(sh, el, 0.09, sleeve); limb(el, hd, 0.075, fore); ink(el, hd); box(0.08, 0.09, 0.08, skin, hd[0], hd[1] - 0.04, hd[2]); return; }
+        if (k < 0 || lie || L.nap) { const el = [k * 0.25 * w, 1.07, 0.05 + st * 0.06], hd = [k * 0.25 * w, 0.84, 0.05 + st * 0.14]; limb(sh, el, 0.09, sleeve); limb(el, hd, 0.075, fore); ink(el, hd); box(0.08, 0.09, 0.08, skin, hd[0], hd[1] - 0.04, hd[2]); return; }
         const el = [k * 0.25 * w, 1.1, 0.0], hd = [0.2 * w, 1.18, -0.26];
         limb(sh, el, 0.09, sleeve); limb(el, hd, 0.075, fore); ink(el, hd); box(0.085, 0.08, 0.085, skin, hd[0], hd[1], hd[2] - 0.03);
         cyl(0.04, 0.03, 0.12, 10, col('#f4f2ee', 0.6), hd[0], hd[1] + 0.06, hd[2] - 0.08); cyl(0.041, 0.035, 0.045, 10, col('#8a5a2b', 0.8), hd[0], hd[1] + 0.06, hd[2] - 0.08); cyl(0.043, 0.043, 0.012, 10, col('#ffffff', 0.4), hd[0], hd[1] + 0.126, hd[2] - 0.08);
@@ -595,7 +595,6 @@ function buildOffice(signText, midShift = 0, midScale = 1) {
       const r6 = rng(61), white = col('#fbfaf6', 0.9), carton = col('#b88a55', 0.95);
       for (let n = 0; n < 46; n++) { const x = (r6() - 0.5) * 1.3, z = -gap - 0.04 - r6() * 0.5; if (Math.abs(x) < 0.27 && z > -gap - 0.22) continue; box(0.05, 0.002, 0.03, white, x, dy + 0.002 + (n % 3) * 0.002, z, false, r6() * 3); }
       for (let n = 0; n < 70; n++) { const a = r6() * 6.3, d = 0.35 + r6() * 1.0; box(0.05, 0.002, 0.03, white, Math.cos(a) * d, 0.003, Math.sin(a) * d * 0.8 + 0.3, false, r6() * 3); }
-      [[0.75, 0.35, 0.3], [-0.7, 0.6, -0.4], [0.5, 0.95, 1.1]].forEach(([x, z, r]) => { box(0.3, 0.2, 0.22, carton, x, 0.1, z, true, r); box(0.26, 0.012, 0.18, white, x, 0.203, z, false, r); });
       box(0.2, 0.12, 0.15, carton, -0.5, dy + 0.06, -gap - 0.36, true, 0.3); box(0.17, 0.01, 0.12, white, -0.5, dy + 0.122, -gap - 0.36, false, 0.3);
     }
     if (L.name && !L.noTag) { // a small name tag over the head, also while walking
@@ -832,7 +831,7 @@ function buildStorefront() {
     lamp: lam('#c8161d', 0.6), bulb: lit('#ffe9a8'), red: lit('#c8161d'), gold: lit('#f4c542'), wood: lam('#7a5234', 0.35),
     glass: new THREE.MeshBasicMaterial({ color: '#dff3f7', transparent: true, opacity: 0.13, depthWrite: false }),
     awning: new THREE.MeshBasicMaterial({ map: canvasTexture(512, 64, (g, w, h) => { for (let i = 0; i < 16; i++) { g.fillStyle = i % 2 ? '#fff6e6' : '#f08a1c'; g.fillRect((i * w) / 16, 0, w / 16 + 1, h); } }), side: THREE.DoubleSide }),
-    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261120zzn') }),
+    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261120zzo') }),
     menu: new THREE.MeshBasicMaterial({ map: canvasTexture(256, 384, (g, w, h) => {
       g.fillStyle = '#c8161d'; g.fillRect(0, 0, w, h); g.fillStyle = '#f4c542'; g.fillRect(14, 14, w - 28, 44);
       const r = rng(11); g.fillStyle = '#fff3d6';
@@ -1328,7 +1327,7 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
   const PHI_MAX = 1.36, YAW_MAX = 2.25;
   const EYE = 340 * U; // lowest the camera goes when walking around: standing eye height, above the table top
   // The open floor of the office, inside the glass walls, the cupboard and the cabinets. The camera stays in it.
-  const BOUND = { x0: (0.381 + 0.3 - OFFICE_AT.y) * S, x1: (6.7455 - 0.3 - OFFICE_AT.y) * S, z0: (OFFICE_AT.x - 11.419 + 0.35) * S, z1: (OFFICE_AT.x - 2.96 - 0.08) * S };
+  const BOUND = { x0: (0.381 + 0.3 - OFFICE_AT.y) * S, x1: (6.7455 - 0.3 - OFFICE_AT.y) * S, z0: (OFFICE_AT.x - 11.419 + 0.35) * S, z1: (OFFICE_AT.x - 2.526 - 0.12) * S };
   // Walking around: the whole office, every room, straight through the glass walls and doors.
   // The limits are the outer walls of the office: nobody walks out to the street.
   const ALL = (() => { const m = 0.35; return { x0: (m - OFFICE_AT.y) * S, x1: (OFFICE.depth - m - OFFICE_AT.y) * S, z0: (OFFICE_AT.x - OFFICE.width + m) * S, z1: (OFFICE_AT.x - OFFICE.bump.x - m) * S }; })();
@@ -1645,11 +1644,13 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     posFor(cur, camera.position);
     // Never under the table top, the floor or outside the walls, whatever the numbers above say.
     camera.position.y = Math.max(tour ? EYE + (120 * U - EYE) * tourW : seated ? 120 * U : EYE, Math.min(FLOOR + 7.5 * S, camera.position.y));
-    const lim = walking ? ALL : BOUND;
+    const lim = walking ? ALL : BOUND, ix = camera.position.x, iz = camera.position.z; // where the camera would be without the walls
     if (tour) { keepIn(tmp.copy(camera.position)); camera.position.x += (tmp.x - camera.position.x) * (1 - tourW); camera.position.z += (tmp.z - camera.position.z) * (1 - tourW); }
     else if (walking) keepIn(camera.position);
     else { camera.position.x = Math.max(lim.x0, Math.min(lim.x1, camera.position.x)); camera.position.z = Math.max(lim.z0, Math.min(lim.z1, camera.position.z)); }
     tmp.copy(cur.t).sub(camera.position);
+    // At the table, a wall only stops the camera; the view keeps the direction it would have had, so it never swings round when the camera is held right over the point it looks at.
+    if (!tour && !walking) { tmp.x = cur.t.x - ix; tmp.z = cur.t.z - iz; }
     const yaw0 = Math.atan2(-tmp.x, -tmp.z), pitch0 = Math.atan2(tmp.y, Math.hypot(tmp.x, tmp.z));
     camera.rotation.set(Math.max(-1.5, Math.min(0.6, pitch0 + cur.pitch)), yaw0 + cur.yaw, 0, 'YXZ');
     // In your own chair you see your body, arms and stool when you look down, but no head in front of your eyes.
