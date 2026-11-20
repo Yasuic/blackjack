@@ -118,6 +118,7 @@ const OFFICE = {"sidePanes":[{"a":2.526,"b":2.7292},{"a":3.7274,"b":3.9306}],"ca
 const OFFICE_AT = { x: 7.07, y: 4.2 };
 // The one name plate in the room. Set it to '' to leave the plate out.
 const OFFICE_SIGN = 'WELCOME TO ARC GROUP!';
+const OFFICE_SIGN_LINES = ['Hours: 8AM to infinity AM', 'Compensation: negative infinity'];
 
 // Builds the whole office as a handful of merged meshes (one per material). Units are metres with the
 // floor at y = 0; the caller scales and places the group. Scene X = -plan x, Z = -plan y.
@@ -146,7 +147,7 @@ function buildOffice(signText) {
     chrome: mk({ color: '#b9bec4', roughness: 0.25, metalness: 0.9 }),
     screen: mk({ color: '#0d0f12', roughness: 0.25, metalness: 0.2 }),
     // What the office screens show: the ARC Group logo, from the photo of it, lit like a screen that is on.
-    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261120zze'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
+    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261120zzf'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
     dark: mk({ color: '#30353c', roughness: 0.6 }),
   };
   const group = new THREE.Group();
@@ -269,12 +270,15 @@ function buildOffice(signText) {
       const draw = (g, w, h) => {
         g.fillStyle = '#f4f2ee'; g.fillRect(0, 0, w, h);
         g.fillStyle = '#2b2f35'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = `600 76px ${FONT}`;
-        g.fillText(signText, w / 2, h / 2 + 4, w - 60);
+        g.fillText(signText, w / 2, 84, w - 60);
+        g.fillStyle = '#c9c5bd'; g.fillRect(60, 158, w - 120, 3);
+        g.fillStyle = '#2b2f35'; g.font = `500 54px ${FONT}`;
+        OFFICE_SIGN_LINES.forEach((t, k) => g.fillText(t, w / 2, 218 + k * 78, w - 60));
       };
-      const tex = canvasTexture(1024, 160, draw);
+      const tex = canvasTexture(1024, 344, draw);
       group.userData.redrawSign = () => { const cv = tex.image, g = cv.getContext('2d'); g.setTransform(1, 0, 0, 1, 0, 0); draw(g, cv.width, cv.height); tex.needsUpdate = true; };
-      const m = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 0.235), mk({ map: tex, roughness: 0.6 }));
-      m.position.set(-(c.x + c.width / 2), 2.2, -c.y + 0.012);
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 0.504), mk({ map: tex, roughness: 0.6 }));
+      m.position.set(-(c.x + c.width / 2), 2.066, -c.y + 0.012); // same top edge as the old one line plate
       group.add(m);
     }
   }
@@ -385,7 +389,7 @@ function buildStorefront() {
     lamp: lam('#c8161d', 0.6), bulb: lit('#ffe9a8'), red: lit('#c8161d'), gold: lit('#f4c542'), wood: lam('#7a5234', 0.35),
     glass: new THREE.MeshBasicMaterial({ color: '#dff3f7', transparent: true, opacity: 0.13, depthWrite: false }),
     awning: new THREE.MeshBasicMaterial({ map: canvasTexture(512, 64, (g, w, h) => { for (let i = 0; i < 16; i++) { g.fillStyle = i % 2 ? '#fff6e6' : '#f08a1c'; g.fillRect((i * w) / 16, 0, w / 16 + 1, h); } }), side: THREE.DoubleSide }),
-    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261120zze') }),
+    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261120zzf') }),
     menu: new THREE.MeshBasicMaterial({ map: canvasTexture(256, 384, (g, w, h) => {
       g.fillStyle = '#c8161d'; g.fillRect(0, 0, w, h); g.fillStyle = '#f4c542'; g.fillRect(14, 14, w - 28, 44);
       const r = rng(11); g.fillStyle = '#fff3d6';
