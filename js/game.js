@@ -354,9 +354,9 @@ export class Table {
   needsShuffle(players = this.seats.length) {
     const s = this.settings;
     if (s.decks === 'csm') return true;
-    // Never start a round the shoe may not finish: keep 8 cards per betting seat plus 12 for the dealer,
+    // Never start a round the shoe may not finish: keep 10 cards per betting seat plus 12 for the dealer,
     // so the shuffle always happens between rounds and not in the middle of a hand.
-    if (this.shoe.length < Math.min(this.shoeSize || Infinity, 12 + 8 * players)) return true;
+    if (this.shoe.length < Math.min(this.shoeSize || Infinity, 12 + 10 * players)) return true;
     if (s.shuffleMode === 'rounds') return this.roundsSinceShuffle >= Number(s.shuffleEvery);
     const dealt = 1 - this.shoe.length / this.shoeSize;
     return dealt * 100 >= Number(s.penetration);
@@ -1072,7 +1072,7 @@ export class Table {
     const acts = ['hit', 'stand'];
     const two = h.cards.length === 2;
     if (two && !h.splitAces && p.chips >= h.bet) acts.push('double');
-    if (two && cardValue(h.cards[0]) === cardValue(h.cards[1]) && seat.hands.length < 4 && p.chips >= h.bet && !h.splitAces) acts.push('split');
+    if (two && cardValue(h.cards[0]) === cardValue(h.cards[1]) && p.chips >= h.bet && !h.splitAces) acts.push('split');
     if (two && seat.hands.length === 1 && this.settings.allowSurrender) acts.push('surrender');
     return acts;
   }

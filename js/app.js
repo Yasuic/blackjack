@@ -1,13 +1,13 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120zz';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261120zz';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120zz';
-import { tickSound, winSound } from './fx.js?v=20261120zz';
-import * as HX from './history.js?v=20261120zz';
-import { webglOK, initRoom } from './room3d.js?v=20261120zz';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120zz';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120zza';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261120zza';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120zza';
+import { tickSound, winSound } from './fx.js?v=20261120zza';
+import * as HX from './history.js?v=20261120zza';
+import { webglOK, initRoom } from './room3d.js?v=20261120zza';
+import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120zza';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -1227,7 +1227,7 @@ function shortFor(a) {
   if (!hand || !me || seat.playerId !== S.myId || hand.cards.length !== 2 || hand.splitAces || me.chips >= hand.bet) return 0;
   const ten = (c) => ['10', 'J', 'Q', 'K'].includes(c.r);
   const pair = hand.cards[0].r === hand.cards[1].r || (ten(hand.cards[0]) && ten(hand.cards[1]));
-  if (a === 'double' || (a === 'split' && pair && seat.hands.length < 4)) return hand.bet - me.chips;
+  if (a === 'double' || (a === 'split' && pair)) return hand.bet - me.chips;
   return 0;
 }
 
@@ -2013,7 +2013,7 @@ function handsHTML(st, s, i, mode, W, H) {
   const B0 = B;
   if (mineBig) { B = { ...B0, cwMax: 54 }; H = Math.round(H * 1.45); }
   if (tall) H = H * 2 + 2;
-  for (const rows of tall ? [2] : n > 2 ? [1, 2] : [1]) {
+  for (const rows of tall ? (n > 6 ? [2, 3] : [2]) : n > 2 ? [1, 2] : [1]) {
     const per = Math.ceil(n / rows), meta = rows > 1 ? B.meta1 : B.meta;
     let cw = Math.min(B.cwMax, (H / rows - meta - 2) / 2.26);
     for (let r = 0; r < rows; r++) {
@@ -2687,7 +2687,7 @@ function renderHostPanel(st) {
 }
 
 // Classic Las Vegas Strip rules: 4+ decks, dealer stands on all 17s, 3 to 2 blackjack,
-// double any two cards and after splits, split to 4 hands, aces split once, late surrender.
+// double any two cards and after splits, split as often as pairs come, aces split once, late surrender.
 // Settings changes go to a vote: every other player must say yes.
 const SETTING_NAMES = {
   seats: ['Seats at the table', (v) => String(v)],
@@ -2790,7 +2790,7 @@ function rulesHTML() {
       return `<div><h4>${sb.icon || ''} ${sb.name}</h4><p>${esc(sb.about)}</p><table>${sb.table.map(([l, m]) => `<tr><td>${esc(l)}</td><td>${m} to 1</td></tr>`).join('')}</table></div>`;
     }).join('')}
     <div><h4>Insurance</h4><p>Offered when the dealer shows an ace. Costs half your main bet.</p><table><tr><td>Dealer has blackjack</td><td>2 to 1</td></tr></table></div>
-    <div><h4>Main game</h4><p>Blackjack pays 3 to 2. Double on any first two cards, also after a split. Split up to 4 hands; split aces get one card each. Surrender gives back half your bet when the host allows it.</p><p>Chips are whole. With an odd bet, a win or a refund is rounded down and insurance is rounded up. A blackjack on 25 pays 37, and insurance on 25 costs 13.</p></div>
+    <div><h4>Main game</h4><p>Blackjack pays 3 to 2. Double on any first two cards, also after a split. Split every pair, with no limit on the number of hands; split aces get one card each. Surrender gives back half your bet when the host allows it.</p><p>Chips are whole. With an odd bet, a win or a refund is rounded down and insurance is rounded up. A blackjack on 25 pays 37, and insurance on 25 costs 13.</p></div>
   </div>`;
 }
 
