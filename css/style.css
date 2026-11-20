@@ -1585,3 +1585,10 @@ body.room3d:has(.room.walking) .hud3d .tray:has(.chip-rack), body.room3d:has(.ro
 
 /* View buttons are hidden unless switched on in the menu. Drag, wheel and pinch still move the view. */
 body.view-hidden .zoom-ctl { display: none !important; }
+
+/* Seat result on the bet circle once the round is over. */
+.spot-amt.spot-net { font-size: 17px; padding: 2px 10px; background: rgba(8,10,14,.94); border: 2px solid #fff; color: #fff; z-index: 6; }
+.spot-amt.spot-net.up { border-color: #7ef0b6; color: #7ef0b6; }
+.spot-amt.spot-net.down { border-color: #ff8a8a; color: #ff8a8a; }
+.felt.in3d .spot-amt.spot-net { font-size: 17px; bottom: -20px; }
+.seat.mini .spot-amt.spot-net { font-size: 12px; padding: 1px 6px; }

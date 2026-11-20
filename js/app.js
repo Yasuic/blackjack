@@ -1,13 +1,13 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120zx';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261120zx';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120zx';
-import { tickSound, winSound } from './fx.js?v=20261120zx';
-import * as HX from './history.js?v=20261120zx';
-import { webglOK, initRoom } from './room3d.js?v=20261120zx';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120zx';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120zy';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261120zy';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120zy';
+import { tickSound, winSound } from './fx.js?v=20261120zy';
+import * as HX from './history.js?v=20261120zy';
+import { webglOK, initRoom } from './room3d.js?v=20261120zy';
+import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120zy';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -890,7 +890,8 @@ function aimSeat(st) {
   const phoneBetting = innerWidth < 700 && (st.phase === 'betting' || st.phase === 'settled') && a !== null;
   S.home = phoneBetting ? a : mine.includes(S.home) ? S.home : mine.length ? mine[0] : null;
   me.home = S.home;
-  if (st.rebets) st.rebet = a !== null ? st.rebets[a] || null : null;
+  // Rebet covers every seat I played last round, so it is offered even when the seat in hand was not one of them.
+  if (st.rebets) st.rebet = a !== null ? st.rebets[a] || Object.values(st.rebets).find(Boolean) || null : null;
 }
 function pickSeat(i) {
   const st = S.state;
@@ -965,6 +966,12 @@ function placeBet(bet, ready = false) {
   render();
 }
 // Put last round's bet down again. Only ever called from the Rebet button or the B key.
+// What Rebet will put down: the sum over all my seats that played last round.
+function rebetSum(st) {
+  const rs = Object.values(st.rebets || {}).filter(Boolean);
+  return rs.length > 1 ? rs.reduce((a, r) => a + betTotal(r), 0) : betTotal(st.rebet);
+}
+function rebetHands(st) { const n = Object.values(st.rebets || {}).filter(Boolean).length; return n > 1 ? ` on ${n} hands` : ''; }
 function doRebet() {
   const st = S.state;
   if (!st) return;
@@ -972,6 +979,24 @@ function doRebet() {
   if (!seat || !st.rebet) return;
   if (st.phase === 'settled') { S.rebetWhenOpen = S.rebetWhenOpen === st.round ? null : st.round; render(); return; }
   if (st.phase !== 'betting') return;
+  // Several seats: every seat I played last round gets its own bet of last round back, side bets included.
+  const own = (me.seats || []).filter((i) => st.seats[i] && st.rebets?.[i]);
+  if (own.length > 1 || (own.length === 1 && own[0] !== me.seat)) {
+    let n = 0;
+    for (const i of own) {
+      const o = st.seats[i];
+      if (o.out || o.ready || betTotal(o.bet)) continue;
+      const r = st.rebets[i];
+      send({ t: 'bet', main: r.main, sides: { ...r.sides }, target: r.target, ready: false, seq: ++S.betSeq, seat: i, auto: !!S.auto?.on });
+      if (S.role !== 'host') o.bet = { ...o.bet, main: r.main, sides: { ...r.sides } };
+      flyChip($('.rebet-btn') || $('#float-balance'), $(`#spot-${i}`), r.main);
+      n++;
+    }
+    if (!n) toast('Your seats already have bets down. Clear them first to rebet.');
+    S.undo = []; S.mainChips = []; S.sideChips = {};
+    render();
+    return;
+  }
   if (betTotal(seat.bet)) { toast('You already have a bet down. Clear it first to rebet.'); return; }
   S.undo.push(structuredClone(seat.bet));
   S.mainChips = [];
@@ -1909,11 +1934,11 @@ function frozenHTML(st) {
 
 // Big "Deal me in" button on the table once you have a bet down.
 function dealMeInHTML(st) {
-  const { seat, isBanker } = myInfo(st);
+  const { me, seat, isBanker } = myInfo(st);
   // Only for a fresh bet, and only when the table can deal: with no dealer, or a dealer whose chips
   // do not cover the bets, the line above already says what the table is waiting for.
   // A new hand with nothing down yet: the big middle button puts last hand's whole bet back, side bets included.
-  if (!isBanker && seat && st.phase === 'betting' && st.rebet && !betTotal(seat.bet)) return `<div class="deal-me-in"><button class="deal-btn rebet-btn" data-act="rebet" title="The same bet as last hand, side bets included (B)">↻ Rebet ${money(betTotal(st.rebet))}</button></div>`;
+  if (!isBanker && seat && st.phase === 'betting' && st.rebet && !(me?.seats || [me?.seat]).some((i) => st.seats[i] && betTotal(st.seats[i].bet))) return `<div class="deal-me-in"><button class="deal-btn rebet-btn" data-act="rebet" title="The same bet as last hand, side bets included (B)">↻ Rebet ${money(rebetSum(st))}${rebetHands(st)}</button></div>`;
   if (isBanker || !seat || st.phase !== 'betting' || !seat.bet.main || st.noDealer || st.bankShort) return '';
   if (seat.ready) {
     const slow = st.seats.filter((s) => s && !s.ready && s.connected !== false && s.playerId !== S.myId).map((s) => s.name);
@@ -1921,7 +1946,6 @@ function dealMeInHTML(st) {
   }
   if (seat.bet.main < st.settings.minBet) return `<div class="deal-me-in waiting"><span class="under-min">Table minimum ${money(st.settings.minBet)}. Add ${money(st.settings.minBet - seat.bet.main)} more to be dealt in.</span></div>`;
   // One press deals in every seat of mine that has a bet of the minimum or more.
-  const me = st.players.find((p) => p.id === S.myId);
   const open = (me?.seats || []).filter((i) => st.seats[i] && !st.seats[i].out && !st.seats[i].ready && st.seats[i].bet.main >= st.settings.minBet).length;
   return `<div class="deal-me-in"><button class="deal-btn" data-act="ready" ${open > 1 ? 'title="Deals in all your seats that have a bet"' : ''}>Deal me in${open > 1 ? ` (${open} hands)` : ''}</button></div>`;
 }
@@ -2094,6 +2118,8 @@ function sideKeys(st) { return (st?.settings?.sideBets || SIDE_KEYS).filter((k) 
 // The main betting circle with the side bets in a ring around it.
 function spotAreaHTML(st, s, i, isMe, mainAmt) {
   const canBet = isMe && st.phase === 'betting';
+  // Once the round is over the label on the circle says what this seat won or lost, side bets included.
+  const settledNet = st.phase === 'settled' && s?.hands?.length && !S.dealing && typeof s.net === 'number' ? s.net : null;
   const keys = sideKeys(st).filter((k) => !SIDE_BETS[k].pvp); // bets on your own cards only; the PvP bet has its own button
   const n = Math.max(1, keys.length);
   // Side bets are slices of one ring around the main bet.
@@ -2117,7 +2143,7 @@ function spotAreaHTML(st, s, i, isMe, mainAmt) {
   const ins = s?.insurance ? `<span class="ins-tag">Insurance ${money(s.insurance)}</span>` : '';
   return `<div class="spot-area ${canBet ? 'live' : ''}">
     ${sides}
-    <div class="spot" id="spot-${i}" ${canBet ? `data-act="main-spot" title="${S.chip ? `Tap to add a ${money(S.chip)} chip` : 'Tap to take your last chip off. Pick a chip below to add instead.'}"` : ''}>${stackHTML(mainAmt)}<span class="spot-amt">${mainAmt ? money(mainAmt) : ''}</span></div>
+    <div class="spot" id="spot-${i}" ${canBet ? `data-act="main-spot" title="${S.chip ? `Tap to add a ${money(S.chip)} chip` : 'Tap to take your last chip off. Pick a chip below to add instead.'}"` : ''}>${stackHTML(mainAmt)}${settledNet !== null ? `<span class="spot-amt spot-net ${settledNet > 0 ? 'up' : settledNet < 0 ? 'down' : ''}" title="This seat's result for the round, side bets included">${settledNet > 0 ? 'Won +' + money(settledNet) : settledNet < 0 ? 'Lost ' + money(-settledNet) : 'Even'}</span>` : `<span class="spot-amt">${mainAmt ? money(mainAmt) : ''}</span>`}</div>
     ${ins}
     ${pvpTagsHTML(st, i)}
   </div>`;
@@ -2488,7 +2514,7 @@ function trayInner(st) {
     const many = ownS.length > 1 ? ` on ${ownS.length} hands` : '';
     const head = !seat.hands.length && ownS.length < 2 ? 'You sat this round out' : rnet > 0 ? `You won ${money(rnet)}${many}` : rnet < 0 ? `You lost ${money(-rnet)}${many}` : 'You broke even';
     const queued = S.rebetWhenOpen === st.round;
-    const rb = st.rebet ? `<button class="btn gold rebet-btn ${queued ? 'on' : ''}" data-act="rebet" title="Bet the same as last round (B)">${queued ? `✓ Rebet ${money(betTotal(st.rebet))} goes down when betting opens. Tap to cancel` : `↻ Rebet ${money(betTotal(st.rebet))}`}</button>` : '';
+    const rb = st.rebet ? `<button class="btn gold rebet-btn ${queued ? 'on' : ''}" data-act="rebet" title="Bet the same as last round (B)">${queued ? `✓ Rebet ${money(rebetSum(st))}${rebetHands(st)} goes down when betting opens. Tap to cancel` : `↻ Rebet ${money(rebetSum(st))}${rebetHands(st)}`}</button>` : '';
     return `<div class="tray-msg round-result"><b class="${rnet > 0 ? 'up' : rnet < 0 ? 'down' : ''}">${head}</b>${parts.length ? `<div class="rr-parts">${parts.join('')}</div>` : ''}</div>
       <div class="actions">${rb}<span class="hint">Betting opens when the cards are cleared.</span></div>`;
   }
@@ -2497,7 +2523,7 @@ function trayInner(st) {
     const s = st.settings;
     const limits = `<small>Table limits</small><span>Bet ${money(s.minBet)} to ${money(s.maxBet)}</span>${sideKeys(st).length ? `<span>Side bets up to ${money(s.maxSideBet)}</span>` : ''}`;
     // With no bet down there is nothing to clear, so that place offers last round's bet again.
-    const rebet = st.rebet && !betTotal(b) ? `<button class="btn gold rebet-btn" data-act="rebet" title="Bet the same as last round (B)">↻ Rebet ${money(betTotal(st.rebet))}</button>` : '';
+    const rebet = st.rebet && !betTotal(b) ? `<button class="btn gold rebet-btn" data-act="rebet" title="Bet the same as last round (B)">↻ Rebet ${money(rebetSum(st))}${rebetHands(st)}</button>` : '';
     return `
       <div class="tray-row">
         <div class="balance limits">${limits}</div>
