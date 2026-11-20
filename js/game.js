@@ -701,6 +701,16 @@ export class Table {
     p.totalIn = (p.totalIn ?? this.settings.startChips) + (p.chips - before);
   }
 
+  // Sit a seat out, or back in. The player keeps the seat; it gets no cards and nobody waits for it.
+  // In a round the hand in play is still finished: the seat is out from the next round.
+  sitOut(clientId, seatIdx, on) {
+    const { seat, idx } = this.mustSeat(clientId, seatIdx);
+    if (!!seat.out === !!on) return;
+    seat.out = !!on;
+    if (on && !seat.hands.length && (this.phase === 'betting' || this.phase === 'settled')) { seat.bet = { main: 0, sides: {} }; seat.ready = false; }
+    this.ev(on ? 'sit out' : 'sit back in', clientId, `seat ${idx + 1}`);
+  }
+
   // A seated player agreed to sit out. Between rounds they leave now; in a round they leave when it ends.
   leaveAfter(clientId) {
     const p = this.mustPlayer(clientId);
@@ -754,6 +764,7 @@ export class Table {
     if (this.phase !== 'betting' && this.phase !== 'settled') throw new Error('Bets are closed.');
     if (this.phase === 'settled') this.startBetting();
     const { p, seat, idx } = this.mustSeat(clientId, bet.seat);
+    if (seat.out) throw new Error('This seat is sitting out. Tap "Sit back in" on it first.');
     const s = this.settings;
     const main = Math.max(0, Math.round(Number(bet.main) || 0));
     const sides = {};
@@ -834,6 +845,7 @@ export class Table {
       if (p.kicked || p.leaving) { this.seats[i] = null; this.fixSeat(p); continue; }
       // Every round starts with empty betting spots; players put fresh chips down.
       this.seats[i] = emptySeat(seat.playerId);
+      if (seat.out) this.seats[i].out = true; // a seat that sits out stays out until its player comes back in
     }
     for (const p of Object.values(this.players)) if (p.leaving) { p.leaving = false; this.ev('leave seat (agreed to sit out)', p.id); }
   }
@@ -1263,6 +1275,7 @@ export class Table {
           connected: p.connected,
           bet: s.bet,
           ready: s.ready,
+          out: !!s.out,
           betSeq: s.betSeq || 0,
           streak: this.players[s.playerId]?.streak || 0,
           insurance: s.insurance,
