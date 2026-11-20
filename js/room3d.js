@@ -123,11 +123,10 @@ const OFFICE_SIGN_LINES = ['Hours: 8AM to infinity AM', 'Compensation: negative 
 
 // Builds the whole office as a handful of merged meshes (one per material). Units are metres with the
 // floor at y = 0; the caller scales and places the group. Scene X = -plan x, Z = -plan y.
-function buildOffice(signText, midShift = 0, midClear = 0) {
-  // The middle desks and their chairs move along x by midShift; a desk that would still reach into the table's space is left out.
-  const D0 = OFFICE;
-  const midGone = new Set(D0.furniture.filter((f) => f.mid && f.cx + midShift - f.w / 2 < midClear).map((f) => f.cx));
-  const D = { ...D0, furniture: D0.furniture.filter((f) => !(f.mid && midGone.has(f.cx))).map((f) => (f.mid ? { ...f, cx: f.cx + midShift } : f)), chairs: D0.chairs.filter((c) => !(c.mid && midGone.has(c.cx))).map((c) => (c.mid ? { ...c, cx: c.cx + midShift } : c)) };
+function buildOffice(signText, midShift = 0, midScale = 1) {
+  // The middle desks and their chairs move along x by midShift. Where the room is too short for them (a deep phone table), the block is squeezed along x so that all eight desks stay.
+  const D0 = OFFICE, mx = (x) => 4.276 + midShift + (x - 4.276) * midScale;
+  const D = { ...D0, furniture: D0.furniture.map((f) => (f.mid ? { ...f, cx: mx(f.cx), w: f.w * midScale } : f)), chairs: D0.chairs.map((c) => (c.mid ? { ...c, cx: mx(c.cx) } : c)) };
   const Hh = { ceil: 2.7, door: 2.1, sill: 0.85, winTop: 2.55, cab: 2.7, desk: 0.749 };
   const TILE = { L: 1.2176, S: 0.6064 };
   const mk = (o) => new THREE.MeshStandardMaterial(o);
@@ -152,7 +151,7 @@ function buildOffice(signText, midShift = 0, midClear = 0) {
     chrome: mk({ color: '#b9bec4', roughness: 0.25, metalness: 0.9 }),
     screen: mk({ color: '#0d0f12', roughness: 0.25, metalness: 0.2 }),
     // What the office screens show: the ARC Group logo, from the photo of it, lit like a screen that is on.
-    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261120zzm'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
+    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261120zzn'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
     dark: mk({ color: '#30353c', roughness: 0.6 }),
   };
   const group = new THREE.Group();
@@ -396,7 +395,7 @@ function buildOffice(signText, midShift = 0, midClear = 0) {
   };
   // The coffee run: from the chair to the nearest aisle, along the aisles to the main door, and out to the street side.
   const walkers = [];
-  const A1 = 2.35, A2 = 6.05, XR = Math.min(11.1, 9.8635 + midShift + 0.32);
+  const A1 = 2.35, A2 = 6.05, XR = Math.min(11.2, mx(9.8635) + 0.32);
   const toAisle = (c) => { // from a chair to the aisle on the door side
     const pts = [[c.cx, c.cy]];
     if (c.room === 'securities') pts.push([12.25, c.cy], [12.25, 4.8], [XR, 4.8], [XR, A1]);
@@ -626,7 +625,7 @@ function buildOffice(signText, midShift = 0, midClear = 0) {
     parent = at(-c.cx, 0, -c.cy, ry);
     if (!c.stand) officeChair();
     // Desk chairs (yellow and white desks) have someone working at the keyboard. Meeting and boardroom chairs stay empty.
-    if (best && desks.includes(best)) worker(D0.chairs.findIndex((q) => q.cy === c.cy && (q.cx === c.cx || (q.mid && c.mid && Math.abs(q.cx + midShift - c.cx) < 1e-6))), Math.sqrt(bd), ry, best.hh || Hh.desk, c.stand, Math.abs(Math.sin(ry)) > 0.7 ? best.w : best.d, c);
+    if (best && desks.includes(best)) worker(D0.chairs.findIndex((q) => q.cy === c.cy && (q.cx === c.cx || (q.mid && c.mid && Math.abs(mx(q.cx) - c.cx) < 1e-6))), Math.sqrt(bd), ry, best.hh || Hh.desk, c.stand, Math.abs(Math.sin(ry)) > 0.7 ? best.w : best.d, c);
     parent = null;
   });
   let nextTrip = 0, dbgTrip = null, nextTalk = 0, snowAt = 0;
@@ -833,7 +832,7 @@ function buildStorefront() {
     lamp: lam('#c8161d', 0.6), bulb: lit('#ffe9a8'), red: lit('#c8161d'), gold: lit('#f4c542'), wood: lam('#7a5234', 0.35),
     glass: new THREE.MeshBasicMaterial({ color: '#dff3f7', transparent: true, opacity: 0.13, depthWrite: false }),
     awning: new THREE.MeshBasicMaterial({ map: canvasTexture(512, 64, (g, w, h) => { for (let i = 0; i < 16; i++) { g.fillStyle = i % 2 ? '#fff6e6' : '#f08a1c'; g.fillRect((i * w) / 16, 0, w / 16 + 1, h); } }), side: THREE.DoubleSide }),
-    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261120zzm') }),
+    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261120zzn') }),
     menu: new THREE.MeshBasicMaterial({ map: canvasTexture(256, 384, (g, w, h) => {
       g.fillStyle = '#c8161d'; g.fillRect(0, 0, w, h); g.fillStyle = '#f4c542'; g.fillRect(14, 14, w - 28, 44);
       const r = rng(11); g.fillStyle = '#fff3d6';
@@ -1013,8 +1012,8 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
   const halfDepth = (H / 2 + RAIL) / S;
   OFFICE_AT.x = 3.11 + 0.45 + halfDepth;
   const dealerEnd = OFFICE_AT.x + halfDepth + 0.42;
-  const midShift = Math.max(0, Math.min(1.19, dealerEnd - 4.276));
-  const office = buildOffice(OFFICE_SIGN, midShift, dealerEnd - 0.02);
+  const midShift = Math.max(0, dealerEnd - 4.276), midScale = Math.min(1, (11.05 - 4.276 - midShift) / 5.5875);
+  const office = buildOffice(OFFICE_SIGN, midShift, midScale);
   office.scale.setScalar(S);
   { const sm = office.userData.snowMat?.(); if (sm) sm.size = 0.026 * S; }
   // Turned a quarter: plan x runs away from the players (toward the dealer and the desks), plan y to their right.
