@@ -1,13 +1,13 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120zt';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261120zt';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120zt';
-import { tickSound, winSound } from './fx.js?v=20261120zt';
-import * as HX from './history.js?v=20261120zt';
-import { webglOK, initRoom } from './room3d.js?v=20261120zt';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120zt';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120zu';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261120zu';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120zu';
+import { tickSound, winSound } from './fx.js?v=20261120zu';
+import * as HX from './history.js?v=20261120zu';
+import { webglOK, initRoom } from './room3d.js?v=20261120zu';
+import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120zu';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -1522,13 +1522,24 @@ function showResult(st) {
   const { seat, isBanker } = myInfo(st);
   let net = null;
   if (isBanker) net = st.banker.net;
-  else if (seat && seat.hands.length) net = seat.net;
+  else {
+    // All of my seats in this round count together.
+    const { me } = myInfo(st);
+    const own = (me?.seats || (seat ? [me.seat] : [])).map((i) => st.seats[i]).filter((x) => x && x.hands.length);
+    if (own.length) net = own.reduce((a, x) => a + (x.net || 0), 0);
+    else if (seat && seat.hands.length) net = seat.net;
+  }
   if (net === null || net === undefined) return;
+  // Running total since joining the table, the same number as the ledger.
+  const row = (st.ledger || []).find((r) => r.id === S.myId);
+  const all = row ? row.chips - row.totalIn - (row.houseNet || 0) : null;
+  const allLine = all === null || st.frozen ? '' : `<em class="rp-total ${all > 0 ? 'up' : all < 0 ? 'down' : ''}">Total ${all > 0 ? 'profit' : all < 0 ? 'loss' : 'even'}${all ? ' ' + money(Math.abs(all)) : ''}</em>`;
   $('#result-pop')?.remove();
   const el = document.createElement('div');
   el.id = 'result-pop';
   el.className = 'result-pop ' + (net > 0 ? 'win' : net < 0 ? 'lose' : 'push');
   el.innerHTML = (net > 0 ? `<small>You win</small><b>${money(net)}</b>` : net < 0 ? `<small>You lose</small><b>${money(-net)}</b>` : '<small>Push</small><b>Even</b>') +
+    allLine +
     (S.timedOutRound === st.round ? '<em class="warn">Time ran out. Your hand was stood.</em>' : '') +
     (st.frozen ? '<em>House dealer: not counted in the ledger</em>' : '');
   const felt = document.body;
@@ -2461,10 +2472,14 @@ function trayInner(st) {
     if (S.dealing) return `<div class="tray-msg round-result"><b>${S.dealMany ? 'Dealing the cards' : 'Dealer is playing'}</b></div>`;
     const parts = seat.hands.map((h, j) => `<span class="rr-part ${handNet(h) > 0 ? 'up' : handNet(h) < 0 ? 'down' : ''}">${seat.hands.length > 1 ? `Hand ${j + 1}: ` : ''}${handResultText(h)}</span>`)
       .concat(seat.hands.length ? seat.sideResults.map((r) => `<span class="rr-part ${r.win ? 'up' : r.push ? '' : 'down'}">${esc(r.name)}: ${sideAmount(r)}</span>`) : []);
-    const head = !seat.hands.length ? 'You sat this round out' : seat.net > 0 ? `You won ${money(seat.net)}` : seat.net < 0 ? `You lost ${money(-seat.net)}` : 'You broke even';
+    // The headline counts all of my seats in this round together.
+    const ownS = (myInfo(st).me?.seats || []).map((i) => st.seats[i]).filter((x) => x && x.hands.length);
+    const rnet = ownS.length > 1 ? ownS.reduce((a, x) => a + (x.net || 0), 0) : seat.net;
+    const many = ownS.length > 1 ? ` on ${ownS.length} hands` : '';
+    const head = !seat.hands.length && ownS.length < 2 ? 'You sat this round out' : rnet > 0 ? `You won ${money(rnet)}${many}` : rnet < 0 ? `You lost ${money(-rnet)}${many}` : 'You broke even';
     const queued = S.rebetWhenOpen === st.round;
     const rb = st.rebet ? `<button class="btn gold rebet-btn ${queued ? 'on' : ''}" data-act="rebet" title="Bet the same as last round (B)">${queued ? `✓ Rebet ${money(betTotal(st.rebet))} goes down when betting opens. Tap to cancel` : `↻ Rebet ${money(betTotal(st.rebet))}`}</button>` : '';
-    return `<div class="tray-msg round-result"><b class="${seat.net > 0 ? 'up' : seat.net < 0 ? 'down' : ''}">${head}</b>${parts.length ? `<div class="rr-parts">${parts.join('')}</div>` : ''}</div>
+    return `<div class="tray-msg round-result"><b class="${rnet > 0 ? 'up' : rnet < 0 ? 'down' : ''}">${head}</b>${parts.length ? `<div class="rr-parts">${parts.join('')}</div>` : ''}</div>
       <div class="actions">${rb}<span class="hint">Betting opens when the cards are cleared.</span></div>`;
   }
   if (ph === 'betting') {

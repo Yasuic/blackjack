@@ -1574,3 +1574,7 @@ body.room3d:has(.room.walking) .hud3d .tray:has(.chip-rack), body.room3d:has(.ro
   body.in-room .float-throw { bottom: 214px; }
   body.in-room #sitout-bar { bottom: 250px; }
 }
+
+/* Running total under the round result. */
+.result-pop em.rp-total { display: block; flex-basis: 100%; margin: 0 0 3px; font-style: normal; font-size: 15px; font-weight: 800; color: #fff; }
+.result-pop em.rp-total.up { color: #7ef0b6; } .result-pop em.rp-total.down { color: #ff8a8a; }

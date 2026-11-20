@@ -354,8 +354,9 @@ export class Table {
   needsShuffle(players = this.seats.length) {
     const s = this.settings;
     if (s.decks === 'csm') return true;
-    // Never start a round with too few cards for a normal round.
-    if (this.shoe.length < 6 + 5 * players) return true;
+    // Never start a round the shoe may not finish: keep 8 cards per betting seat plus 12 for the dealer,
+    // so the shuffle always happens between rounds and not in the middle of a hand.
+    if (this.shoe.length < Math.min(this.shoeSize || Infinity, 12 + 8 * players)) return true;
     if (s.shuffleMode === 'rounds') return this.roundsSinceShuffle >= Number(s.shuffleEvery);
     const dealt = 1 - this.shoe.length / this.shoeSize;
     return dealt * 100 >= Number(s.penetration);
