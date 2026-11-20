@@ -1,12 +1,12 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120o';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120o';
-import { tickSound, winSound } from './fx.js?v=20261120o';
-import * as HX from './history.js?v=20261120o';
-import { webglOK, initRoom } from './room3d.js?v=20261120o';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120o';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120p';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120p';
+import { tickSound, winSound } from './fx.js?v=20261120p';
+import * as HX from './history.js?v=20261120p';
+import { webglOK, initRoom } from './room3d.js?v=20261120p';
+import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120p';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -343,10 +343,12 @@ function onHostMessage(conn, msg) {
     S.table.join(id, msg.name, msg.buyIn, msg.look);
     hostChanged();
     if (S.snapSent) { try { conn.send({ t: 'snap', snap: S.snapSent }); } catch {} }
+    if (S.chat?.length) { try { conn.send({ t: 'chat-log', list: S.chat.slice(-40) }); } catch {} }
     return;
   }
   if (!conn.clientId) return;
   if (msg.t === 'throw') { relayThrow(conn.clientId, msg); return; }
+  if (msg.t === 'chat') { relayChat(conn.clientId, msg); return; }
   if (msg.t === 'keys') { gotNonce(msg, conn.clientId); return; }
   if (msg.t === 'hist-get') return; // hand history is for the host only and is never sent to players
   fresh(moveCount(msg), () => runAction(conn.clientId, msg, (err) => conn.open && conn.send({ t: 'error', msg: err, bet: msg.t === 'bet' })));
@@ -744,6 +746,8 @@ function connectToHost() {
     else if (msg.t === 'error') { toast(msg.msg); if (msg.bet) dropPend(); }
     else if (msg.t === 'snap') S.snap = String(msg.snap || '').slice(0, 400000);
     else if (msg.t === 'say') toast(String(msg.msg || '').slice(0, 200));
+    else if (msg.t === 'chat') gotChat(msg);
+    else if (msg.t === 'chat-log') { if (Array.isArray(msg.list) && !S.chat?.length) { S.chat = []; msg.list.slice(-40).forEach((m) => gotChat(m, true)); } }
     else if (msg.t === 'ask-out') showAsk(msg);
     else if (msg.t === 'note') showNote(msg);
     else if (msg.t === 'fx') showThrow(msg);
@@ -772,6 +776,7 @@ function connectToHost() {
 
 // Send a move: players send it to the host, the host runs it directly.
 function send(msg) {
+  if (S.role === 'host' && msg.t === 'chat') { relayChat(S.myId, msg); return; }
   if (S.role === 'host' && msg.t === 'throw') relayThrow(S.myId, msg);
   else if (S.role === 'host') fresh(moveCount(msg), () => runAction(S.myId, msg, (err) => { toast(err); if (msg.t === 'bet') dropPend(); }));
   else if (S.conn?.open) S.conn.send(msg);
@@ -2056,11 +2061,72 @@ function sitOutHTML(st) {
   if (!mine.length || st.banker?.id === S.myId) return '';
   return mine.map((i) => { const o = st.seats[i].out; return `<button class="seat-out ${o ? 'on' : ''}" data-act="sit-out" data-seat="${i}" data-on="${o ? 0 : 1}" title="${o ? 'Play this seat again from the next round' : 'Skip rounds on this seat. You keep the seat, and a hand in play is still finished.'}">${mine.length > 1 ? `Seat ${i + 1}: ` : ''}${o ? 'Sit back in' : 'Sit out'}</button>`; }).join('');
 }
+// ---------- Live chat ----------
+// Text chat for everyone at the table, players and watchers. It travels over the table's own
+// connection: a guest sends a line to the host, and the host passes it to everyone. Nothing is stored online.
+function relayChat(from, msg) {
+  const p = S.table?.players[from];
+  const text = String(msg.text ?? '').replace(/\s+/g, ' ').trim().slice(0, 200);
+  if (!p || !text) return;
+  S.chatAt ||= {};
+  const now = Date.now();
+  if (now - (S.chatAt[from] || 0) < 700) return; // at most one line every 0.7 seconds per person
+  S.chatAt[from] = now;
+  const out = { t: 'chat', id: from, name: String(p.name).slice(0, 16), text, at: now };
+  for (const c of Object.values(S.conns || {})) { if (c?.open) { try { c.send(out); } catch {} } }
+  gotChat(out);
+}
+function gotChat(m, old = false) {
+  S.chat ||= [];
+  S.chat.push({ id: String(m.id || ''), name: String(m.name || 'Someone').slice(0, 16), text: String(m.text || '').slice(0, 200), at: Number(m.at) || Date.now() });
+  if (S.chat.length > 100) S.chat.splice(0, S.chat.length - 100);
+  if (old) return;
+  if (S.chatOpen) drawChat();
+  else if (m.id !== S.myId) { S.chatUnread = (S.chatUnread || 0) + 1; chatPeek(S.chat[S.chat.length - 1]); if (S.state) drawSitOut(S.state); }
+}
+const chatLine = (m) => `<div class="chat-line ${m.id === S.myId ? 'mine' : ''}"><b>${esc(m.name)}</b> ${esc(m.text)}</div>`;
+function drawChat() {
+  const list = $('#chat-list');
+  if (!list) return;
+  list.innerHTML = (S.chat || []).map(chatLine).join('') || '<div class="chat-empty">Say hello to the table.</div>';
+  list.scrollTop = list.scrollHeight;
+}
+// A new line while the chat is closed shows for a few seconds beside the chat button, then goes.
+function chatPeek(m) {
+  let el = $('#chat-peek');
+  if (!el || !el.isConnected) { el = document.createElement('div'); el.id = 'chat-peek'; app.appendChild(el); }
+  el.innerHTML = chatLine(m);
+  el.classList.add('show');
+  clearTimeout(S.chatPeekT);
+  S.chatPeekT = setTimeout(() => el.classList.remove('show'), 6000);
+}
+function toggleChat(on = !S.chatOpen) {
+  S.chatOpen = !!on;
+  let el = $('#chat-panel');
+  if (!on) { el?.remove(); if (S.state) drawSitOut(S.state); return; }
+  if (!el || !el.isConnected) {
+    el = document.createElement('div'); el.id = 'chat-panel';
+    el.innerHTML = '<div class="chat-head"><b>Table chat</b><button class="chat-x" data-act="chat-close" aria-label="Close chat">✕</button></div><div id="chat-list"></div><form id="chat-form"><input id="chat-input" maxlength="200" autocomplete="off" placeholder="Type a message" /><button class="btn small" type="submit">Send</button></form>';
+    app.appendChild(el);
+    el.querySelector('#chat-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const inp = $('#chat-input'), text = inp.value.trim();
+      if (!text) return;
+      send({ t: 'chat', text }); inp.value = ''; inp.focus();
+    });
+    el.querySelector('#chat-input').addEventListener('keydown', (e) => { if (e.key === 'Escape') toggleChat(false); });
+  }
+  S.chatUnread = 0; $('#chat-peek')?.classList.remove('show');
+  drawChat();
+  if (S.state) drawSitOut(S.state);
+  if (!matchMedia('(max-width: 700px)').matches) $('#chat-input')?.focus();
+}
+
 function drawSitOut(st) {
   let el = $('#sitout-bar');
   if (el && !el.isConnected) el = null;
   if (!el) { el = document.createElement('div'); el.id = 'sitout-bar'; app.appendChild(el); }
-  const h = st ? sitOutHTML(st) : '';
+  const h = st ? sitOutHTML(st) + `<button class="chat-btn ${S.chatOpen ? 'on' : ''}" data-act="chat" title="Chat with everyone at the table">💬 Chat${S.chatUnread ? `<i>${S.chatUnread > 9 ? '9+' : S.chatUnread}</i>` : ''}</button>` : '';
   if (el.dataset.h !== h) { el.dataset.h = h; el.innerHTML = h; }
 }
 function autoBarHTML(st) {
@@ -2582,6 +2648,8 @@ function runAct(el) {
     }
     case 'train': safeSet('bj-train', trainingOn() ? '0' : '1'); el.textContent = trainingOn() ? '🧮 Count training: on' : '🧮 Count training: off'; S.train = { right: 0, total: 0 }; render(); break;
     case 'chart': openChart(); break;
+    case 'chat': toggleChat(); break;
+    case 'chat-close': toggleChat(false); break;
     case 'hints': safeSet('bj-hints', hintsOn() ? '0' : '1'); el.textContent = hintsOn() ? '💡 Strategy hints: on' : '💡 Strategy hints: off'; render(); break;
     case 'buyin-open': openBuyIn(); break;
     case 'ledger-toggle': { const l = $('#ledger'); l.classList.toggle('closed'); safeSet('bj-ledger', l.classList.contains('closed') ? '0' : '1'); renderLedger(S.state); break; }
