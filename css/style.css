@@ -1027,7 +1027,7 @@ body.aiming .seat.me[id^="seat-"] { outline: none; cursor: default; }
 /* ---------- Phone ---------- */
 @media (max-width: 700px) {
   body.in-room .main.player { padding-top: 44px; }
-  body.in-room .topbar { gap: 6px; padding: 8px; overflow: hidden; }
+  body.in-room .topbar { gap: 6px; padding: 8px; overflow: visible; overflow-x: clip; }
   body.in-room .topbar .title { font-size: 12px; letter-spacing: 1px; }
   body.in-room .topbar .pill { min-width: 0; flex-shrink: 1; overflow: hidden; text-overflow: ellipsis; }
   body.in-room .topbar .fair-pill { flex-shrink: 0; }
