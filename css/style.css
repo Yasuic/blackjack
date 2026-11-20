@@ -1519,3 +1519,8 @@ body.room3d:has(.room.walking) .hud3d .tray:has(.chip-rack), body.room3d:has(.ro
 #hist-panel .hp-seat span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #hist-panel .up { color: #4fd18a; } #hist-panel .down { color: #ff7b7b; }
 @media (max-width: 700px) { #hist-panel { left: 8px; top: 122px; width: 150px; max-height: 22vh; font-size: 9.5px; } }
+
+/* Sit out buttons: easy to find at the left edge, gold like the other main buttons. */
+#sitout-bar .seat-out { border: 1.5px solid var(--gold); color: var(--gold); font-size: 14px; padding: 8px 14px; box-shadow: 0 4px 14px rgba(0,0,0,.45); }
+#sitout-bar .seat-out:hover { background: var(--gold); color: #1b1300; }
+@media (max-width: 700px) { #sitout-bar .seat-out { font-size: 11.5px; padding: 4px 9px; border-width: 1px; } }
