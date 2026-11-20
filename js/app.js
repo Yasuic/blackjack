@@ -1,13 +1,13 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120zb';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261120zb';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120zb';
-import { tickSound, winSound } from './fx.js?v=20261120zb';
-import * as HX from './history.js?v=20261120zb';
-import { webglOK, initRoom } from './room3d.js?v=20261120zb';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120zb';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120zd';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261120zd';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120zd';
+import { tickSound, winSound } from './fx.js?v=20261120zd';
+import * as HX from './history.js?v=20261120zd';
+import { webglOK, initRoom } from './room3d.js?v=20261120zd';
+import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120zd';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -1942,6 +1942,10 @@ function handsHTML(st, s, i, mode, W, H) {
   const split = n > 1;
   const hand = (h, j) => {
     const active = turn && st.turn.hand === j;
+    // The hand in play lifts off the felt. The hand that was just in play comes back down once.
+    const lk = `${st.round}:${i}:${j}`;
+    if (active && S.liftKey !== lk) { S.dropKey = S.liftKey; S.dropAt = Date.now(); S.liftKey = lk; S.liftAt = Date.now(); }
+    const fresh = active && Date.now() - S.liftAt < 500, dropping = !active && S.dropKey === lk && Date.now() - S.dropAt < 500;
     const k = h.doubled ? h.cards.length - 1 : h.cards.length;
     const fanW = fanUnits(h.cards.length, h.doubled) * cw;
     const w = Math.max(fanW, B.minW);
@@ -1959,7 +1963,7 @@ function handsHTML(st, s, i, mode, W, H) {
     const total = h.cards.length && !busy ? `<span class="total ${h.total > 21 ? 'bust' : ''}">${h.total > 21 ? 'Bust ' + h.total : h.total + (h.soft && h.total < 21 ? ' soft' : '')}</span>` : '';
     const bet = split ? `<span class="hand-bet" title="Bet on this hand"><span class="chipv hb-chip ${chipClass(h.bet)}"></span><span class="hb-amt">${money(h.bet)}</span></span>` : (h.doubled ? `<span class="dbl-tag">Doubled ${money(h.bet)}</span>` : '');
     const line2 = mode === 'mini' || rows > 1 ? (split && mode !== 'mini' ? bet : '') : `${bet}${mode === 'seat' && (split || h.doubled) ? '' : oddsHTML(`${i}-${j}`)}`;
-    return `<div class="hand ${active ? 'active' : ''} ${split ? 'split' : ''} ${h.doubled ? 'dbl' : ''} ${narrow ? 'narrow' : ''}" style="--cw:${cw}px;width:${w.toFixed(1)}px">
+    return `<div class="hand ${active ? 'active' + (fresh ? ' lift' : '') : ''} ${dropping ? 'drop' : ''} ${split ? 'split' : ''} ${h.doubled ? 'dbl' : ''} ${narrow ? 'narrow' : ''}" style="--cw:${cw}px;width:${w.toFixed(1)}px">
       <div class="cards fan" style="width:${fanW.toFixed(1)}px;height:${(cw * 2.26).toFixed(1)}px">${cardsHtml}</div>
       <div class="meta" style="height:${meta}px"><div class="meta-1">${total}${res}</div>${line2 ? `<div class="meta-2">${line2}</div>` : ''}</div>
     </div>`;
