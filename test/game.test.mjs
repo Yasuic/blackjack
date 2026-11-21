@@ -432,7 +432,7 @@ const da = t.players.a.chips, dd = t.players.d.chips;
   const t = new G.Table({ startChips: 1000 });
   t.hostId = 'h'; t.frozen = true;
   t.join('a', 'Ann', 1000); t.join('b', 'Bob', 1000);
-  t.sit('a', 2); t.sit('a', 4, true); t.sit('b', 3);
+  t.sit('a', 2); t.sit('a', 4, true); t.sit('b', 6);
   // Seats of one player are always side by side: seat 4 was asked for, and the two seats are moved together.
   const [s1, s2] = t.seatsOf('a'); assert.equal(s2, s1 + 1); assert.equal(t.players.a.seat, s1); assert.equal(t.seatsOf('b').length, 1);
   t.setBet('a', { main: 600, sides: {}, ready: true, seat: s1 });
