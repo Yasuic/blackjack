@@ -1658,3 +1658,5 @@ body.view-hidden .zoom-ctl { display: none !important; }
   body.in-room .hud-bar > button, body.in-room .hud-bar > .sb-guide > summary { padding-left: 6px; padding-right: 6px; }
   body.in-room .hud-bar > .float-throw, body.in-room .hud-bar > .sb-guide, body.in-room .hud-bar > .ledger { flex: 0 1 auto; min-width: 0; overflow: hidden; }
 }
+/* Flat phone table: taller small seats with larger cards. */
+.felt:not(.in3d) .seat.mini { width: 84px; height: 150px; }

@@ -1,13 +1,13 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261121g';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261121g';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261121g';
-import { tickSound, winSound } from './fx.js?v=20261121g';
-import * as HX from './history.js?v=20261121g';
-import { webglOK, initRoom } from './room3d.js?v=20261121g';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261121g';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261121h';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261121h';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261121h';
+import { tickSound, winSound } from './fx.js?v=20261121h';
+import * as HX from './history.js?v=20261121h';
+import { webglOK, initRoom } from './room3d.js?v=20261121h';
+import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261121h';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -1764,6 +1764,8 @@ function seatOrder(st) {
 const SEAT_BOX = {
   desk: { who: 44, ring: 120, hh: 124, fwho: 54, fring: 160, fhh: 206, gap: 6, side: 34, bottom: 24, top: 20 },
   phone: { mw: 80, mh: 124, side: 5, top: 58, bottom: 8, who: 40 },
+  // The flat phone table has room for taller small seats, so their cards are larger and easy to read.
+  phoneFlat: { mw: 84, mh: 150, side: 4, top: 58, bottom: 8, who: 40 },
 };
 // How the cards of a seat are sized: room for the labels under each hand (meta, or meta1 when hands
 // are stacked in two rows), the largest card width, the narrowest a hand may be, and the gap between
@@ -1771,7 +1773,7 @@ const SEAT_BOX = {
 const HAND_BOX = {
   focus: { meta: 46, meta1: 24, cwMax: 64, minW: 48, gap: 14 },
   seat: { meta: 40, meta1: 20, cwMax: 38, minW: 38, gap: 8 },
-  mini: { meta: 18, meta1: 14, cwMax: 21, minW: 26, gap: 4 },
+  mini: { meta: 18, meta1: 14, cwMax: 31, minW: 26, gap: 4 },
   pfocus: { meta: 40, meta1: 22, cwMax: 56, minW: 40, gap: 9 },
 };
 // Where every seat goes, like a real blackjack table: the dealer stands at the straight edge and the
@@ -1820,7 +1822,8 @@ function seatLayout(n, c, { W, H, phone, flip, round, noFocus, in3d }) {
 // is a small card (name, chips, bet, total, tiny cards) down the two sides. Tap one to see it large.
 // The dealer's own view has no seat of its own, so every player is a small card in rows at the far end.
 function phoneLayout(n, c, { W, H, flip, noFocus, pct, in3d }) {
-  const B = SEAT_BOX.phone;
+  const B = in3d ? SEAT_BOX.phone : SEAT_BOX.phoneFlat;
+  const HH = in3d ? 66 : 92;
   const out = new Array(n);
   // The dealer in the 3D room on a phone: the seats follow the rounded far end of the table, one after
   // another along its edge, so every seat is in front of the player who holds it and none is cut off.
@@ -1835,7 +1838,7 @@ function phoneLayout(n, c, { W, H, flip, noFocus, pct, in3d }) {
     let s = 1;
     const fits = (k) => { for (let pos = 1; pos < n; pos++) { const p = at(pos - 1, k), q = at(pos, k); if (Math.abs(q.x - p.x) < B.mw * k + 3 && Math.abs(q.y - p.y) < B.mh * k + 3) return false; } return true; };
     while (s > 0.5 && !fits(s)) s -= 0.04;
-    for (let pos = 0; pos < n; pos++) { const p = at(pos, s); out[pos] = { x: pct(p.x, W), y: pct(p.y + (B.mh * s) / 2, H), s: Math.round(s * 1000) / 1000, r: 0, mode: 'mini', hw: B.mw - 4, hh: 66 }; }
+    for (let pos = 0; pos < n; pos++) { const p = at(pos, s); out[pos] = { x: pct(p.x, W), y: pct(p.y + (B.mh * s) / 2, H), s: Math.round(s * 1000) / 1000, r: 0, mode: 'mini', hw: B.mw - 4, hh: HH }; }
     return out;
   }
   if (noFocus) {
@@ -1846,7 +1849,7 @@ function phoneLayout(n, c, { W, H, flip, noFocus, pct, in3d }) {
       const row = Math.floor(pos / per), inRow = Math.min(per, n - row * per), col = pos - row * per;
       const x = W / 2 + (col - (inRow - 1) / 2) * (B.mw + 4);
       const yTop = 12 + row * (B.mh + 6) * s;
-      out[pos] = { x: pct(x, W), y: pct(flip ? yTop + B.mh * s : H - yTop, H), s: Math.round(s * 1000) / 1000, r: 0, mode: 'mini', hw: B.mw - 4, hh: 66 };
+      out[pos] = { x: pct(x, W), y: pct(flip ? yTop + B.mh * s : H - yTop, H), s: Math.round(s * 1000) / 1000, r: 0, mode: 'mini', hw: B.mw - 4, hh: HH };
     }
     return out;
   }
@@ -1865,7 +1868,7 @@ function phoneLayout(n, c, { W, H, flip, noFocus, pct, in3d }) {
     if (!count) return;
     const slot = (yb - B.top) / count;
     const s = Math.min(1, (slot - 4) / B.mh);
-    for (let k = 0; k < count; k++) out[posOf(k)] = { x: pct(x0 + Math.sign(W / 2 - x0) * inset(yb - k * slot), W), y: pct(yb - k * slot, H), s: Math.round(s * 1000) / 1000, r: 0, mode: 'mini', hw: B.mw - 4, hh: 66 };
+    for (let k = 0; k < count; k++) out[posOf(k)] = { x: pct(x0 + Math.sign(W / 2 - x0) * inset(yb - k * slot), W), y: pct(yb - k * slot, H), s: Math.round(s * 1000) / 1000, r: 0, mode: 'mini', hw: B.mw - 4, hh: HH };
   };
   col(left, B.side + B.mw / 2, (k) => c - 1 - k);
   col(right, W - B.side - B.mw / 2, (k) => c + 1 + k);
