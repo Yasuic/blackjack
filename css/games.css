@@ -549,3 +549,13 @@ body.room-fp.room3d .felt.pfelt:not(.tall) { --k: 1.5; }
 .bc-peel.mine:active { cursor: grabbing; animation: none; }
 @keyframes bcPeelMe { 50% { box-shadow: 0 0 0 calc(3px * var(--k, 1)) #fff3c4, 0 0 calc(24px * var(--k, 1)) rgba(255,224,138,1); } }
 .bc-peel.third { transform: rotate(90deg); margin: 0 calc(var(--cw) * .2); }
+/* Sizes taken from the PokerNow measurements (in parts of the screen height): own cards about 13% tall,
+   board cards about 18% tall, action buttons about 9% tall with 2.6% letters. Computers only. */
+@media (min-width: 700px) {
+  body.game-pk .pk-myhand { --cw: clamp(56px, 9.2vh, 120px); }
+  body.game-pk .pk-acts:not(.small):not(.pk-runask) .pk-act { min-height: clamp(44px, 9vh, 96px); font-size: clamp(15px, 2.6vh, 26px); min-width: clamp(108px, 11vw, 190px); border-radius: 12px; }
+  body.game-pk.room3d .pfelt:not(.tall) .pk-mid:not(.many) .pk-board { --cw: calc(66px * var(--k)); }
+  body.game-pk .pk-handrow .pk-rank.flat b { font-size: clamp(12px, 1.9vh, 18px); }
+  body.game-pk #hud-top .status { font-size: clamp(13px, 2vh, 19px); }
+}
+@media (min-width: 1180px) { body.game-pk .pk-raise { bottom: calc(46px + clamp(44px, 9vh, 96px) + 10px); width: clamp(400px, 36vw, 600px); } body.game-pk .pk-presets button { font-size: clamp(13.5px, 1.9vh, 18px); min-height: clamp(34px, 5vh, 52px); } }
