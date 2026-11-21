@@ -1,11 +1,11 @@
 // The poker page: a Texas Hold'em table for up to 9 in the big meeting room. The host's browser runs
 // the table (js/poker.js); every other browser sends its moves there and is told only what it may see.
-import { PokerTable, POKER_SEATS, pokerDeck, cardText } from './poker.js?v=20261121x';
-import { sha256 } from './game.js?v=20261121x';
-import { botMove, isBot, BOT_NAMES } from './pokerbot.js?v=20261121x';
-import { chipSound, cardSound, hitSound, standSound, potSound, tickSound, turnSound } from './fx.js?v=20261121x';
-import { webglOK, initRoom } from './room3d.js?v=20261121x';
-import { params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame } from './common.js?v=20261121x';
+import { PokerTable, POKER_SEATS, pokerDeck, cardText } from './poker.js?v=20261121y';
+import { sha256 } from './game.js?v=20261121y';
+import { botMove, isBot, BOT_NAMES } from './pokerbot.js?v=20261121y';
+import { chipSound, cardSound, hitSound, standSound, potSound, tickSound, turnSound } from './fx.js?v=20261121y';
+import { webglOK, initRoom } from './room3d.js?v=20261121y';
+import { params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame } from './common.js?v=20261121y';
 
 const PREFIX = 'bjt-pk-';
 const app = $('#app');
@@ -522,7 +522,7 @@ function playSounds(st) {
     if (say) { (S.said ||= {})[i] = { text: say, until: Date.now() + 2000 }; clearTimeout(S.saidT); S.saidT = setTimeout(() => { if (S.st) render(); }, 2080); }
   });
   try {
-    if (now.mine && !was.mine) turnSound(); // your turn starts: a short beep for you only
+    if (now.mine && !was.mine) { turnSound(); if (safeGet('pk-turnhome') !== '0') S.room?.turnHome?.(); } // your turn starts: a short beep for you only, and the view glides back to your chair
     if (now.hand !== was.hand && now.phase !== 'waiting' && now.phase !== 'done') { cardSound(); setTimeout(cardSound, 140); setTimeout(cardSound, 280); return; } // a new hand is dealt
     if (now.hand !== was.hand) return;
     if (now.board > was.board) { const n = Math.min(3, now.board - was.board); for (let k = 0; k < n; k++) setTimeout(cardSound, k * 200); } // one sound a card, in step with the cards coming out // flop, turn, river
@@ -820,6 +820,7 @@ function drawMenu(st) {
     <button class="menu-item" data-act="bomb">💣 Bomb pot next hand: ${st.bombNext ? 'on' : 'off'}</button>
     <button class="menu-item" data-act="pause">${S.paused ? '▶️ Resume dealing' : '⏸️ Pause after this hand'}</button>` : ''}
     <button class="menu-item" data-act="view3d">🧊 3D room: ${use3D() ? 'on' : 'off'}</button>
+    ${S.room ? `<button class="menu-item" data-act="turnhome">🎯 Back to my seat on my turn: ${safeGet('pk-turnhome') === '0' ? 'off' : 'on'}</button>` : ''}
     ${S.room ? '<button class="menu-item" data-act="walk">🚶 Walk around</button><button class="menu-item" data-act="view-reset">🪑 Back to my seat</button>' : ''}
     ${mySeatNow(st) ? '<button class="menu-item" data-act="stand">🚪 Leave my seat</button>' : ''}
     <button class="menu-item" data-act="leave">↩️ Leave the table</button>`;
@@ -999,6 +1000,7 @@ document.addEventListener('click', (e) => {
     case 'view3d': safeSet('bj-3d', use3D() ? '0' : '1'); location.reload(); break;
     case 'walk': closeMenu(); S.room?.walk(true); break;
     case 'view-reset': closeMenu(); S.room?.home(); break;
+    case 'turnhome': safeSet('pk-turnhome', safeGet('pk-turnhome') === '0' ? '1' : '0'); drawMenu(st); break;
     case 'leave': if (S.role === 'guest') send({ t: 'stand' }); setTimeout(() => { location.href = location.pathname; }, 150); break;
     default: break;
   }
