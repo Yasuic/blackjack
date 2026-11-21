@@ -1,9 +1,9 @@
 // The poker page: a Texas Hold'em table for up to 9 in the big meeting room. The host's browser runs
 // the table (js/poker.js); every other browser sends its moves there and is told only what it may see.
-import { PokerTable, POKER_SEATS, pokerDeck, cardText } from './poker.js?v=20261121e';
-import { sha256 } from './game.js?v=20261121e';
-import { webglOK, initRoom } from './room3d.js?v=20261121e';
-import { params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest } from './common.js?v=20261121e';
+import { PokerTable, POKER_SEATS, pokerDeck, cardText } from './poker.js?v=20261121f';
+import { sha256 } from './game.js?v=20261121f';
+import { webglOK, initRoom } from './room3d.js?v=20261121f';
+import { params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest } from './common.js?v=20261121f';
 
 const PREFIX = 'bjt-pk-';
 const app = $('#app');
@@ -14,7 +14,7 @@ const phone = () => innerWidth < 700;
 const bbOn = () => safeGet('pk-bb') === '1';
 // An amount as chips, or in big blinds when the player switched that view on.
 function amt(n) { const bb = S.st?.settings?.bigBlind; if (!bbOn() || !bb) return money(n); const v = n / bb; return (Math.round(v * 10) / 10).toLocaleString() + ' BB'; }
-const PHONE_FLAT = false; // switched on once the flat phone table is checked
+const PHONE_FLAT = true;
 // A phone opens the flat table unless the 3D room was switched on in the menu; a computer opens the 3D room unless it was switched off.
 const use3D = () => { if (params.get('flat') === '1' || !webglOK()) return false; if (params.get('3d') === '1') return true; const v = safeGet('bj-3d'); return PHONE_FLAT && phone() ? v === '1' : v !== '0'; };
 
@@ -208,7 +208,7 @@ function shareLink() {
 const FELT = () => {
   if (!phone()) return { W: 1240, H: 600 };
   const W = Math.max(300, Math.min(440, innerWidth - 20));
-  return { W, H: use3D() ? 640 : Math.max(430, Math.min(640, innerHeight - 56 - 250)) };
+  return { W, H: use3D() ? 640 : Math.max(380, Math.min(640, innerHeight - 56 - 345)) };
 };
 function showTable() {
   document.body.classList.add('in-room');
@@ -280,6 +280,14 @@ function seatSpots(W, H) {
 }
 const toward = (p, f) => ({ x: 50 + (p.x - 50) * f, y: 50 + (p.y - 50) * f });
 
+// The badge under the board: what your own hand is right now, in its own colour by strength.
+const RANKS_UI = [['Royal flush', 9, '👑'], ['Straight flush', 8, '⚡'], ['Four', 7, '💎', 'Quads'], ['Full house', 6, '🏠'], ['Flush', 5, '🌊'], ['Straight', 4, '📏'], ['Three', 3, '🔱', 'Trips'], ['Two pair', 2, '✌️'], ['Pair', 1, '👥'], ['', 0, '🂠', 'High card']];
+function rankBadge(seat) {
+  if (!seat || !seat.hand || !seat.inHand || seat.folded) return '';
+  const [key, tier, icon, label] = RANKS_UI.find((r) => seat.hand.startsWith(r[0]));
+  const title = label || key, rest = seat.hand.replace(/^(Royal flush|Straight flush|Full house|Flush|Straight|Two pair),?\s*/, '').replace(/^Four /, '').replace(/^Three /, '').replace(/^Pair of /, '');
+  return `<div class="pk-rank pk-stand t${tier}"><b>${icon} ${title}</b>${rest && rest !== seat.hand || tier === 0 || tier === 1 || tier === 3 || tier === 7 ? `<small>${esc(rest)}</small>` : ''}</div>`;
+}
 const stepMs = () => Number(params.get('step')) || { fast: 1100, normal: 1900, long: 3200 }[(S.st || S.table)?.settings?.showSpeed] || 1100; // an all in board comes one step at a time, this many milliseconds apart
 // Where an all in showdown is in its show: which cards are out, whose chances to print, and whether the winners are known yet.
 function runStage(st) {
@@ -328,8 +336,8 @@ function render() {
   const rows = boards.map((b, r) => `<div class="pk-brow">${many ? `<i>Run ${r + 1}</i>` : ''}${b.map((c, i) => cardHTML(c, 'bcard' + ((r === 0 ? i >= seen.n : r >= seen.rows) ? ' deal' : '') + (Object.keys(winBy).some((k) => inBest(Number(k), c)) ? ' hi' : ''))).join('')}${r === 0 ? rabbit : ''}</div>`).join('');
   seen.n = boards[0].length; seen.rows = boards.length;
   h += `<div class="pk-mid${many ? ' many n' + allBoards.length : ''}">
-    <div class="pk-pot pk-stand">${st.bomb && live ? '<span class="pk-bomb">💣 Bomb pot</span>' : ''}<b>Pot ${amt(potNow)}</b>${potLine ? `<small>${potLine}</small>` : ''}</div>
-    <div class="pk-board pk-stand">${rows}</div>
+    <div class="pk-board pk-stand"><div class="pk-pot">${st.bomb && live ? '<span class="pk-bomb">💣 Bomb pot</span>' : ''}<b>Pot ${amt(potNow)}</b>${potLine ? `<small>${potLine}</small>` : ''}</div>${rows}</div>
+    ${rankBadge(mySeat >= 0 && !showing ? st.seats[mySeat] : null)}
     <div class="pk-spot pot" id="spot-99"></div>
   </div>`;
   const people = [], chips = [], stools = [];
@@ -338,7 +346,15 @@ function render() {
     const seat = st.seats[i], P = at(i), isMe = !!seat && seat.id === S.myId;
     // Standing things at the far side and the ends would poke out past the table's edge on the screen, so they are set further in.
     const far = P.y < 40 || Math.abs(P.x - 50) > 38;
-    const A = toward(P, isMe || mySeat < 0 && P.y > 90 ? 0.8 : phone() ? (far ? 0.6 : 0.7) : P.y < 40 ? 0.56 : far ? 0.66 : 0.74), B = toward(P, phone() ? 0.36 : 0.44);
+    const top = P.y < 40, mineSpot = isMe || (mySeat < 0 && P.y > 90);
+    // Flat table: everything is centred on its place, close to the rim. 3D room: the far side looks much shorter
+    // from your chair, so the far seats are set well in from the edge and their bets closer to the middle.
+    const fa = !S.room ? (mineSpot ? 0.9 : 0.82) : mineSpot ? 0.8 : phone() ? (top ? 0.46 : far ? 0.6 : 0.7) : top ? 0.42 : far ? 0.66 : 0.74;
+    const fb = !S.room ? 0.5 : top ? 0.24 : phone() ? 0.36 : 0.44;
+    // The far seats keep their place along the table and only move towards you, so they do not bunch up in the middle.
+    const wide = S.room && top && !phone();
+    const A = wide ? { x: 50 + (P.x - 50) * (Math.abs(P.x - 50) > 30 ? 0.84 : 0.95), y: 50 + (P.y - 50) * 0.46 } : toward(P, fa);
+    const B = wide ? { x: 50 + (P.x - 50) * 0.9, y: 50 + (P.y - 50) * fb } : mineSpot && S.room ? { x: P.x + (phone() ? 16 : 9), y: 50 + (P.y - 50) * 0.5 } : toward(P, fb);
     stools.push({ seat: i, x: P.x, y: P.y });
     if (!seat) {
       if (mySeat < 0) h += `<button class="pk-sit pk-stand" style="left:${A.x}%;top:${A.y}%" data-act="sit" data-seat="${i}"><span class="sit-arrow">Sit ▼</span>Seat ${i + 1}</button>`;

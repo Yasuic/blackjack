@@ -1,13 +1,13 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261121e';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261121e';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261121e';
-import { tickSound, winSound } from './fx.js?v=20261121e';
-import * as HX from './history.js?v=20261121e';
-import { webglOK, initRoom } from './room3d.js?v=20261121e';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261121e';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261121f';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261121f';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261121f';
+import { tickSound, winSound } from './fx.js?v=20261121f';
+import * as HX from './history.js?v=20261121f';
+import { webglOK, initRoom } from './room3d.js?v=20261121f';
+import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261121f';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -1100,7 +1100,7 @@ function buildLayout() {
 
 // The 3D room is on unless the browser cannot draw it or the person turned it off.
 // The 3D room is the usual view on every device that can draw it. The menu switch turns it off and is remembered.
-const PHONE_FLAT = false; // switched on once the flat phone tables are checked
+const PHONE_FLAT = true;
 function use3D() {
   if (params.get('flat') === '1' || !webglOK()) return false;
   if (params.get('room') === '3d' || params.get('3d') === '1') return true;

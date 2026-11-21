@@ -167,3 +167,55 @@ body.game-poker:not(.room3d) .main.player { padding: 0; }
   body.game-poker:not(.room3d) .pk-seat.far { grid-template-columns: auto; }
   body.game-poker:not(.room3d) .pk-flat-hud .status { margin: 0; font-size: 13px; padding: 4px 12px; }
 }
+
+/* 3D room: the board is a little nearer to you, clear of the far seats. */
+body.room3d .pfelt:not(.tall) .pk-board { top: 56%; }
+body.room3d .pfelt:not(.tall) .pk-pot { top: calc(56% + 34px * var(--k)); }
+body.room3d .pfelt:not(.tall) .pk-spot.pot { top: calc(56% + 72px * var(--k)); }
+/* Flat table: things lie on the felt, centred on their place. */
+body:not(.room3d) .pk-stand { transform: translate(-50%, -50%); }
+body:not(.room3d) .pk-pot { top: calc(50% + 62px * var(--k)); }
+body:not(.room3d) .pk-spot.pot { display: none; }
+body:not(.room3d) .pk-amt { top: 50% !important; }
+body:not(.room3d) .pk-spot.has { width: calc(30px * var(--k)); height: calc(30px * var(--k)); margin: calc(-15px * var(--k)) 0 0 calc(-15px * var(--k)); }
+body:not(.room3d) .pk-seat.far { grid-template-columns: auto; }
+@media (max-width: 700px) {
+  body.game-poker:not(.room3d) .pfelt.tall .pk-board { --cw: 44px; gap: 3px; top: 50%; }
+  body.game-poker:not(.room3d) .pfelt.tall .pk-pot { top: calc(50% + 50px); font-size: 13px; }
+  body.game-poker:not(.room3d) .pfelt.tall .pk-seat.far .pk-cards { --cw: 28px; }
+  body.game-poker:not(.room3d) .pk-seat { gap: 1px; }
+  body.game-poker:not(.room3d) .pk-bubble { font-size: 10.5px; padding: 1px 7px; }
+  body.game-poker:not(.room3d) .pfelt.tall .pk-plate { min-width: 56px; font-size: 11px; padding: 1px 5px 2px; }
+  body.game-poker:not(.room3d) .pfelt.tall .pk-plate span { font-size: 12px; }
+  body.game-poker:not(.room3d) .pk-myhand { --cw: 50px; }
+}
+
+/* The pot label rides on top of the board cards. */
+.pk-board .pk-pot { position: static; margin-bottom: calc(4px * var(--k)); }
+body.room3d .pfelt:not(.tall) .pk-spot.pot { top: calc(56% + 44px * var(--k)); }
+body.room3d .pfelt.tall .pk-spot.pot { top: calc(47% + 40px); }
+
+/* Your hand, under the board. */
+.pk-rank { left: 50%; top: calc(50% + 40px * var(--k)); display: flex; align-items: baseline; gap: calc(8px * var(--k)); white-space: nowrap; border-radius: calc(10px * var(--k)); padding: calc(3px * var(--k)) calc(14px * var(--k)); font-family: "Space Grotesk", sans-serif; color: #fff; border: calc(2px * var(--k)) solid rgba(255,255,255,.35); background: linear-gradient(180deg, #3a4250, #1c212a); box-shadow: 0 4px 14px rgba(0,0,0,.55); animation: pk-rank-in .35s ease-out; }
+.pk-rank b { font-size: calc(16px * var(--k)); letter-spacing: calc(1.5px * var(--k)); text-transform: uppercase; }
+.pk-rank small { font-size: calc(12px * var(--k)); opacity: .9; font-weight: 600; }
+.pk-rank.t1 { background: linear-gradient(180deg, #2f6fb3, #1c436e); border-color: #8cc4ff; }
+.pk-rank.t2 { background: linear-gradient(180deg, #1f9a8a, #0f5a50); border-color: #86f0df; }
+.pk-rank.t3 { background: linear-gradient(180deg, #2fa357, #17602f); border-color: #9af5b8; }
+.pk-rank.t4 { background: linear-gradient(180deg, #d98a1f, #8a5208); border-color: #ffd596; }
+.pk-rank.t5 { background: linear-gradient(180deg, #2c7be0, #5a2fd0); border-color: #b9c8ff; }
+.pk-rank.t6 { background: linear-gradient(180deg, #c0392b, #7a1810); border-color: #ffb0a6; }
+.pk-rank.t7 { background: linear-gradient(180deg, #a03fd6, #5a1690); border-color: #e6b8ff; box-shadow: 0 0 calc(18px * var(--k)) rgba(190,110,255,.8); }
+.pk-rank.t8, .pk-rank.t9 { background: linear-gradient(90deg, #f6d365, #fda085, #f6d365); color: #2a1500; border-color: #fff3c4; box-shadow: 0 0 calc(24px * var(--k)) rgba(255,210,110,.95); animation: pk-rank-in .35s ease-out, pk-pulse 1.2s ease-in-out infinite; }
+@keyframes pk-rank-in { from { opacity: 0; margin-top: 14px; } to { opacity: 1; margin-top: 0; } }
+body.room3d .pfelt:not(.tall) .pk-rank { top: calc(56% + 36px * var(--k)); }
+body.room3d .pfelt:not(.tall) .pk-spot.pot { top: calc(56% + 80px * var(--k)); }
+body.room3d .pfelt.tall .pk-rank { top: calc(47% + 34px); }
+body.room3d .pfelt.tall .pk-spot.pot { top: calc(47% + 74px); }
+body:not(.room3d) .pk-rank { top: calc(50% + 64px * var(--k)); }
+@media (max-width: 700px) { body.game-poker:not(.room3d) .pk-rank { top: calc(50% + 56px); } }
+@media (max-width: 700px) {
+  body.game-poker:not(.room3d) .pfelt.tall .pk-board { --cw: 40px; }
+  body.game-poker:not(.room3d) .pfelt.tall .pk-mid.many .pk-board { --cw: 30px; }
+  body.game-poker:not(.room3d) .pfelt.tall .pk-mid.many .pk-brow i { font-size: 9px; padding: 0 3px; }
+}
