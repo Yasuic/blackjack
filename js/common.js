@@ -37,7 +37,7 @@ export function cardHTML(c, cls = '') {
 }
 
 // ---------- The game switch ----------
-export const GAMES = { blackjack: { name: 'Blackjack', page: './', icon: '🃏' }, poker: { name: 'Poker', page: 'poker.html', icon: '♠️' }, baccarat: { name: 'Baccarat', icon: '🎴', soon: true }, roulette: { name: 'Roulette', icon: '🎡', soon: true } };
+export const GAMES = { blackjack: { name: 'Blackjack', page: './', icon: '🃏' }, poker: { name: 'Poker', page: 'poker.html', icon: '♠️' }, baccarat: { name: 'Baccarat', page: 'baccarat.html', icon: '🎴' }, roulette: { name: 'Roulette', icon: '🎡', soon: true } };
 export function gameSwitchHTML(current) {
   return `<select class="game-switch" id="game-switch" title="Switch game" aria-label="Game">${Object.entries(GAMES).map(([k, g]) => `<option value="${k}"${k === current ? ' selected' : ''}${g.soon ? ' disabled' : ''}>${g.icon} ${g.name}${g.soon ? ' (soon)' : ''}</option>`).join('')}</select>`;
 }

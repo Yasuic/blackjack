@@ -264,3 +264,80 @@ body.game-poker:not(.room3d) .pfelt.tall .pk-mid.many.n2 .pk-brow i { font-size:
 .pk-seat.far .pk-stats i:nth-child(3) { display: none; }
 /* Two boards in the 3D room on a computer: the pot is beside the boards, so it does not cover the far seats. */
 body.room3d .pfelt:not(.tall) .pk-mid.many.n2 .pk-board .pk-pot { position: absolute; left: calc(100% + 14px * var(--k)); top: 50%; transform: translateY(-50%); margin: 0; white-space: nowrap; }
+
+/* ---------- Baccarat felt: flat side at the top for the cards, rounded side for the players ---------- */
+.felt.pfelt.bfelt { border-radius: 26px 26px 50% 50% / 26px 26px 66% 66% !important; background: radial-gradient(ellipse at 50% 30%, #1b6f86 0%, #0f4f63 60%, #093645 100%); }
+.felt.pfelt.bfelt::before { border-radius: 16px 16px 50% 50% / 16px 16px 66% 66% !important; }
+.felt.pfelt.bfelt::after { border-radius: 26px 26px 50% 50% / 26px 26px 66% 66%; }
+.felt.pfelt.bfelt.tall { border-radius: 20px 20px 50% 50% / 20px 20px 30% 30% !important; }
+.felt.pfelt.bfelt.tall::before { border-radius: 12px 12px 50% 50% / 12px 12px 30% 30% !important; }
+.bc-deal { left: 50%; top: 31%; display: flex; gap: calc(26px * var(--k)); align-items: flex-end; --cw: calc(50px * var(--k)); }
+.pfelt.tall .bc-deal { top: 30%; gap: 14px; --cw: 50px; }
+body:not(.room3d) .bc-deal, body:not(.room3d) .bc-result { transform: translate(-50%, -50%); }
+body:not(.room3d) .bc-deal { top: 19%; }
+body:not(.room3d) .pfelt.tall .bc-deal { top: 17%; }
+.bc-side { display: flex; flex-direction: column; align-items: center; gap: calc(3px * var(--k)); background: rgba(6,10,16,.62); border: calc(2px * var(--k)) solid rgba(255,255,255,.2); border-radius: calc(12px * var(--k)); padding: calc(5px * var(--k)) calc(10px * var(--k)) calc(6px * var(--k)); min-width: calc(128px * var(--k)); }
+.pfelt.tall .bc-side { min-width: 132px; padding: 4px 6px 5px; }
+.bc-side b { font: 800 calc(13px * var(--k)) "Space Grotesk", sans-serif; letter-spacing: .16em; }
+.bc-side.p b { color: #7fc4ff; } .bc-side.b b { color: #ff8f8f; }
+.bc-side.p { border-color: rgba(127,196,255,.55); } .bc-side.b { border-color: rgba(255,143,143,.55); }
+.bc-side.won { box-shadow: 0 0 calc(22px * var(--k)) rgba(255,214,110,.95); border-color: #ffd66e; }
+.bc-cards { display: flex; gap: calc(4px * var(--k)); min-height: calc(var(--cw) * 1.4); align-items: center; justify-content: center; }
+.bc-cards .card.third { transform: rotate(90deg); margin: 0 calc(var(--cw) * .2); }
+.bc-total { font: 800 calc(22px * var(--k)) "Space Grotesk", sans-serif; color: #fff6dc; min-height: 1.2em; line-height: 1.1; }
+.bc-result { left: 50%; top: 44%; white-space: nowrap; font: 800 calc(19px * var(--k)) "Space Grotesk", sans-serif; color: #1b1300; background: linear-gradient(#ffe9a6, #e8c46a); border: 2px solid #fff3c9; border-radius: 999px; padding: calc(4px * var(--k)) calc(18px * var(--k)); box-shadow: 0 6px 24px rgba(0,0,0,.6); z-index: 4; }
+.bc-result.player { background: linear-gradient(#bfe2ff, #6fb5f5); } .bc-result.banker { background: linear-gradient(#ffc9c9, #f08080); } .bc-result.tie { background: linear-gradient(#c9f5cf, #6fd28a); }
+body:not(.room3d) .bc-result { top: 35.5%; }
+.pfelt.tall .bc-result { font-size: 15px; padding: 3px 12px; }
+.bc-spots { left: 7%; right: 7%; top: 47%; display: grid; grid-template-columns: 1fr 1.5fr 1.15fr 1.5fr 1fr; gap: calc(6px * var(--k)); pointer-events: auto; }
+body.room3d .bc-spots { top: 50%; left: 12%; right: 12%; }
+.pfelt.tall .bc-spots { left: 5%; right: 5%; top: 40%; grid-template-columns: 1fr 1fr 1fr 1fr 1fr 1fr; gap: 5px; }
+.pfelt.tall .bc-spot.player, .pfelt.tall .bc-spot.banker { grid-column: span 3; grid-row: 1; }
+.pfelt.tall .bc-spot.ppair, .pfelt.tall .bc-spot.tie, .pfelt.tall .bc-spot.bpair { grid-column: span 2; grid-row: 2; }
+.pfelt.tall .bc-spot.player { order: 1; } .pfelt.tall .bc-spot.banker { order: 2; } .pfelt.tall .bc-spot.ppair { order: 3; } .pfelt.tall .bc-spot.tie { order: 4; } .pfelt.tall .bc-spot.bpair { order: 5; }
+.bc-spot { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; min-height: calc(74px * var(--k)); border-radius: calc(12px * var(--k)); border: calc(2px * var(--k)) solid rgba(232,196,106,.6); background: rgba(0,0,0,.26); color: #fff6dc; cursor: pointer; font-family: "Space Grotesk", sans-serif; padding: 4px 2px; pointer-events: auto; }
+.pfelt.tall .bc-spot { min-height: 62px; }
+.bc-spot b { font-size: calc(17px * var(--k)); letter-spacing: .04em; }
+.pfelt.tall .bc-spot b { font-size: 15px; }
+.bc-spot small { font-size: calc(10px * var(--k)); opacity: .8; }
+.pfelt.tall .bc-spot small { font-size: 10px; }
+.bc-spot i { font-style: normal; font-size: calc(9.5px * var(--k)); opacity: .75; }
+.pfelt.tall .bc-spot i { font-size: 9px; }
+.bc-spot.player { border-color: #7fc4ff; background: rgba(40,110,180,.32); } .bc-spot.banker { border-color: #ff8f8f; background: rgba(180,50,50,.3); } .bc-spot.tie { border-color: #7fe09a; background: rgba(40,140,70,.3); }
+.bc-spot:hover { filter: brightness(1.2); }
+.bc-spot.won { box-shadow: 0 0 calc(20px * var(--k)) rgba(255,214,110,.95); border-color: #ffd66e; }
+.bc-spot.lost { opacity: .5; }
+.bc-mine { position: absolute; top: calc(-9px * var(--k)); right: calc(-4px * var(--k)); background: var(--gold); color: #1b1300; font: 800 calc(13px * var(--k)) "Space Grotesk", sans-serif; border-radius: 999px; padding: 1px calc(8px * var(--k)); box-shadow: 0 2px 8px rgba(0,0,0,.5); font-variant-numeric: tabular-nums; }
+.pfelt.tall .bc-mine { font-size: 13px; top: -8px; right: -2px; padding: 1px 7px; }
+.bc-mine.up { background: #7ef0b6; } .bc-mine.down { background: #ff8a8a; }
+.bc-seat .pk-plate { cursor: default; }
+/* Under the table: results, chips, buttons. */
+.bc-road { display: flex; flex-wrap: wrap; gap: 3px; align-items: center; justify-content: center; background: rgba(8,10,14,.8); border: 1px solid var(--line); border-radius: 10px; padding: 4px 8px; max-width: 100%; }
+.bc-road i { font: 800 10px "Space Grotesk", sans-serif; font-style: normal; width: 17px; height: 17px; line-height: 17px; text-align: center; border-radius: 50%; color: #fff; position: relative; }
+.bc-road i.p { background: #2f7fd0; } .bc-road i.b { background: #d04848; } .bc-road i.t { background: #2f9c55; }
+.bc-road i.pp::before, .bc-road i.bp::after { content: ''; position: absolute; width: 5px; height: 5px; border-radius: 50%; }
+.bc-road i.pp::before { background: #7fc4ff; left: -1px; top: -1px; } .bc-road i.bp::after { background: #ff8f8f; right: -1px; bottom: -1px; }
+.bc-road em, .bc-road span { font: 600 11px Inter, sans-serif; font-style: normal; color: #b9c6d6; margin-left: 6px; }
+.bc-chips { display: flex; gap: 8px; justify-content: center; }
+.bc-chip { width: 52px; height: 52px; border-radius: 50%; border: 4px dashed rgba(255,255,255,.85); color: #fff; font: 800 15px "Space Grotesk", sans-serif; cursor: pointer; box-shadow: 0 3px 10px rgba(0,0,0,.5); }
+.bc-chip.c1 { background: #5b6b7d; } .bc-chip.c5 { background: #c0392b; } .bc-chip.c25 { background: #27864a; } .bc-chip.c100 { background: #1d1f26; } .bc-chip.c500 { background: #6b3fa0; }
+.bc-chip.on { outline: 3px solid var(--gold); outline-offset: 2px; transform: translateY(-4px); }
+.bc-acts { align-items: center; }
+.bc-bal { font: 600 13px Inter, sans-serif; color: #dbe4ee; background: rgba(8,10,14,.8); border: 1px solid var(--line); border-radius: 10px; padding: 5px 10px; white-space: nowrap; }
+.bc-bal b { color: var(--gold); font-family: "Space Grotesk", sans-serif; }
+.bc-acts .btn[disabled] { opacity: .4; cursor: default; }
+/* Baccarat places, second pass. */
+body.room3d .pfelt:not(.tall) .bc-deal { top: 40%; --cw: calc(44px * var(--k)); }
+body.room3d .pfelt:not(.tall) .bc-result { top: 50%; }
+body.room3d .pfelt:not(.tall) .bc-spots { top: 53%; left: 14%; right: 14%; }
+body.room3d .pfelt:not(.tall) .bc-spot { min-height: calc(62px * var(--k)); }
+body:not(.room3d) .pfelt.tall .bc-deal { top: 14%; }
+body:not(.room3d) .pfelt.tall .bc-result { top: 29.5%; }
+body:not(.room3d) .pfelt.tall .bc-spots { top: 33%; }
+body:not(.room3d) .pfelt.tall .bc-seat .pk-plate { min-width: 58px; padding: 1px 5px 2px; font-size: 11px; }
+body:not(.room3d) .pfelt.tall .bc-seat { transform: translate(-50%, -100%); }
+body:not(.room3d) .pfelt.tall .bc-seat .pk-bubble { font-size: 10px; padding: 1px 6px; white-space: nowrap; }
+body.room3d .pfelt:not(.tall) .bc-deal { top: 43%; --cw: calc(42px * var(--k)); }
+body.room3d .pfelt:not(.tall) .bc-result { top: 52%; }
+body.room3d .pfelt:not(.tall) .bc-spots { top: 55%; left: 19%; right: 19%; }
+body.room3d .pfelt:not(.tall) .bc-spot b { font-size: calc(15px * var(--k)); }
