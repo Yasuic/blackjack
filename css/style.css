@@ -1674,3 +1674,10 @@ body.room3d .room.seat-locked { cursor: default; }
 .room-pov { display: none; position: fixed; z-index: 40; top: 68px; left: 136px; font: 600 12px Inter, sans-serif; color: #e9eef5; background: rgba(10,12,16,.82); border: 1px solid rgba(255,255,255,.22); border-radius: 999px; padding: 6px 12px; cursor: pointer; white-space: nowrap; }
 .room-pov.on { border-color: var(--gold); color: #ffe7a8; }
 @media (min-width: 700px) { body.room3d .room-pov { display: block; } }
+
+/* Leave seat is larger than the other tray buttons, so it is easy to find and hit. */
+.tray .actions .btn[data-act^="stand-up"], body.room3d .hud3d .tray .actions .btn[data-act^="stand-up"] { height: 50px; padding: 0 22px; font-size: 17px; font-weight: 800; flex: none; align-self: center; }
+.tray .actions { align-items: center; }
+@media (max-width: 600px) {
+  .tray .actions .btn[data-act^="stand-up"], body.room3d .hud3d .tray .actions .btn[data-act^="stand-up"] { height: 42px; padding: 0 12px; font-size: 14px; }
+}

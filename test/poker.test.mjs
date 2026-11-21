@@ -388,6 +388,18 @@ PokerTable.noChances = true; PokerTable.autoRun = false;
     ok(t.canStart(), 'after a buy in a hand can start'); t.startHand(); ok(t.phase === 'preflop', 'the next hand is dealt');
   } else ok(false, 'no player went broke in 50 all in hands');
 }
+{ // A hand checked down to showdown: the winner's cards are seen, the loser's stay face down until the loser shows them.
+  const t = mk(3, 1000); t.startHand(); // btn0 sb1 bb2, p0 first
+  rig(t, { 0: 'A♠ A♥', 1: 'K♠ K♥', 2: '8♠ 4♥' }, '2♣ 7♦ 9♣ J♦ 3♠');
+  t.act('p0', 'call'); t.act('p1', 'call'); t.act('p2', 'check');
+  let g = 0; while (t.phase !== 'done' && g++ < 20) { const x = t.seats[t.turn]; t.act(x.id, 'check'); }
+  const pub = t.publicState('zz');
+  ok(t.phase === 'done' && pub.seats[0].cards.every(Boolean) && pub.seats[0].shown, 'winner shown at showdown');
+  ok(pub.seats[1].cards.every((c) => !c) && pub.seats[2].cards.every((c) => !c) && !pub.seats[1].hand, 'losing hands stay face down');
+  ok(t.publicState('p1').seats[1].cards.every(Boolean), 'the loser still sees their own cards');
+  t.showCards('p1'); ok(t.publicState('zz').seats[1].cards.every(Boolean), 'a loser can show by choice');
+  ok(tot(t) === 3000, 'chips constant');
+}
 PokerTable.noChances = false; PokerTable.samples = 0;
 console.log(`${n - fails}/${n} poker checks passed`);
 process.exit(fails ? 1 : 0);

@@ -1,6 +1,6 @@
 // No-limit Texas Hold'em for up to 9 players. Pure rules: the host's browser owns one PokerTable and
 // every action goes through it. Nothing here touches the page or the network.
-import { SUITS, RANKS, sha256, fairSeed, fairShoe, MAX_CHIPS } from './game.js?v=20261121zc';
+import { SUITS, RANKS, sha256, fairSeed, fairShoe, MAX_CHIPS } from './game.js?v=20261121ze';
 
 export const POKER_SEATS = 9;
 export const POKER_DEFAULTS = {
@@ -642,11 +642,10 @@ export class PokerTable {
     const hands = showdown ? boards.map((b) => Object.fromEntries(live.map((i) => [i, this.best(this.seats[i].cards, b)]))) : null;
     const runWord = this.dbl ? 'board' : 'run';
     if (showdown) {
-      for (const i of live) { const x = this.seats[i]; x.hand = hands[0][i]; x.show = true; }
-      boards.forEach((b, r) => {
-        this.addLog(`Showdown${R > 1 ? `, ${runWord} ${r + 1} of ${R}` : ''}. Board: ${b.map(cardText).join(' ')}.`);
-        for (const i of order) if (live.includes(i)) this.addLog(`${this.name(i)} ${r ? 'has' : 'shows'} ${this.seats[i].cards.map(cardText).join(' ')}: ${hands[r][i].name}.`);
-      });
+      // Hands are not turned up for their owners. A hand that wins chips has to be seen; a hand that
+      // loses stays face down unless its owner shows it. After an all in the hands were already face up.
+      for (const i of live) { const x = this.seats[i]; x.hand = hands[0][i]; if (this.allInRun) x.show = true; }
+      boards.forEach((b, r) => this.addLog(`Showdown${R > 1 ? `, ${runWord} ${r + 1} of ${R}` : ''}. Board: ${b.map(cardText).join(' ')}.`));
     }
     pots.forEach((pot, n) => {
       for (let r = 0; r < R; r++) {
@@ -672,6 +671,15 @@ export class PokerTable {
     // Each player's numbers: hands dealt, hands with chips put in by choice before the flop (VPIP), hands raised
     // before the flop (PFR), showdowns reached and showdowns won. Bomb pots have no betting before the flop and are left out of VPIP and PFR.
     const wonSeats = new Set(wins.map((w) => w.seat));
+    if (showdown) {
+      for (const i of order) {
+        if (!live.includes(i)) continue;
+        const x = this.seats[i];
+        if (wonSeats.has(i)) x.show = true;
+        if (x.show) boards.forEach((bd, r) => this.addLog(`${this.name(i)} ${r ? 'has' : 'shows'} ${x.cards.map(cardText).join(' ')}: ${hands[r][i].name}.`));
+        else this.addLog(`${this.name(i)} does not show.`);
+      }
+    }
     for (const i of dealtIn) {
       const x = this.seats[i], p = this.players[x.id];
       if (!p) continue;

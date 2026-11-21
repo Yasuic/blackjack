@@ -1,11 +1,11 @@
 // The poker page: a Texas Hold'em table for up to 9 in the big meeting room. The host's browser runs
 // the table (js/poker.js); every other browser sends its moves there and is told only what it may see.
-import { PokerTable, POKER_SEATS, pokerDeck, cardText } from './poker.js?v=20261121zc';
-import { sha256 } from './game.js?v=20261121zc';
-import { botMove, isBot, BOT_NAMES } from './pokerbot.js?v=20261121zc';
-import { chipSound, cardSound, hitSound, standSound, potSound, tickSound, turnSound } from './fx.js?v=20261121zc';
-import { webglOK, initRoom } from './room3d.js?v=20261121zc';
-import { params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame } from './common.js?v=20261121zc';
+import { PokerTable, POKER_SEATS, pokerDeck, cardText } from './poker.js?v=20261121ze';
+import { sha256 } from './game.js?v=20261121ze';
+import { botMove, isBot, BOT_NAMES } from './pokerbot.js?v=20261121ze';
+import { chipSound, cardSound, hitSound, standSound, potSound, tickSound, turnSound } from './fx.js?v=20261121ze';
+import { webglOK, initRoom } from './room3d.js?v=20261121ze';
+import { params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame } from './common.js?v=20261121ze';
 
 const PREFIX = 'bjt-pk-';
 const app = $('#app');
@@ -259,6 +259,9 @@ function hostClock() {
     if (t.players[x.id]?.connected === false && gone && now - gone > 40000) { t.sitOut(x.id, true); S.autoAway[x.id] = true; t.addLog(`${t.players[x.id].name} is offline and was marked away.`); push(); }
   }
   const r = t.result;
+  // A rabbit hunt is shown slowly: the next hand waits until every card has been turned and seen.
+  if (!t.rabbit) S.rabUntil = 0; else if (!S.rabUntil) S.rabUntil = now + t.rabbit.length * RABBIT_MS + 2500;
+  if (S.rabUntil && now < S.rabUntil) return;
   // Too few players for a new hand (away, or out of chips): once the result has been shown, the cards are
   // collected and the table waits. It deals again by itself as soon as two players can play.
   if (t.phase === 'done' && !t.canStart() && now - S.doneAt >= 6000 + (r?.showdown ? 2500 : 0) + (r?.runout ? (r.runout.length + (r.boards ? r.boards.length : 1)) * stepMs() : 0)) { t.clearHand(); S.doneAt = 0; push(); return; }
@@ -400,6 +403,7 @@ function rankBadge(seat) {
   const [key, tier, icon, label] = RANKS_UI.find((r) => seat.hand.startsWith(r[0]));
   return `<div class="pk-rank flat t${tier}"><b>${icon} ${label || key}</b></div>`;
 }
+const RABBIT_MS = 1300; // a rabbit hunt turns one card every this many milliseconds
 const stepMs = () => Number(params.get('step')) || { fast: 1100, normal: 1900, long: 3200 }[(S.st || S.table)?.settings?.showSpeed] || 1100; // an all in board comes one step at a time, this many milliseconds apart
 // Where an all in showdown is in its show: which cards are out, whose chances to print, and whether the winners are known yet.
 function runStage(st) {
@@ -565,10 +569,25 @@ function render() {
   const inBest = (i, c) => !!(c && bests && winBy[i] && bests[i]?.cards.some((b) => b.r === c.r && b.s === c.s));
   let h = '';
   const potLine = st.pots.length > 1 ? st.pots.map((p, n) => `${n ? 'Side pot ' + n : 'Main pot'} ${amt(p.amount)}`).join(' · ') : '';
-  const rab = (cs) => (cs ? `<div class="pk-rabbit">🐇 ${cs.map((c) => cardHTML(c, 'ghost')).join('')}</div>` : '');
-  const rabbit = rab(st.rabbit), rabbit2 = rab(st.rabbit2);
+  // Rabbit hunt: the cards that would have come take the empty places on the board, one at a time and slowly.
+  // Before anyone looked, those places are face down cards that a player dealt into the hand can tap.
+  if (st.rabbit && S.rabSeen?.hand !== st.handNo) S.rabSeen = { hand: st.handNo, at: Date.now() };
+  const rabAge = st.rabbit ? Date.now() - S.rabSeen.at : 0;
+  const mineIn = st.seats.some((x) => x && x.id === S.myId && x.inHand);
+  const canHunt = st.phase === 'done' && st.result?.early && st.settings.rabbitHunt && !st.rabbit && mineIn && !stage;
+  const rab = (cs, have) => (cs ? cs.map((c, i) => { const d = i * RABBIT_MS - rabAge; return cardHTML(c, 'bcard ghost' + (d > -700 ? ' rab-in" style="animation-delay:' + Math.round(d) + 'ms' : '')); }).join('')
+    : canHunt ? Array.from({ length: Math.max(0, 5 - have) }, (_, i) => `<div class="card back bcard rab-slot" data-act="rabbit" title="Rabbit hunt: see the cards that would have come">${i === 0 ? '<span>🐇</span>' : ''}</div>`).join('') : '');
+  const rabbit = rab(st.rabbit, st.board.length), rabbit2 = dbl ? rab(st.rabbit2, (st.board2 || []).length) : '';
   const potNow = st.potTotal || (st.phase === 'done' ? (st.result?.wins || []).reduce((a, w) => a + w.amount, 0) : 0);
-  const rows = boards.map((b, r) => `<div class="pk-brow">${many ? `<i>${dbl ? 'Board' : 'Run'} ${r + 1}</i>` : ''}${b.map((c, i) => cardHTML(c, 'bcard' + ((r === 0 || dbl ? i >= seen.n : r >= seen.rows) ? ' deal d' + Math.max(0, Math.min(4, r === 0 || dbl ? i - seen.n : i)) : '') + (Object.keys(winBy).some((k) => inBest(Number(k), c)) ? ' hi' : ''))).join('')}${r === 0 ? rabbit : dbl && r === 1 ? rabbit2 : ''}</div>`).join('');
+  const cardAt = (b, r) => b.map((c, i) => cardHTML(c, 'bcard' + ((r === 0 || dbl ? i >= seen.n : r >= seen.rows) ? ' deal d' + Math.max(0, Math.min(4, r === 0 || dbl ? i - seen.n : i)) : '') + (Object.keys(winBy).some((k) => inBest(Number(k), c)) ? ' hi' : '')));
+  const label = (r) => (many ? `<i>${dbl ? 'Board' : 'Run'} ${r + 1}</i>` : '');
+  // Run it more than once: the cards every run shares (the flop, or the flop and turn) are drawn once, and
+  // each run is a branch from them with only its own cards.
+  let base = 0;
+  if (many && !dbl && allBoards.length > 1) { const a = allBoards[0]; while (base < 5 && a[base] && allBoards.every((b) => b[base] && b[base].r === a[base].r && b[base].s === a[base].s)) base++; if (base >= 5) base = 0; }
+  const rows = base
+    ? `<div class="pk-tree"><div class="pk-trunk">${cardAt(boards[0], 0).slice(0, base).join('')}</div><div class="pk-branches">${boards.map((b, r) => `<div class="pk-brow">${label(r)}${cardAt(b, r).slice(base).join('')}</div>`).join('')}</div></div>`
+    : boards.map((b, r) => `<div class="pk-brow">${label(r)}${cardAt(b, r).join('')}${r === 0 ? rabbit : dbl && r === 1 ? rabbit2 : ''}</div>`).join('');
   seen.n = boards[0].length; seen.rows = boards.length;
   h += `<div class="pk-mid${many ? ' many n' + allBoards.length : ''}" style="--cols:${allBoards.length > 6 ? 3 : allBoards.length > 3 ? 2 : 1};--rcw:${[0, 59, 28, 18, 28, 18, 18, 15, 15, 15, 12][Math.min(10, allBoards.length)] || 12}">
     <div class="pk-board pk-stand"><div class="pk-pot">${st.bomb && live && !ring ? '<span class="pk-bomb">💣 Bomb pot</span>' : ''}${(st.plo || dbl) && st.phase !== 'waiting' && !ring ? `<span class="pk-variant">${st.plo ? 'PLO' : "Hold'em"}${dbl ? ' · 2 boards' : ''}</span>` : ''}<b class="pk-potnum"><i>POT</i>${amt(potNow)}</b>${potLine && !ring ? `<small>${potLine}</small>` : ''}</div>${rows}</div>
@@ -723,7 +742,7 @@ function drawHud(st, mySeat, showing) {
   const hr = $('#host-run');
   if (hr) { const running = S.started && !S.paused; hr.hidden = !isHost; hr.textContent = running ? '⏸ Stop' : '▶ Start'; hr.title = running ? 'Stop dealing after this hand' : 'Deal the next hand and keep dealing'; hr.classList.toggle('primary', !running); hr.disabled = !running && !st.canStart; }
   let h = '';
-  if (seat && seat.cards.length && seat.cards[0]) h += `<div class="pk-handrow"><div class="pk-myhand${seat.cards.length > 2 ? ' four' : ''}">${seat.cards.map((c) => cardHTML(c, 'big')).join('')}</div>${badge}</div>`;
+  if (seat && seat.cards.length && seat.cards[0]) h += `<div class="pk-handrow"><div class="pk-myhand${seat.cards.length > 2 ? ' four' : ''}${seat.folded || !seat.inHand ? ' out' : ''}">${seat.cards.map((c) => cardHTML(c, 'big')).join('')}</div>${badge}</div>`;
   if (S.pre && S.pre.hand !== st.handNo) S.pre = null;
   if (o && S.pre) {
     // The move picked ahead of time. "Check" only checks: with a bet to call it is dropped and you choose yourself.
@@ -777,6 +796,7 @@ function drawHud(st, mySeat, showing) {
     // Only what is used during play stays on screen (top left). Chips, the amount view and Leave seat are in the menu.
     h += `<div class="pk-mine">
       ${st.settings.straddle ? `<button class="btn small" data-act="straddle">Straddle: ${seat.straddle ? 'on' : 'off'}</button>` : ''}
+      <button class="btn danger pk-leave" data-act="stand">🚪 Leave seat</button>
     </div>`;
   }
   // Keep what is being typed in the amount box while the table redraws.

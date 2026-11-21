@@ -74,6 +74,54 @@ function woodGrain(base, dark, light, seed) {
     g.globalAlpha = 1;
   };
 }
+// The poker cloth in the 3D room: woven green with a lit middle, a faint suit pattern, a gold line and
+// stitching along the rail, a betting line, and the club emblem on both sides of the board.
+function pokerFelt(W, H) {
+  const cw = 2048, ch = Math.max(256, Math.round(cw * H / W));
+  return canvasTexture(cw, ch, (g, w, h) => {
+    const k = w / W; // canvas pixels per table unit
+    const grd = g.createRadialGradient(w / 2, h * 0.48, h * 0.05, w / 2, h * 0.5, w * 0.56);
+    grd.addColorStop(0, '#1c8a62'); grd.addColorStop(0.55, '#12684a'); grd.addColorStop(1, '#0a4733');
+    g.fillStyle = grd; g.fillRect(0, 0, w, h);
+    // Cloth weave: fine crossed lines, lighter one way and darker the other.
+    g.lineWidth = 1;
+    for (const [dir, col] of [[1, 'rgba(255,255,255,.035)'], [-1, 'rgba(0,0,0,.07)']]) {
+      g.strokeStyle = col; g.beginPath();
+      for (let x = -h; x < w + h; x += 5) { g.moveTo(x, dir > 0 ? 0 : h); g.lineTo(x + h, dir > 0 ? h : 0); }
+      g.stroke();
+    }
+    // Speckle, so the cloth is not flat colour.
+    for (let n = 0; n < 9000; n++) { g.fillStyle = Math.random() < 0.5 ? 'rgba(255,255,255,.035)' : 'rgba(0,0,0,.05)'; g.fillRect(Math.random() * w, Math.random() * h, 1.5, 1.5); }
+    // Suits in a diamond grid.
+    g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = `${Math.round(26 * k)}px serif`; g.fillStyle = 'rgba(255,255,255,.07)';
+    const step = 74 * k, suits = ['♠', '♥', '♦', '♣'];
+    for (let r = 0, y = step / 2; y < h; y += step, r++) for (let c = 0, x = (r % 2 ? step : step / 2); x < w; x += step, c++) g.fillText(suits[(r * 2 + c) % 4], x, y);
+    // Lines that follow the table's outline: a stadium shape, a given distance in from the edge.
+    const stadium = (inset) => { const r = h / 2 - inset, L = w / 2 - h / 2; g.beginPath(); g.moveTo(w / 2 - L, inset); g.lineTo(w / 2 + L, inset); g.arc(w / 2 + L, h / 2, r, -Math.PI / 2, Math.PI / 2); g.lineTo(w / 2 - L, h - inset); g.arc(w / 2 - L, h / 2, r, Math.PI / 2, Math.PI * 1.5); g.closePath(); };
+    g.setLineDash([]); g.strokeStyle = 'rgba(0,0,0,.28)'; g.lineWidth = 14 * k; stadium(7 * k); g.stroke();           // shade under the rail
+    g.strokeStyle = 'rgba(232,196,106,.75)'; g.lineWidth = 2.5 * k; stadium(18 * k); g.stroke();                       // gold line
+    g.strokeStyle = 'rgba(255,244,214,.4)'; g.lineWidth = 1.6 * k; g.setLineDash([7 * k, 6 * k]); stadium(11 * k); g.stroke(); // stitching
+    g.setLineDash([]); g.strokeStyle = 'rgba(255,255,255,.22)'; g.lineWidth = 2 * k; stadium(h * 0.2); g.stroke();      // betting line
+    g.strokeStyle = 'rgba(0,0,0,.2)'; g.lineWidth = 1 * k; stadium(h * 0.2 + 3 * k); g.stroke();
+    // The club emblem: rings, a spade and the name on an arc.
+    const emblem = (cx, cy, R) => {
+      g.save(); g.translate(cx, cy);
+      g.strokeStyle = 'rgba(241,213,138,.5)'; g.fillStyle = 'rgba(241,213,138,.46)';
+      g.lineWidth = R * 0.022; g.beginPath(); g.arc(0, 0, R, 0, 7); g.stroke();
+      g.lineWidth = R * 0.008; g.beginPath(); g.arc(0, 0, R * 0.94, 0, 7); g.stroke();
+      g.setLineDash([R * 0.015, R * 0.04]); g.lineWidth = R * 0.02; g.beginPath(); g.arc(0, 0, R * 0.56, 0, 7); g.stroke(); g.setLineDash([]);
+      const arcText = (text, rad, from, top) => { g.font = `700 ${Math.round(R * 0.17)}px Georgia, serif`; const each = (top ? 1 : -1) * 0.2; let a = from - each * (text.length - 1) / 2; for (const chr of text) { g.save(); g.rotate(a); g.translate(0, top ? -rad : rad); g.fillText(chr, 0, 0); g.restore(); a += each; } };
+      arcText('ARC POKER ROOM', R * 0.75, 0, true);
+      arcText('♠ ♥ ♦ ♣', R * 0.75, 0, false);
+      const u = R * 0.0042; g.scale(u, u); g.translate(-200, -200);
+      g.fill(new Path2D('M200 118c-34 44-70 62-70 98 0 24 18 40 38 40 12 0 22-5 28-14-2 20-10 32-24 42h56c-14-10-22-22-24-42 6 9 16 14 28 14 20 0 38-16 38-40 0-36-36-54-70-98z'));
+      g.restore();
+    };
+    const R = h * 0.2;
+    emblem(w * 0.17, h * 0.5, R); emblem(w * 0.83, h * 0.5, R);
+    vignette(g, w, h);
+  });
+}
 // Soft dark edge laid over the felt, as if the lamp lights the middle most.
 function vignette(g, w, h) {
   const grd = g.createRadialGradient(w / 2, h * 0.5, h * 0.2, w / 2, h * 0.5, h * 0.72);
@@ -162,7 +210,7 @@ function buildOffice(signText, midShift = 0, midScale = 1, skipRoom = null, live
     chrome: mk({ color: '#b9bec4', roughness: 0.25, metalness: 0.9 }),
     screen: mk({ color: '#0d0f12', roughness: 0.25, metalness: 0.2 }),
     // What the office screens show: the ARC Group logo, from the photo of it, lit like a screen that is on.
-    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261121zc'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
+    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261121ze'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
     dark: mk({ color: '#30353c', roughness: 0.6 }),
   };
   const group = new THREE.Group();
@@ -909,7 +957,7 @@ function buildStorefront() {
     lamp: lam('#c8161d', 0.6), bulb: lit('#ffe9a8'), red: lit('#c8161d'), gold: lit('#f4c542'), wood: lam('#7a5234', 0.35),
     glass: new THREE.MeshBasicMaterial({ color: '#dff3f7', transparent: true, opacity: 0.13, depthWrite: false }),
     awning: new THREE.MeshBasicMaterial({ map: canvasTexture(512, 64, (g, w, h) => { for (let i = 0; i < 16; i++) { g.fillStyle = i % 2 ? '#fff6e6' : '#f08a1c'; g.fillRect((i * w) / 16, 0, w / 16 + 1, h); } }), side: THREE.DoubleSide }),
-    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261121zc') }),
+    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261121ze') }),
     menu: new THREE.MeshBasicMaterial({ map: canvasTexture(256, 384, (g, w, h) => {
       g.fillStyle = '#c8161d'; g.fillRect(0, 0, w, h); g.fillStyle = '#f4c542'; g.fillRect(14, 14, w - 28, 44);
       const r = rng(11); g.fillStyle = '#fff3d6';
@@ -1050,7 +1098,9 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
   // on top of the whole 3D picture, so text and cards float above the rail, the shadows and the chips.
   const TOP = OVAL;
   container.classList.toggle('html-top', TOP);
-  const hole = flat(new THREE.Mesh(feltGeo, TOP ? new THREE.MeshStandardMaterial({ color: '#12684a', roughness: 0.95 })
+  let clothMap = null;
+  if (TOP) { clothMap = pokerFelt(W, H); clothMap.repeat.set(1 / W, 1 / H); clothMap.offset.set(0.5, 0.5); }
+  const hole = flat(new THREE.Mesh(feltGeo, TOP ? new THREE.MeshStandardMaterial({ color: '#ffffff', map: clothMap, roughness: 0.95 })
     : new THREE.MeshBasicMaterial({ color: 0x000000, opacity: 0, blending: THREE.NoBlending })), 1);
   hole.receiveShadow = TOP;
   scene.add(hole);
