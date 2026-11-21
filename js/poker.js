@@ -1,6 +1,6 @@
 // No-limit Texas Hold'em for up to 9 players. Pure rules: the host's browser owns one PokerTable and
 // every action goes through it. Nothing here touches the page or the network.
-import { SUITS, RANKS, sha256, fairSeed, fairShoe, MAX_CHIPS } from './game.js?v=20261121h';
+import { SUITS, RANKS, sha256, fairSeed, fairShoe, MAX_CHIPS } from './game.js?v=20261121i';
 
 export const POKER_SEATS = 9;
 export const POKER_DEFAULTS = {
@@ -17,6 +17,10 @@ export const POKER_DEFAULTS = {
   rabbitHunt: true,   // after a hand ends early, players may look at the cards that would have come
   straddle: false,    // the player left of the big blind may post 2 big blinds before the cards
   showSpeed: 'fast',  // how long an all in showdown takes on screen: fast, normal or long
+  game: 'nlh',        // nlh = no limit Texas Hold'em (2 cards), plo = pot limit Omaha (4 cards, a hand uses exactly 2 of them with 3 from the board)
+  doubleBoard: false, // two boards are dealt and each plays for half the pot
+  bombGame: 'same',   // the game of a bomb pot: same as the table, nlh or plo
+  bombBoards: 0,      // boards in a bomb pot: 0 = same as the table, 1 or 2
   runTimes: 10,       // when everyone is all in before the river, the rest of the board is dealt this many times (1 to 10) and the pot is shared between the runs
 };
 
@@ -66,6 +70,18 @@ export function bestHand(cards) {
   };
   if (n < 5) return null;
   go(0);
+  const cat = Math.floor(best.score / 15 ** 5);
+  return { ...best, cat, name: handName(cat, best.cards) };
+}
+// Omaha: the best five made of exactly two of the player's cards and exactly three from the board.
+export function bestOmaha(hole, board) {
+  if (hole.length < 2 || board.length < 3) return null;
+  let best = null;
+  for (let a = 0; a < hole.length; a++) for (let b = a + 1; b < hole.length; b++)
+    for (let x = 0; x < board.length; x++) for (let y = x + 1; y < board.length; y++) for (let z = y + 1; z < board.length; z++) {
+      const five = [hole[a], hole[b], board[x], board[y], board[z]], sc = score5(five);
+      if (!best || sc > best.score) best = { score: sc, cards: five };
+    }
   const cat = Math.floor(best.score / 15 ** 5);
   return { ...best, cat, name: handName(cat, best.cards) };
 }
@@ -156,6 +172,10 @@ export class PokerTable {
     s.runTimes = clampInt(s.runTimes, 1, 10, this.settings.runTimes);
     for (const k of ['autoStart', 'straddle']) s[k] = !!s[k];
     s.rabbitHunt = true; // always allowed
+    s.game = s.game === 'plo' ? 'plo' : 'nlh';
+    s.doubleBoard = !!s.doubleBoard;
+    s.bombGame = ['same', 'nlh', 'plo'].includes(s.bombGame) ? s.bombGame : 'same';
+    s.bombBoards = [0, 1, 2].includes(Number(s.bombBoards)) ? Number(s.bombBoards) : 0;
     s.showSpeed = ['fast', 'normal', 'long'].includes(s.showSpeed) ? s.showSpeed : 'fast';
     this.settings = s;
   }
@@ -287,9 +307,13 @@ export class PokerTable {
     this.deck = pokerDeck(f.next.seed, seeds);
     this.dealt = [];
     f.next = newCommit();
-    this.board = []; this.pot = 0; this.result = null; this.rabbit = null; this.bomb = bomb; this.allInRun = false; this.runout = null; this.runs = 1; this.runBase = null; this.boards = null;
+    const game = bomb && s.bombGame !== 'same' ? s.bombGame : s.game;
+    this.plo = game === 'plo';
+    this.dbl = bomb && s.bombBoards ? s.bombBoards === 2 : s.doubleBoard;
+    this.cur.plo = this.plo; this.cur.dbl = this.dbl;
+    this.board = []; this.board2 = []; this.rabbit2 = null; this.pot = 0; this.result = null; this.rabbit = null; this.bomb = bomb; this.allInRun = false; this.runout = null; this.runs = 1; this.runBase = null; this.boards = null;
     for (const i of inIdx) { const x = this.seats[i]; x.inHand = true; x.bank = Math.min(this.settings.timeBank, (x.bank ?? this.settings.timeBank) + (this.handNo > 1 ? 10 : 0)); }
-    this.addLog(`Hand ${this.handNo}${bomb ? ' (bomb pot)' : ''}. ${this.name(this.button)} has the button.`);
+    this.addLog(`Hand ${this.handNo}${bomb ? ' (bomb pot)' : ''}${this.plo ? ', pot limit Omaha' : ''}${this.dbl ? ', two boards' : ''}. ${this.name(this.button)} has the button.`);
     const post = (i, amount, what) => {
       const x = this.seats[i], pay = Math.min(x.stack, amount);
       x.stack -= pay; x.bet += pay; x.total += pay;
@@ -327,13 +351,16 @@ export class PokerTable {
     this.turn = null;
     this.seekTurn(this.prevSeat(first));
   }
+  get holeN() { return this.plo ? 4 : 2; }
+  // The best hand of a player's cards on a board, by the rules of the game in play.
+  best(cards, board) { return this.plo ? bestOmaha(cards, board) : bestHand([...cards, ...board]); }
   prevSeat(i) { return (i + POKER_SEATS - 1) % POKER_SEATS; }
   dealHole(inIdx) {
     // One card at a time, starting left of the button, twice round.
     const order = [];
     let j = this.button;
     for (let k = 0; k < inIdx.length; k++) { j = this.nextFrom(j, (q) => inIdx.includes(q)); order.push(j); }
-    for (let r = 0; r < 2; r++) for (const i of order) this.seats[i].cards.push(this.draw());
+    for (let r = 0; r < this.holeN; r++) for (const i of order) this.seats[i].cards.push(this.draw());
     // A sealed note of each player's cards, open to all. If the table moves to another browser mid hand,
     // each player hands in their cards with the secret word and the new host checks them against the note.
     for (const i of order) { const x = this.seats[i]; x.salt = randomSeed(); x.cc = sha256(x.cards.map(cardText).join('') + x.salt); }
@@ -363,7 +390,9 @@ export class PokerTable {
     // A raise is open unless this player already acted and only a short all in came since.
     const mayRaise = !x.acted && others && max > this.currentBet;
     const minTo = Math.min(max, this.currentBet + this.minRaise);
-    return { toCall, canCheck: x.bet >= this.currentBet, canRaise: mayRaise, minTo: mayRaise ? minTo : null, maxTo: mayRaise ? max : null, isBet: this.currentBet === 0, pot: this.potTotal() };
+    // Pot limit: the largest raise is the size of the pot after calling.
+    const cap = this.plo ? Math.min(max, Math.max(minTo, this.currentBet + this.potTotal() + (this.currentBet - x.bet))) : max;
+    return { toCall, canCheck: x.bet >= this.currentBet, canRaise: mayRaise, minTo: mayRaise ? minTo : null, maxTo: mayRaise ? cap : null, allIn: cap === max, potLimit: !!this.plo, isBet: this.currentBet === 0, pot: this.potTotal() };
   }
   potTotal() { return this.pot + this.seats.reduce((a, x) => a + (x ? x.bet : 0), 0); }
 
@@ -388,7 +417,7 @@ export class PokerTable {
     } else if (type === 'raise' || type === 'bet') {
       if (!o.canRaise) throw new Error('You cannot raise now.');
       const to = Math.round(Number(amount));
-      if (!Number.isFinite(to) || to > o.maxTo) throw new Error('You do not have that many chips.');
+      if (!Number.isFinite(to) || to > o.maxTo) throw new Error(o.allIn ? 'You do not have that many chips.' : `Pot limit: the largest raise now is to ${o.maxTo}.`);
       if (to < o.minTo) throw new Error(`The smallest ${o.isBet ? 'bet' : 'raise'} is to ${o.minTo}.`);
       const pay = to - x.bet, by = to - this.currentBet;
       x.stack -= pay; x.bet = to; x.total += pay; x.acted = true;
@@ -443,7 +472,7 @@ export class PokerTable {
       // Nobody left to bet against: the hands turn face up and the rest of the board comes.
       // Before each new card the chances of every hand are worked out, for the display.
       if (!this.allInRun) {
-        for (const i of live) if (this.seats[i].cards.length !== 2) this.redraw(i); // only after a table move
+        for (const i of live) if (this.seats[i].cards.length !== this.holeN) this.redraw(i); // only after a table move
         this.allInRun = true; this.runout = [];
         for (const i of live) this.seats[i].show = true;
         // Run it more than once: as many runs as the table asks for and the deck has cards for.
@@ -452,7 +481,7 @@ export class PokerTable {
         this.runBase = [...this.board];
         // Each player picks how many times they like to run it (1 to 10); the lowest pick among the players in the hand counts.
         const want = Math.min(this.settings.runTimes, ...live.map((i) => this.seats[i].runs || 2));
-        this.runs = 1 + Math.max(0, Math.min(want - 1, Math.floor((this.deck.length - first) / need)));
+        this.runs = this.dbl ? 1 : 1 + Math.max(0, Math.min(want - 1, Math.floor((this.deck.length - first) / need)));
       }
       if (!PokerTable.noChances) this.runout.push(this.chances(live));
       this.nextStreet();
@@ -464,10 +493,12 @@ export class PokerTable {
   }
   nextStreet() {
     this.draw(); // burn
-    if (this.phase === 'preflop') { this.board.push(this.draw(), this.draw(), this.draw()); this.phase = 'flop'; }
-    else if (this.phase === 'flop') { this.board.push(this.draw()); this.phase = 'turn'; }
-    else if (this.phase === 'turn') { this.board.push(this.draw()); this.phase = 'river'; }
-    this.addLog(`${this.phase[0].toUpperCase() + this.phase.slice(1)}: ${this.board.map(cardText).join(' ')}.`);
+    // With two boards the first board gets its cards, then the second.
+    const give = (n) => { for (let k = 0; k < n; k++) this.board.push(this.draw()); if (this.dbl) for (let k = 0; k < n; k++) this.board2.push(this.draw()); };
+    if (this.phase === 'preflop') { give(3); this.phase = 'flop'; }
+    else if (this.phase === 'flop') { give(1); this.phase = 'turn'; }
+    else if (this.phase === 'turn') { give(1); this.phase = 'river'; }
+    this.addLog(`${this.phase[0].toUpperCase() + this.phase.slice(1)}: ${this.board.map(cardText).join(' ')}${this.dbl ? ' | second board: ' + this.board2.map(cardText).join(' ') : ''}.`);
   }
 
   // Each live hand's chance to win from here, in percent, and its outs: the cards of the next street that
@@ -475,26 +506,32 @@ export class PokerTable {
   // the deck are never looked at. With two or fewer cards to come every case is counted; before the flop
   // 4,000 random boards are tried.
   chances(live) {
-    const seen = new Set([...this.board, ...live.flatMap((i) => this.seats[i].cards)].map(cardText));
+    const boards = this.dbl ? [this.board, this.board2] : [this.board];
+    const seen = new Set([...boards.flat(), ...live.flatMap((i) => this.seats[i].cards)].map(cardText));
     const rest = [];
     for (const sName of SUITS) for (const r of RANKS) { const c = { r, s: sName }; if (!seen.has(cardText(c))) rest.push(c); }
     const need = 5 - this.board.length;
     const win = Object.fromEntries(live.map((i) => [i, 0]));
-    let total = 0;
-    const best = (board) => { const sc = live.map((i) => bestHand([...this.seats[i].cards, ...board]).score); const top = Math.max(...sc); return live.filter((_, k) => sc[k] === top); };
-    const tally = (board) => { const w = best(board); for (const i of w) win[i] += 1 / w.length; total++; };
-    if (need === 1) for (const a of rest) tally([...this.board, a]);
-    else if (need === 2) { for (let x = 0; x < rest.length; x++) for (let y = x + 1; y < rest.length; y++) tally([...this.board, rest[x], rest[y]]); }
-    else for (let n = 0; n < (PokerTable.samples || 4000); n++) {
-      const pick = [];
-      while (pick.length < need) { const k = Math.floor(Math.random() * rest.length); if (!pick.includes(k)) pick.push(k); }
-      tally([...this.board, ...pick.map((k) => rest[k])]);
+    const bestOn = (board) => { const sc = live.map((i) => this.best(this.seats[i].cards, board).score); const top = Math.max(...sc); return live.filter((_, k) => sc[k] === top); };
+    // Each board plays for an equal part of the pot, so a hand's chance is the average over the boards.
+    for (const base of boards) {
+      let total = 0;
+      const part = Object.fromEntries(live.map((i) => [i, 0]));
+      const tally = (board) => { const w = bestOn(board); for (const i of w) part[i] += 1 / w.length; total++; };
+      if (need === 1) for (const a of rest) tally([...base, a]);
+      else if (need === 2) { for (let x = 0; x < rest.length; x++) for (let y = x + 1; y < rest.length; y++) tally([...base, rest[x], rest[y]]); }
+      else for (let n = 0, N = (PokerTable.samples || (this.plo ? 1000 : 4000)) / boards.length; n < N; n++) {
+        const pick = [];
+        while (pick.length < need) { const k = Math.floor(Math.random() * rest.length); if (!pick.includes(k)) pick.push(k); }
+        tally([...base, ...pick.map((k) => rest[k])]);
+      }
+      for (const i of live) win[i] += part[i] / total / boards.length;
     }
-    const pct = Object.fromEntries(live.map((i) => [i, Math.round((win[i] / total) * 1000) / 10]));
+    const pct = Object.fromEntries(live.map((i) => [i, Math.round(win[i] * 1000) / 10]));
     const outs = {};
-    if (this.board.length >= 3) {
-      const ahead = best(this.board);
-      for (const i of live) if (!ahead.includes(i)) outs[i] = rest.filter((c) => best([...this.board, c]).includes(i)).length;
+    if (this.board.length >= 3 && !this.dbl) {
+      const ahead = bestOn(this.board);
+      for (const i of live) if (!ahead.includes(i)) outs[i] = rest.filter((c) => bestOn([...this.board, c]).includes(i)).length;
     }
     return { n: this.board.length, pct, outs };
   }
@@ -523,7 +560,7 @@ export class PokerTable {
     this.turn = null;
     const live = this.liveSeats();
     const showdown = live.length > 1;
-    if (showdown) for (const i of live) if (this.seats[i].cards.length !== 2) this.redraw(i); // only after a table move
+    if (showdown) for (const i of live) if (this.seats[i].cards.length !== this.holeN) this.redraw(i); // only after a table move
     const early = this.board.length < 5;
     const dealtIn = this.seats.map((x, i) => (x && x.inHand ? i : -1)).filter((i) => i >= 0);
     // Seats in dealing order from the left of the button: the first of them gets an odd chip.
@@ -534,17 +571,18 @@ export class PokerTable {
     const paid = pots.reduce((a, p) => a + p.amount, 0);
     if (paid !== this.pot) throw new Error(`Pot mismatch: ${paid} against ${this.pot}`);
     // The boards: one, or one per run when the all in is run more than once.
-    const boards = [this.board];
-    if (showdown && this.allInRun && this.runs > 1 && this.runBase) {
+    const boards = this.dbl && showdown ? [this.board, this.board2] : [this.board];
+    if (!this.dbl && showdown && this.allInRun && this.runs > 1 && this.runBase) {
       for (let r = 1; r < this.runs; r++) { const b = [...this.runBase]; while (b.length < 5) b.push(this.draw()); boards.push(b); }
       this.boards = boards;
     }
     const R = boards.length;
-    const hands = showdown ? boards.map((b) => Object.fromEntries(live.map((i) => [i, bestHand([...this.seats[i].cards, ...b])]))) : null;
+    const hands = showdown ? boards.map((b) => Object.fromEntries(live.map((i) => [i, this.best(this.seats[i].cards, b)]))) : null;
+    const runWord = this.dbl ? 'board' : 'run';
     if (showdown) {
       for (const i of live) { const x = this.seats[i]; x.hand = hands[0][i]; x.show = true; }
       boards.forEach((b, r) => {
-        this.addLog(`Showdown${R > 1 ? `, run ${r + 1} of ${R}` : ''}. Board: ${b.map(cardText).join(' ')}.`);
+        this.addLog(`Showdown${R > 1 ? `, ${runWord} ${r + 1} of ${R}` : ''}. Board: ${b.map(cardText).join(' ')}.`);
         for (const i of order) if (live.includes(i)) this.addLog(`${this.name(i)} ${r ? 'has' : 'shows'} ${this.seats[i].cards.map(cardText).join(' ')}: ${hands[r][i].name}.`);
       });
     }
@@ -565,7 +603,7 @@ export class PokerTable {
           this.seats[i].stack += get; this.seats[i].won = (this.seats[i].won || 0) + get;
           const hn = showdown ? hands[r][i].name : null;
           wins.push({ seat: i, amount: get, pot: n, run: r, hand: hn });
-          this.addLog(`${this.name(i)} wins ${get}${R > 1 ? ` on run ${r + 1}` : ''}${pots.length > 1 ? (n ? ` from side pot ${n}` : ' from the main pot') : ''}${hn ? ` with ${hn}` : ''}.`);
+          this.addLog(`${this.name(i)} wins ${get}${R > 1 ? ` on ${runWord} ${r + 1}` : ''}${pots.length > 1 ? (n ? ` from side pot ${n}` : ' from the main pot') : ''}${hn ? ` with ${hn}` : ''}.`);
         }
       }
     });
@@ -583,7 +621,7 @@ export class PokerTable {
     this.pot = 0;
     // 7-2 bounty: a winner holding seven-two collects from everyone who was dealt in.
     const bounty = [];
-    if (this.settings.sevenDeuce > 0) {
+    if (this.settings.sevenDeuce > 0 && !this.plo) {
       const winners = [...new Set(wins.map((w) => w.seat))];
       for (const w of winners) {
         const v = this.seats[w].cards.map(rankVal).sort((a, b) => a - b);
@@ -595,11 +633,11 @@ export class PokerTable {
         this.addLog(`${this.name(w)} won with seven-two and collects a bounty of ${got}.`);
       }
     }
-    this.result = { wins, showdown, bounty, early, board: [...this.board], runout: this.allInRun && this.runout?.length ? this.runout : null, boards: R > 1 ? boards : null,
+    this.result = { wins, showdown, bounty, early, board: [...this.board], runout: this.allInRun && this.runout?.length ? this.runout : null, boards: R > 1 ? boards : null, dbl: !!this.dbl,
       bests: showdown ? boards.map((_, r) => Object.fromEntries(live.map((i) => [i, { name: hands[r][i].name, cards: hands[r][i].cards }]))) : null };
     this.phase = 'done';
     // The record of the hand, with the seed that anyone can check.
-    const rec = { ...this.cur, dealt: [...this.dealt], board: [...this.board], boards: R > 1 ? boards : undefined, button: this.button, wins, bounty,
+    const rec = { ...this.cur, dealt: [...this.dealt], board: [...this.board], board2: this.dbl ? [...this.board2] : undefined, boards: R > 1 ? boards : undefined, button: this.button, wins, bounty,
       seats: dealtIn.map((i) => ({ seat: i, id: this.seats[i].id, name: this.name(i), cards: this.shownCards(i), folded: this.seats[i].folded, total: this.seats[i].total, won: this.seats[i].won || 0, end: this.seats[i].stack })) };
     this.fair.last = { hand: rec.hand, commit: rec.commit, serverSeed: rec.serverSeed, clientSeeds: rec.clientSeeds, dealt: rec.dealt }; // host side only
     this.hist.push(rec); if (this.hist.length > 100) this.hist.shift();
@@ -619,13 +657,13 @@ export class PokerTable {
     const i = this.seatOf(id);
     if (i < 0 || this.phase !== 'done') return;
     const x = this.seats[i];
-    if (!x.inHand || x.show || x.cards.length !== 2) return;
-    const one = which === 0 || which === 1;
+    if (!x.inHand || x.show || x.cards.length !== this.holeN) return;
+    const one = Number.isInteger(which) && which >= 0 && which < x.cards.length;
     if (one) {
-      const m = x.mask || [false, false];
+      const m = x.mask || x.cards.map(() => false);
       if (m[which]) return;
       m[which] = true; x.mask = m;
-      if (m[0] && m[1]) x.show = true;
+      if (m.every(Boolean)) x.show = true;
       this.addLog(`${this.name(i)} shows one card: ${cardText(x.cards[which])}.`);
     } else {
       x.show = true;
@@ -638,7 +676,7 @@ export class PokerTable {
   shownCards(i) {
     const x = this.seats[i];
     if (x.show && x.cards.length) return x.cards;
-    if (x.mask && x.cards.length === 2 && (x.mask[0] || x.mask[1])) return x.cards.map((c, k) => (x.mask[k] ? c : null));
+    if (x.mask && x.cards.length && x.mask.some(Boolean)) return x.cards.map((c, k) => (x.mask[k] ? c : null));
     return null;
   }
   // ---- the table moves to another browser ----
@@ -649,7 +687,7 @@ export class PokerTable {
   static fromPublic(st, myId, mine) {
     const t = new PokerTable(st.settings);
     Object.assign(t, { hostId: myId, button: st.button, handNo: st.handNo, phase: st.phase, board: [...st.board], pot: st.pot, currentBet: st.currentBet,
-      minRaise: st.minRaise ?? st.settings.bigBlind, turn: st.turn, bomb: !!st.bomb, bombNext: !!st.bombNext, result: st.result, rabbit: st.rabbit,
+      minRaise: st.minRaise ?? st.settings.bigBlind, turn: st.turn, bomb: !!st.bomb, plo: !!st.plo, dbl: !!st.dbl, board2: [...(st.board2 || [])], rabbit2: st.rabbit2 || null, bombNext: !!st.bombNext, result: st.result, rabbit: st.rabbit,
       awayVotes: st.awayVotes || {}, pending: { ...(st.pending || {}) }, log: [...(st.log || [])], hist: st.lastHand ? [st.lastHand] : [], moved: (st.moved || 0) + 1 });
     for (const r of st.ledger || []) t.players[r.id] = { id: r.id, name: r.name, connected: r.id === myId, totalIn: r.totalIn, look: { skin: 2, hair: 0 }, stats: r.stats || undefined };
     st.seats.forEach((x, i) => {
@@ -657,12 +695,12 @@ export class PokerTable {
       if (t.players[x.id] && x.look) t.players[x.id].look = x.look;
       t.seats[i] = { id: x.id, stack: x.stack, bet: x.bet, total: x.total, cards: [], folded: x.folded, allIn: x.allIn, acted: !!x.acted, inHand: x.inHand, out: x.out,
         show: false, mask: null, bank: x.bank || 0, runs: x.runs || 2, straddle: !!x.straddle, leaving: !!x.leaving, cc: x.cc || null, salt: null, vp: !!x.vp, pf: !!x.pf, won: x.won || 0 };
-      const known = x.id === myId && mine ? mine.cards : x.cards && x.cards.length === 2 && x.cards[0] && x.cards[1] ? x.cards : null;
+      const known = x.id === myId && mine ? mine.cards : x.cards && x.cards.length >= 2 && x.cards.every(Boolean) ? x.cards : null;
       if (x.inHand && known) { t.seats[i].cards = known.map((c) => ({ r: c.r, s: c.s })); if (x.shown) t.seats[i].show = true; }
       if (x.id === myId && mine) t.seats[i].salt = mine.salt;
     });
     if (t.inHand()) {
-      t.cur = { hand: t.handNo, commit: null, serverSeed: null, clientSeeds: {}, lines: [], bomb: t.bomb, time: Date.now(), moved: true };
+      t.cur = { hand: t.handNo, commit: null, serverSeed: null, clientSeeds: {}, lines: [], bomb: t.bomb, plo: t.plo, dbl: t.dbl, time: Date.now(), moved: true };
       t.turnStarted = Date.now();
       t.reshuffleRest();
     }
@@ -670,22 +708,22 @@ export class PokerTable {
   }
   // The deck after a move: every card that is not on the board and not in a hand this browser knows, shuffled fresh.
   reshuffleRest() {
-    const seen = new Set([...this.board, ...this.seats.flatMap((x) => (x && x.inHand ? x.cards : []))].map(cardText));
+    const seen = new Set([...this.board, ...(this.board2 || []), ...this.seats.flatMap((x) => (x && x.inHand ? x.cards : []))].map(cardText));
     this.deck = pokerDeck(randomSeed(), { move: randomSeed() }).filter((c) => !seen.has(cardText(c)));
     this.dealt = [];
   }
   // Seats still in the hand whose cards this browser has not been given yet.
-  missingCards() { return this.inHand() ? this.liveSeats().filter((i) => this.seats[i].cards.length !== 2) : []; }
+  missingCards() { return this.inHand() ? this.liveSeats().filter((i) => this.seats[i].cards.length !== this.holeN) : []; }
   // A player hands in their two cards after a move. They count only when they fit the sealed note made at the deal.
   giveCards(id, cards, salt) {
     const i = this.seatOf(id);
     if (i < 0) return false;
     const x = this.seats[i];
-    if (!x.inHand || x.cards.length === 2 || !x.cc || !Array.isArray(cards) || cards.length !== 2) return false;
+    if (!x.inHand || x.cards.length === this.holeN || !x.cc || !Array.isArray(cards) || cards.length !== this.holeN) return false;
     const cs = cards.map((c) => ({ r: String(c?.r), s: String(c?.s) }));
     if (sha256(cs.map(cardText).join('') + String(salt)) !== x.cc) return false;
     const txt = cs.map(cardText);
-    if ([...this.board, ...(this.rabbit || []), ...(this.moved ? this.dealt : [])].some((c) => txt.includes(cardText(c)))) return false; // came out after the move while this player was folded and away
+    if ([...this.board, ...(this.board2 || []), ...(this.rabbit || []), ...(this.rabbit2 || []), ...(this.moved ? this.dealt : [])].some((c) => txt.includes(cardText(c)))) return false; // came out after the move while this player was folded and away
     x.cards = cs; x.salt = String(salt);
     this.deck = this.deck.filter((c) => !txt.includes(cardText(c)));
     return true;
@@ -693,9 +731,9 @@ export class PokerTable {
   // A player still in the hand who never came back after a move gets two cards from the unseen cards, so the hand can end.
   redraw(i) {
     const x = this.seats[i];
-    if (!x || !x.inHand || x.cards.length === 2) return;
-    x.cards = [this.draw(), this.draw()]; x.redrawn = true; x.cc = null;
-    this.addLog(`${this.name(i)} did not come back after the table moved, so the seat got two cards from the cards nobody had seen.`);
+    if (!x || !x.inHand || x.cards.length === this.holeN) return;
+    x.cards = Array.from({ length: this.holeN }, () => this.draw()); x.redrawn = true; x.cc = null;
+    this.addLog(`${this.name(i)} did not come back after the table moved, so the seat got new cards from the cards nobody had seen.`);
   }
   // The whole table as plain data (the host's browser keeps it, so a reload carries on), and back again.
   static restore(j) { const t = new PokerTable(); Object.assign(t, j); return t; }
@@ -705,11 +743,11 @@ export class PokerTable {
     if (this.phase !== 'done' || !this.result?.early || this.rabbit) return;
     const i = this.seatOf(id);
     if (i < 0 || !this.seats[i].inHand) throw new Error('Only players dealt into the hand can look.');
-    const deck = [...this.deck], out = [];
+    const deck = [...this.deck], out = [], out2 = [];
     let n = this.board.length;
-    while (n < 5) { deck.shift(); const take = n === 0 ? 3 : 1; for (let k = 0; k < take; k++) out.push(deck.shift()); n += take; }
-    this.rabbit = out;
-    this.addLog(`${this.name(i)} looked at what would have come: ${out.map(cardText).join(' ')}.`);
+    while (n < 5) { deck.shift(); const take = n === 0 ? 3 : 1; for (let k = 0; k < take; k++) out.push(deck.shift()); if (this.dbl) for (let k = 0; k < take; k++) out2.push(deck.shift()); n += take; }
+    this.rabbit = out; this.rabbit2 = this.dbl ? out2 : null;
+    this.addLog(`${this.name(i)} looked at what would have come: ${out.map(cardText).join(' ')}${this.dbl ? ' | second board: ' + out2.map(cardText).join(' ') : ''}.`);
   }
   // The host asks for a bomb pot on the next hand.
   setBombNext(on) { this.bombNext = !!on; }
@@ -721,15 +759,15 @@ export class PokerTable {
     const done = this.phase === 'done';
     const me = this.seatOf(forId);
     return {
-      game: 'poker', settings: this.settings, phase: this.phase, handNo: this.handNo, button: this.button, board: this.board, bomb: !!this.bomb,
+      game: 'poker', settings: this.settings, phase: this.phase, handNo: this.handNo, button: this.button, board: this.board, board2: this.dbl ? this.board2 || [] : null, plo: !!this.plo, dbl: !!this.dbl, rabbit2: this.rabbit2 || null, bomb: !!this.bomb,
       pot: this.pot, minRaise: this.minRaise, pending: this.pending, moved: this.moved || 0, mySalt: me >= 0 ? this.seats[me].salt || null : null, wait: this.waitCards ? this.missingCards().map((i) => this.name(i)) : undefined, potTotal: this.potTotal(), pots: this.inHand() || done ? this.potsNow() : [], currentBet: this.currentBet, turn: this.turn,
       turnLeft: this.turn !== null && this.settings.turnTimer ? Math.max(0, this.settings.turnTimer * 1000 - (Date.now() - (this.turnStarted || Date.now()))) : null,
       hostId: this.hostId, awayVotes: this.awayVotes || {}, canStart: this.canStart(), bombNext: this.bombNext, result: this.result, rabbit: this.rabbit, allInRun: !!this.allInRun && !done ? true : undefined,
       seats: this.seats.map((x, i) => x && {
         id: x.id, name: this.players[x.id]?.name, look: this.players[x.id]?.look, connected: this.players[x.id]?.connected !== false,
         stack: x.stack, bet: x.bet, total: x.total, bank: x.bank || 0, runs: x.runs || 2, shown: !!x.show, mask: x.mask || null, acted: !!x.acted, leaving: !!x.leaving, cc: x.cc || null, vp: !!x.vp, pf: !!x.pf, stats: this.players[x.id]?.stats || null, folded: x.folded, allIn: x.allIn, inHand: x.inHand, out: x.out, won: done ? x.won || 0 : 0, straddle: !!x.straddle,
-        cards: x.inHand ? (x.cards.length === 2 ? x.cards : [null, null]).map((c, k) => (i === me || x.show || (x.mask && x.mask[k]) ? c : null)) : [],
-        hand: x.show && x.hand ? x.hand.name : i === me && x.inHand && !x.folded && x.cards.length === 2 && this.board.length >= 3 ? bestHand([...x.cards, ...this.board]).name : null,
+        cards: x.inHand ? (x.cards.length === this.holeN ? x.cards : Array(this.holeN).fill(null)).map((c, k) => (i === me || x.show || (x.mask && x.mask[k]) ? c : null)) : [],
+        hand: x.show && x.hand ? x.hand.name : i === me && x.inHand && !x.folded && x.cards.length === this.holeN && this.board.length >= 3 ? this.best(x.cards, this.board).name + (this.dbl ? ' | ' + this.best(x.cards, this.board2).name : '') : null,
         best: done && x.show && x.hand ? x.hand.cards : null,
       }),
       players: Object.values(this.players).filter((p) => !p.kicked).map((p) => ({ id: p.id, name: p.name, connected: p.connected, seat: this.seatOf(p.id) })),
@@ -754,7 +792,7 @@ export class PokerTable {
     const open = (h) => this.revealAll || h.hand <= this.handNo - 20;
     return {
       nextCommit: this.fair.next.commit, mySeed: !!this.fair.seeds[forId], seeds: Object.keys(this.fair.seeds).filter((id) => id !== this.hostId).length,
-      hands: this.hist.slice(-40).map((h) => ({ hand: h.hand, commit: h.commit, board: h.board, button: h.button, seats: h.seats.map((x) => ({ seat: x.seat, name: x.name, cards: x.cards })),
+      hands: this.hist.slice(-40).map((h) => ({ hand: h.hand, commit: h.commit, board: h.board, board2: h.board2, plo: !!h.plo, dbl: !!h.dbl, button: h.button, seats: h.seats.map((x) => ({ seat: x.seat, name: x.name, cards: x.cards })),
         ...(open(h) ? { serverSeed: h.serverSeed, clientSeeds: h.clientSeeds } : {}) })),
     };
   }

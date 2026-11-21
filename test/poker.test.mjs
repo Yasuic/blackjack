@@ -1,4 +1,4 @@
-import { PokerTable, bestHand, verifyHand, pokerDeck, cardText } from '../js/poker.js';
+import { PokerTable, bestHand, bestOmaha, verifyHand, pokerDeck, cardText } from '../js/poker.js';
 let fails = 0, n = 0;
 const ok = (c, m) => { n++; if (!c) { fails++; console.log('FAIL', m); } };
 const C = (s) => s.split(' ').map((x) => ({ r: x.slice(0, -1), s: x.slice(-1) }));
@@ -258,7 +258,7 @@ for (let g = 0; g < 300; g++) {
   const liveBefore = m.liveSeats();
   ok(m.giveCards('p0', [{ r: 'A', s: '♠' }, { r: 'A', s: '♥' }], hole.p0.salt) === (cardText(hole.p0.cards[0]) + cardText(hole.p0.cards[1]) === 'A♠A♥' && m.seats[0].inHand), 'made up cards are refused');
   const absent = g % 7 === 3 ? liveBefore.find((i) => 'p' + i !== nh) : -1; // one live player never comes back
-  for (let i = 0; i < nP; i++) if ('p' + i !== nh && i !== absent && m.seats[i].inHand) ok(m.giveCards('p' + i, hole['p' + i].cards, hole['p' + i].salt), 'true cards are taken');
+  for (let i = 0; i < nP; i++) if ('p' + i !== nh && i !== absent && m.seats[i].inHand && !m.seats[i].cards.length) ok(m.giveCards('p' + i, hole['p' + i].cards, hole['p' + i].salt), 'true cards are taken');
   ok(m.missingCards().length === (absent >= 0 ? 1 : 0), 'cards missing only for the absent player');
   for (const i of m.missingCards()) m.redraw(i);
   while (m.inHand()) step(m);
@@ -274,5 +274,62 @@ for (let g = 0; g < 300; g++) {
 }
 function m0(pub, id) { return pub.seats.findIndex((x) => x && x.id === id); }
 PokerTable.noChances = false;
+
+// ---- Omaha and two boards ----
+{
+  const o = (hole, board) => bestOmaha(C(hole), C(board));
+  ok(o('A♠ K♠ 2♦ 3♦', 'Q♠ J♠ 10♠ 4♣ 5♣').name === 'Royal flush', 'omaha royal with two spades in hand');
+  ok(o('A♠ K♦ 2♦ 3♦', 'Q♠ J♠ 10♠ 9♠ 5♣').cat === 4, 'one spade in hand is no flush in omaha: ' + o('A♠ K♦ 2♦ 3♦', 'Q♠ J♠ 10♠ 9♠ 5♣').name);
+  ok(o('A♠ A♦ 7♣ 2♥', 'A♣ A♥ K♦ 9♠ 4♣').cat === 7 && o('7♦ 7♣ 2♥ 3♥', 'A♣ A♥ A♦ 9♠ 4♣').cat === 6, 'quads need two in hand; one ace with three on board is a full house with the sevens');
+  ok(o('2♠ 3♦ 7♣ 8♥', 'A♣ A♥ A♦ A♠ K♣').cat === 3, 'four aces on board: three aces plus two from hand');
+  ok(o('K♠ K♦ Q♣ J♥', '9♣ 9♥ 9♦ 2♠ 3♣').name === 'Full house, nines full of kings', 'pair in hand with trips on board');
+  ok(o('A♠ 2♦ 3♣ 4♥', '5♣ 6♥ 7♦ K♠ Q♣').cat === 4 && o('A♠ 9♦ J♣ K♥', '5♣ 6♥ 7♦ 8♠ 4♣').cat === 4 === false, 'straight needs two from hand');
+  // pot limit
+  const t = mk(3, 1000, { game: 'plo' }); t.startHand();
+  ok(t.seats.filter(Boolean).every((x) => x.cards.length === 4), 'four cards each');
+  const id = t.seats[t.turn].id, op = t.options(id);
+  ok(op.maxTo === 10 + 15 + 10 && op.minTo === 20 && !op.allIn, 'first raise is capped at the pot: ' + op.maxTo);
+  let thr = 0; try { t.act(id, 'raise', 36); } catch { thr++; } ok(thr === 1, 'a raise over the pot is refused');
+  t.act(id, 'raise', 35);
+  const op2 = t.options(t.seats[t.turn].id); // small blind: 5 in, to call 30; pot after call 15+35+30 = 80, so raise to 35+80
+  ok(op2.maxTo === 115, 'pot raise after a raise: ' + op2.maxTo);
+  // two boards share the pot
+  const d = mk(2, 500, { doubleBoard: true }); d.startHand();
+  d.seats[0].cards = C('A♠ A♥'); d.seats[1].cards = C('K♠ K♥');
+  // deck after the hole cards: burn, 3 for board one, 3 for board two, burn, 1, 1, burn, 1, 1
+  d.deck = [...C('3♣ 2♣ 7♦ 9♣ K♦ 4♣ 5♦ 3♦ J♦ K♣ 4♥ 3♠ 5♥'), ...d.deck.filter((c) => !'3♣ 2♣ 7♦ 9♣ K♦ 4♣ 5♦ 3♦ J♦ K♣ 4♥ 3♠ 5♥ A♠ A♥ K♠ K♥'.split(' ').includes(cardText(c)))];
+  const b = d.button; d.act('p' + b, 'raise', 500); d.act('p' + (1 - b), 'call');
+  ok(d.board.map(cardText).join(' ') === '2♣ 7♦ 9♣ J♦ 3♠' && d.board2.map(cardText).join(' ') === 'K♦ 4♣ 5♦ K♣ 5♥', 'two boards dealt in order: ' + d.board.map(cardText).join(' ') + ' | ' + d.board2.map(cardText).join(' '));
+  ok(d.seats[0].stack === 500 && d.seats[1].stack === 500, 'aces win board one, kings win board two, half the pot each');
+}
+for (let g = 0; g < 240; g++) {
+  PokerTable.noChances = g % 12 !== 0; PokerTable.samples = 60;
+  const nP = 2 + (g % 8);
+  const t = mk(nP, 200 + g, { game: g % 2 ? 'plo' : 'nlh', doubleBoard: g % 4 < 2, bombGame: ['same', 'nlh', 'plo'][g % 3], bombBoards: g % 3, bombPotEvery: g % 5 === 0 ? 2 : 0, sevenDeuce: 5 });
+  for (let i = 0; i < nP; i++) t.setRuns('p' + i, 1 + (g % 3));
+  const chips = t.chipsTotal() ;
+  const ledger0 = Object.values(t.players).reduce((a, p) => a + p.totalIn, 0);
+  for (let hnd = 0; hnd < 6 && t.canStart(); hnd++) {
+    t.startHand();
+    let guard = 0;
+    while (t.inHand() && guard++ < 400) {
+      const id = t.seats[t.turn].id, o = t.options(id), r = Math.random();
+      if (r < 0.1 && !o.canCheck) t.act(id, 'fold');
+      else if (r < 0.35 && o.canRaise) t.act(id, 'raise', r < 0.2 ? o.maxTo : o.minTo + Math.floor(Math.random() * (o.maxTo - o.minTo + 1)));
+      else t.act(id, o.canCheck ? 'check' : 'call');
+    }
+    ok(!t.inHand(), 'variant hand ends');
+    ok(t.chipsTotal() === chips, 'variant chips kept: ' + t.chipsTotal() + '/' + chips + ' plo=' + t.plo + ' dbl=' + t.dbl);
+    const rec = t.hist[t.hist.length - 1];
+    ok(new Set(rec.dealt.map(cardText)).size === rec.dealt.length && rec.dealt.length <= 52, 'no card twice in a variant hand');
+    ok(verifyHand(rec).ok, 'variant hand checks against its seed');
+    const hole = t.seats.filter((x) => x && x.inHand);
+    ok(hole.every((x) => x.cards.length === (t.plo ? 4 : 2)), 'right number of cards');
+    if (t.dbl && rec.board.length) ok(rec.board2.length === rec.board.length, 'both boards have the same number of cards');
+    if (t.result.early && t.dbl) { t.rabbitHunt(hole[0].id); ok(t.rabbit.length + t.board.length === 5 && t.rabbit2.length === t.rabbit.length && new Set([...rec.dealt, ...t.rabbit, ...t.rabbit2].map(cardText)).size === rec.dealt.length + t.rabbit.length * 2, 'rabbit on two boards'); }
+  }
+  void ledger0;
+}
+PokerTable.noChances = false; PokerTable.samples = 0;
 console.log(`${n - fails}/${n} poker checks passed`);
 process.exit(fails ? 1 : 0);

@@ -241,3 +241,26 @@ body:not(.room3d) .pk-rank { top: calc(50% + 64px * var(--k)); }
 .pfelt.tall .pk-stats i { display: block; line-height: 1.15; }
 .pfelt.tall .pk-stats i + i::before { content: none; }
 .pfelt.tall .pk-stats i:nth-child(3) { display: none; }
+/* Omaha (four cards) and two boards. */
+.pk-cards.four { --cw: calc(25px * var(--k)); gap: 2px; }
+.pfelt.tall .pk-cards.four, .pfelt.tall .pk-seat.far .pk-cards.four { --cw: 24px; gap: 1px; }
+body.game-poker:not(.room3d) .pfelt.tall .pk-seat.far .pk-cards.four { --cw: 22px; }
+.pk-myhand.four { --cw: 50px; gap: 4px; }
+@media (max-width: 699px) { body.game-poker .pk-myhand.four { --cw: 46px; } }
+.pk-variant { font: 700 .62em "Space Grotesk", sans-serif; letter-spacing: .08em; color: #9fe8ff; text-transform: uppercase; }
+.pk-rank.two { display: grid; grid-template-columns: auto auto; gap: 0 calc(8px * var(--k)); align-items: baseline; }
+.pk-rank.two b { font-size: calc(12px * var(--k)); letter-spacing: .04em; }
+.pk-mid.many.n2 .pk-rank { margin-top: calc(26px * var(--k)); }
+/* Four cards at a seat overlap like a fan, so the seat stays narrow. */
+.pk-seat .pk-cards.four .card + .card { margin-left: calc(var(--cw) * -.42); }
+.pk-seat .pk-cards.four { gap: 0; --cw: calc(32px * var(--k)); }
+.pfelt.tall .pk-seat .pk-cards.four, .pfelt.tall .pk-seat.far .pk-cards.four, body.game-poker:not(.room3d) .pfelt.tall .pk-seat.far .pk-cards.four { --cw: 30px; gap: 0; }
+.pk-myhand > span.two { font-size: 12.5px; line-height: 1.35; }
+.pk-myhand > span.two em { font-style: normal; font-size: .78em; background: #1d6f8f; color: #fff; border-radius: 4px; padding: 0 5px; margin-right: 3px; }
+/* Two boards in the 3D room: slightly smaller cards, set a little nearer, so the far seats stay clear. */
+body.room3d .pfelt:not(.tall) .pk-mid.many.n2 .pk-board { top: 64%; --cw: calc(31px * var(--k)); }
+body.game-poker:not(.room3d) .pfelt.tall .pk-mid.many.n2 .pk-board { --cw: 34px; }
+body.game-poker:not(.room3d) .pfelt.tall .pk-mid.many.n2 .pk-brow i { font-size: 9px; padding: 0 3px; }
+.pk-seat.far .pk-stats i:nth-child(3) { display: none; }
+/* Two boards in the 3D room on a computer: the pot is beside the boards, so it does not cover the far seats. */
+body.room3d .pfelt:not(.tall) .pk-mid.many.n2 .pk-board .pk-pot { position: absolute; left: calc(100% + 14px * var(--k)); top: 50%; transform: translateY(-50%); margin: 0; white-space: nowrap; }
