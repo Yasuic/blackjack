@@ -1,16 +1,16 @@
 // The poker page: a Texas Hold'em table for up to 9 in the big meeting room. The host's browser runs
 // the table (js/poker.js); every other browser sends its moves there and is told only what it may see.
-import { PokerTable, POKER_SEATS, pokerDeck, cardText } from './poker.js?v=20261121t';
-import { sha256 } from './game.js?v=20261121t';
-import { chipSound, cardSound, hitSound, standSound, potSound, tickSound } from './fx.js?v=20261121t';
-import { webglOK, initRoom } from './room3d.js?v=20261121t';
-import { params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame } from './common.js?v=20261121t';
+import { PokerTable, POKER_SEATS, pokerDeck, cardText } from './poker.js?v=20261121u';
+import { sha256 } from './game.js?v=20261121u';
+import { chipSound, cardSound, hitSound, standSound, potSound, tickSound } from './fx.js?v=20261121u';
+import { webglOK, initRoom } from './room3d.js?v=20261121u';
+import { params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame } from './common.js?v=20261121u';
 
 const PREFIX = 'bjt-pk-';
 const app = $('#app');
 const S = { name: safeGet('bj-name') || '', myId: getClientId(), code: null, role: null, table: null, st: null, net: null, room: null,
   conn: ['Connecting', false], raiseTo: null, raiseFor: '', seedFor: '', boardSeen: { hand: -1, n: 0 }, doneAt: 0, started: false, paused: false, at: 0, goneAt: {}, autoAway: {} };
-if (params.has('roomdebug')) window.__P = S;
+if (params.has('roomdebug')) { window.__P = S; window.__pk = { push: () => push(), render: () => render(), ring: () => ({ g: ringMeasure(), key: S.ringKey, plan: S.ringPlan }) }; }
 const phone = () => innerWidth < 700;
 const bbOn = () => safeGet('pk-bb') === '1';
 // An amount as chips, or in big blinds when the player switched that view on.
@@ -396,11 +396,85 @@ function statsHTML(t) {
   if (!t || !t.hands) return '<p class="hint">No hands played yet.</p>';
   return `<table class="pk-table"><tr><td>Hands dealt</td><td>${t.hands}</td></tr><tr><td>VPIP (put chips in by choice before the flop)</td><td>${pc(t.vpip, t.pre)}%</td></tr><tr><td>PFR (raised before the flop)</td><td>${pc(t.pfr, t.pre)}%</td></tr><tr><td>Went to showdown</td><td>${pc(t.sd, t.hands)}%</td></tr><tr><td>Won at showdown</td><td>${pc(t.wsd, t.sd)}%</td></tr><tr><td>Hands won</td><td>${pc(t.won, t.hands)}%</td></tr></table>`;
 }
+// Seat view on a computer ("ring"): the name plates stand round the outside of the table, so the middle is free for
+// the pot and the board and nothing lies on top of anything else. The places are worked out on the screen, from where
+// the table really is in the picture, and then turned back into places on the felt, so they hold for any screen shape.
+// Per seat, counted clockwise from your own: dx, dy = the plate (dy from: n near edge, f far edge, b board bottom),
+// bx, by = the bet, side = which end of the group the bubble lines up with. All in screen pixels of the design size.
+const RING = [
+  { dx: 0, from: 'n', dy: 0, bx: 175, bfrom: 'n', by: -26, side: '' },
+  { dx: -450, from: 'n', dy: 0, bx: -255, bfrom: 'n', by: -26, side: 'bl' },
+  { dx: -222, from: 'b', dy: -78, bx: -45, bfrom: 'b', by: -86, side: 'bl', out: 1 },
+  { dx: -359, from: 'f', dy: -9, bx: -370, bfrom: 'c', by: 12, side: 'bl' },
+  { dx: -120, from: 'f', dy: -9, bx: -145, bfrom: 'c', by: 12, side: '' },
+  { dx: 120, from: 'f', dy: -9, bx: 145, bfrom: 'c', by: 12, side: '' },
+  { dx: 359, from: 'f', dy: -9, bx: 370, bfrom: 'c', by: 12, side: 'br' },
+  { dx: 222, from: 'b', dy: -78, bx: 45, bfrom: 'b', by: -86, side: 'br', out: 1 },
+  { dx: 450, from: 'n', dy: 0, bx: 255, bfrom: 'n', by: -26, side: 'br' },
+];
+const useRing = () => !!S.room && !phone() && POKER_SEATS === RING.length;
+// Where the felt is on the screen now: the far edge, the middle and the near edge (y), the middle (x) and half the far edge's width.
+function ringMeasure() {
+  const felt = $('#felt');
+  if (!felt) return null;
+  const at = (x, y) => { const d = document.createElement('div'); d.style.cssText = `position:absolute;left:${x}%;top:${y}%;width:0;height:0`; felt.append(d); const r = d.getBoundingClientRect(); d.remove(); return r; };
+  // Three places down the middle of the felt (0, 40 and 80 % from the far edge) fix the whole picture. The near edge
+  // itself is not used: in the first person view it is under your chin, out of the picture.
+  const f = at(50, 0), m = at(50, 40), n = at(50, 80), l = at(0, 0);
+  // The line of text under the table is fixed on the screen: your own plate must end above it.
+  const hud = $('#hud-top .status')?.getBoundingClientRect() || $('#hud-top')?.getBoundingClientRect();
+  const g = { far: f.top, y40: m.top, y80: n.top, cx: f.left, hw: f.left - l.left, W: innerWidth, low: hud && hud.top > m.top ? hud.top - 6 : 1e9, fp: document.body.classList.contains('room-fp') };
+  // Only a view from your own chair counts: the table upright and in the middle of the screen.
+  if (!(g.far < g.y40 - 15 && g.y40 < g.y80 - 15 && g.hw > 120 && Math.abs(g.cx - innerWidth / 2) < innerWidth * 0.06 && g.y80 - g.y40 > g.y40 - g.far)) return null;
+  return g;
+}
+// The places for one table picture. Returns the size factor for everything on the felt (k), the board's place and each seat's places.
+function ringPlan(g) {
+  const b = g.far, c = ((g.y80 - b) / 80 - (g.y40 - b) / 40) / (g.y40 - g.y80), a = (g.y40 - b) / 40 + g.y40 * c;
+  const near = 1 + 100 * c > 0.08 ? (100 * a + b) / (1 + 100 * c) : 1e9; // the near edge of the felt on the screen, if it is in the picture
+  const inv = (sy) => (sy - b) / (a - c * sy);                        // a height on the screen -> how far down the felt (%)
+  const xAt = (sx, v) => 50 + ((sx - g.cx) * (1 + c * v) * 50) / g.hw; // a place across the screen -> how far across the felt (%)
+  const u50 = g.hw / 620 / (1 + 50 * c);                               // screen pixels for one felt pixel, at the middle of the table
+  // Everything between the far edge and the near edge: pot, board, your bubble, your plate. If the table looks too flat for it, all of it is drawn smaller.
+  const uAt = (v) => g.hw / 620 / (1 + c * v);
+  // The lowest line the near plates may reach: a little past the near edge of the felt, and above the text line under the table.
+  // hang: how far a near plate ends below its place on the felt (measured on the screen after each drawing).
+  const hang = g.hang ?? 28 * (u50 / 0.915);
+  // ph: the height of your own plate on the screen for each unit of k (measured too: near things look taller than the sums say).
+  const ph = g.ph ?? 44 * (u50 / 0.915);
+  // The largest size at which pot and board still fit under the far plates.
+  let fit = 1, s = 1, yb = 0, cardsTop = 0, low = 0;
+  for (; fit >= 0.55; fit -= 0.02) {
+    s = fit * (u50 / 0.915); low = Math.min(near + 12 * s, (g.low || 1e9) - 5, innerHeight * 0.86); yb = low - ph * 1.85 * fit * 1.72 - 14 * s;
+    const ub = uAt(inv(yb)) * 1.85 * fit;
+    cardsTop = yb - 82.6 * ub;
+    if (cardsTop - 35 * ub >= g.far - 2) break;
+  }
+  const k = 1.85 * fit;
+  const bh = 159.5 * k * uAt(inv(yb)); // half the width of the five board cards on the screen
+  const base = { n: low - hang, f: g.far, b: yb, c: cardsTop };
+  const lim = g.W / 2 - 150 * s;
+  const seats = RING.map((r) => {
+    const ay = base[r.from] + r.dy * s, av = inv(ay), by = base[r.bfrom] + r.by * s, bv = inv(by);
+    const off = r.out ? Math.sign(r.dx) * bh : 0; // the seats at the two ends stand clear of the board, however wide it is
+    const far = 1;
+    const grow = Math.max(1, Math.min(g.fp ? 2.2 : 1, (far * (1 + c * av)) / (1 + 50 * c))); // far plates drawn larger (first person) need more room side by side
+    const dx = Math.max(-lim, Math.min(lim, off + r.dx * s * grow));
+    return { a: { x: xAt(g.cx + dx, av), y: av }, b: { x: xAt(g.cx + dx + (r.bx - r.dx) * s, bv), y: bv }, side: r.side, ds: Math.max(0.45, Math.min(g.fp ? 2.2 : 1, (far * (1 + c * av)) / (1 + 50 * c))), bs: Math.max(0.45, Math.min(g.fp ? 1.5 : 1, (1 + c * bv) / (1 + 50 * c))) };
+  });
+  return { k, board: inv(yb), pot: inv(g.far + (yb - g.far) * 0.45), seats, low, ownY: low - hang };
+}
+// The plan in use. A new measurement replaces it only when the picture has changed, so a look round the room does not move the plates.
+function ringNow() {
+  const g = ringMeasure();
+  if (g) { if (S.ringHang !== undefined) { g.hang = S.ringHang; g.ph = S.ringPh; } const key = [g.far, g.y40, g.y80, g.cx, g.hw, Math.min(g.low, 9999), g.fp ? 3 : 0, g.hang ?? -1, (g.ph ?? -1) * 10].map((v) => Math.round(v / 3)).join(','); if (key !== S.ringKey) { S.ringKey = key; S.ringPlan = ringPlan(g); } }
+  return S.ringPlan || ringPlan({ far: 284, y40: 389, y80: 541, cx: 720, hw: 449, W: 1440 });
+}
 function seatLayout(st) {
   const F = FELT(), spots = seatSpots(F.W, F.H);
   const mySeat = st.seats.findIndex((x) => x && x.id === S.myId);
   const rel = (i) => (i - Math.max(0, mySeat) + POKER_SEATS) % POKER_SEATS;
-  return { mySeat, at: (i) => spots[rel(i)] };
+  return { mySeat, rel, at: (i) => spots[rel(i)] };
 }
 // Sounds for what just happened at the table: the deal, each new board card, and each player's move.
 function playSounds(st) {
@@ -432,7 +506,9 @@ function render() {
     return;
   }
   playSounds(st);
-  const { mySeat, at } = seatLayout(st);
+  const { mySeat, at, rel } = seatLayout(st);
+  const ring = useRing(), plan = ring ? ringNow() : null;
+  { const f = $('#felt'); if (f) { f.classList.toggle('ring', ring); if (plan) { f.style.setProperty('--k', plan.k.toFixed(3)); f.style.setProperty('--rb', plan.board.toFixed(2) + '%'); f.style.setProperty('--rp', plan.pot.toFixed(2) + '%'); } else { f.style.removeProperty('--k'); f.style.removeProperty('--rb'); f.style.removeProperty('--rp'); } } }
   const stage = runStage(st);
   const showing = stage && !stage.final; // an all in board is still coming out
   const done = st.phase === 'done' && !showing, live = st.phase !== 'done' && st.phase !== 'waiting';
@@ -453,8 +529,8 @@ function render() {
   const potNow = st.potTotal || (st.phase === 'done' ? (st.result?.wins || []).reduce((a, w) => a + w.amount, 0) : 0);
   const rows = boards.map((b, r) => `<div class="pk-brow">${many ? `<i>${dbl ? 'Board' : 'Run'} ${r + 1}</i>` : ''}${b.map((c, i) => cardHTML(c, 'bcard' + ((r === 0 || dbl ? i >= seen.n : r >= seen.rows) ? ' deal d' + Math.max(0, Math.min(4, r === 0 || dbl ? i - seen.n : i)) : '') + (Object.keys(winBy).some((k) => inBest(Number(k), c)) ? ' hi' : ''))).join('')}${r === 0 ? rabbit : dbl && r === 1 ? rabbit2 : ''}</div>`).join('');
   seen.n = boards[0].length; seen.rows = boards.length;
-  h += `<div class="pk-mid${many ? ' many n' + allBoards.length : ''}">
-    <div class="pk-board pk-stand"><div class="pk-pot">${st.bomb && live ? '<span class="pk-bomb">💣 Bomb pot</span>' : ''}${(st.plo || dbl) && st.phase !== 'waiting' ? `<span class="pk-variant">${st.plo ? 'PLO' : "Hold'em"}${dbl ? ' · 2 boards' : ''}</span>` : ''}<b class="pk-potnum"><i>POT</i>${amt(potNow)}</b>${potLine ? `<small>${potLine}</small>` : ''}</div>${rows}</div>
+  h += `<div class="pk-mid${many ? ' many n' + allBoards.length : ''}" style="--cols:${allBoards.length > 6 ? 3 : allBoards.length > 3 ? 2 : 1};--rcw:${[0, 59, 28, 18, 28, 18, 18, 15, 15, 15, 12][Math.min(10, allBoards.length)] || 12}">
+    <div class="pk-board pk-stand"><div class="pk-pot">${st.bomb && live && !ring ? '<span class="pk-bomb">💣 Bomb pot</span>' : ''}${(st.plo || dbl) && st.phase !== 'waiting' && !ring ? `<span class="pk-variant">${st.plo ? 'PLO' : "Hold'em"}${dbl ? ' · 2 boards' : ''}</span>` : ''}<b class="pk-potnum"><i>POT</i>${amt(potNow)}</b>${potLine && !ring ? `<small>${potLine}</small>` : ''}</div>${rows}</div>
     <div class="pk-spot pot" id="spot-99"></div>
   </div>`;
   const people = [], chips = [], stools = [];
@@ -470,8 +546,12 @@ function render() {
     const fb = !S.room ? 0.5 : top ? 0.24 : phone() ? 0.36 : 0.44;
     // The far seats keep their place along the table and only move towards you, so they do not bunch up in the middle.
     const wide = S.room && top && !phone();
-    const A = wide ? { x: 50 + (P.x - 50) * (Math.abs(P.x - 50) > 30 ? 0.84 : 0.95), y: 50 + (P.y - 50) * 0.46 } : toward(P, fa);
-    const B = wide ? { x: 50 + (P.x - 50) * 0.9, y: 50 + (P.y - 50) * fb } : mineSpot && S.room ? { x: P.x + (phone() ? 16 : 9), y: 50 + (P.y - 50) * 0.5 } : toward(P, fb);
+    let A = wide ? { x: 50 + (P.x - 50) * (Math.abs(P.x - 50) > 30 ? 0.84 : 0.95), y: 50 + (P.y - 50) * 0.46 } : toward(P, fa);
+    let B = wide ? { x: 50 + (P.x - 50) * 0.9, y: 50 + (P.y - 50) * fb } : mineSpot && S.room ? { x: P.x + (phone() ? 16 : 9), y: 50 + (P.y - 50) * 0.5 } : toward(P, fb);
+    const R = plan ? plan.seats[rel(i)] : null;
+    if (R) { A = R.a; B = R.b; }
+    // Near things look larger from your chair, so they are drawn a little smaller: every name is about the same size on screen.
+    const ds = R ? R.ds : Math.max(0.62, Math.min(1.7, (1.35 - A.y / 100) / 0.75));
     stools.push({ seat: i, x: P.x, y: P.y });
     if (!seat) {
       if (mySeat < 0) h += `<button class="pk-sit pk-stand" style="left:${A.x}%;top:${A.y}%" data-act="sit" data-seat="${i}"><span class="sit-arrow">Sit ▼</span>Seat ${i + 1}</button>`;
@@ -489,7 +569,7 @@ function render() {
     else if (done && winBy[i]) { bubble = `+${amt(winBy[i])}${!many && seat.hand ? ' · ' + esc(shortHand(seat.hand)) : ''}`; bcls = 'win'; }
     else if (seat.inHand && seat.folded) { bubble = 'Fold'; bcls = 'fold'; }
     else if (seat.allIn && seat.inHand && !done) { bubble = 'All in'; bcls = 'allin'; }
-    else if (turn) { bubble = 'Thinking…'; bcls = 'turn'; }
+    else if (turn) { if (!(R && me)) { bubble = 'Thinking…'; bcls = 'turn'; } }
     else if (!seat.connected) { bubble = 'Offline'; bcls = 'fold'; }
     else if (seat.out) { bubble = 'Away'; bcls = 'fold'; }
     else if (live && inH && seat.bet > 0 && seat.bet >= st.currentBet) { bubble = st.phase === 'preflop' && seat.bet <= st.settings.bigBlind ? 'In' : 'Called'; bcls = 'in'; }
@@ -500,19 +580,40 @@ function render() {
     const hideMine = me;
     const cards = !hideMine && seat.cards.length ? seat.cards.map((c) => cardHTML(c, (me ? 'mine ' : '') + (inBest(i, c) ? 'hi' : ''))).join('') : '';
     const timer = turn && st.turnLeft !== null ? `<i class="pk-bank" data-bank="${seat.bank}"></i><i class="pk-timer"><i style="animation-duration:${Math.max(0.1, (st.turnLeft - (Date.now() - S.at)) / 1000)}s;width:${100 - Math.min(100, (Math.max(0, st.turnLeft - (Date.now() - S.at)) / (st.settings.turnTimer * 1000)) * 100)}%"></i></i>` : '';
-    h += `<div class="pk-seat pk-stand${!me ? ' far' : ''}${me ? ' me' : ''}${turn ? ' turn' : ''}${seat.inHand && seat.folded ? ' folded' : ''}${!seat.inHand && live ? ' idle' : ''}${bcls === 'win' ? ' won' : ''}" style="left:${A.x}%;top:${A.y}%;--ds:${Math.max(0.62, Math.min(1.7, (1.35 - A.y / 100) / 0.75)).toFixed(2)}" data-seat="${i}">
+    h += `<div class="pk-seat pk-stand${!me ? ' far' : ''}${me ? ' me' : ''}${turn ? ' turn' : ''}${seat.inHand && seat.folded ? ' folded' : ''}${!seat.inHand && live ? ' idle' : ''}${bcls === 'win' ? ' won' : ''}${R ? ' ' + R.side : ''}" style="left:${A.x}%;top:${A.y}%;--ds:${ds.toFixed(2)}${R ? ';--dsy:' + (ds * (S.ringTall?.[rel(i)] || 1)).toFixed(3) : ''}" data-seat="${i}" data-rel="${rel(i)}">
       ${bubble ? `<div class="pk-bubble ${bcls}">${bubble}</div>` : ''}
       <div class="pk-cards${seat.folded ? ' dim' : ''}${seat.cards.length > 2 ? ' four' : ''}">${cards}</div>
-      <button class="pk-plate" data-act="seat-menu" data-seat="${i}"><b>${esc(seat.name)}${me ? ' <em>YOU</em>' : ''}</b><span>${amt(seat.stack - (showing ? seat.won || 0 : 0))}</span>${statLine(seat.stats)}${timer}</button>${me ? '<button class="pk-react" data-act="react" title="Reaction">😀</button>' : ''}
+      <button class="pk-plate" data-act="seat-menu" data-seat="${i}"><b>${R && st.button === i && st.handNo > 0 ? '<i class="pk-d" title="Dealer button">D</i>' : ''}${esc(seat.name)}${me ? ' <em>YOU</em>' : ''}</b><span>${amt(seat.stack - (showing ? seat.won || 0 : 0))}</span>${statLine(seat.stats)}${timer}</button>${me ? '<button class="pk-react" data-act="react" title="Reaction">😀</button>' : ''}
     </div>`;
-    h += `<div class="pk-spot${seat.bet ? ' has' : ''}" id="spot-${i}" style="left:${B.x}%;top:${B.y}%">${seat.bet ? `<span class="pk-amt pk-stand">${amt(seat.bet)}</span>` : ''}</div>`;
-    if (st.button === i && st.handNo > 0) { h += `<div class="pk-dbtn" style="left:calc(${B.x}% + ${(P.y > 50 ? 1 : -1) * (phone() ? 30 : 52)}px);top:${B.y}%">D</div>`; }
+    h += `<div class="pk-spot${seat.bet ? ' has' : ''}" id="spot-${i}" style="left:${B.x}%;top:${B.y}%;--ds:${R ? R.bs.toFixed(2) : 1}">${seat.bet ? `<span class="pk-amt pk-stand">${amt(seat.bet)}</span>` : ''}</div>`;
+    if (!R && st.button === i && st.handNo > 0) { h += `<div class="pk-dbtn" style="left:calc(${B.x}% + ${(P.y > 50 ? 1 : -1) * (phone() ? 30 : 52)}px);top:${B.y}%">D</div>`; }
     people.push({ id: seat.id, name: seat.name, look: seat.look || { skin: 2, hair: 0 }, seat: i, seats: POKER_SEATS, isMe: me, isDealer: false, x: P.x, y: P.y, bet: seat.bet });
     chips.push({ seat: i, main: seat.bet, balance: seat.stack - (showing ? seat.won || 0 : 0), mine: me });
   }
   const potChips = st.phase === 'done' ? (showing ? potNow : 0) : st.pot;
   if (potChips > 0) chips.push({ seat: 99, main: potChips, balance: 0 });
   body.innerHTML = h;
+  // Seat view on a computer: the picture is checked after it is drawn, and drawn again (at most three times) if it is off.
+  // 1. Things that stand on the felt look squashed far from you and stretched close to you. Each plate is made as tall
+  //    as it is wide again. 2. How far your own plate ends below its place, and how tall it is, go back into the plan.
+  if (plan && (S.ringAgain || 0) < 3) {
+    let again = false;
+    const tall = (S.ringTall ||= {});
+    for (const el of body.querySelectorAll('.pk-seat[data-rel]')) {
+      const r = el.getBoundingClientRect(), w = el.offsetWidth, hh = el.offsetHeight;
+      if (!(w > 8 && hh > 8 && r.width > 8 && r.height > 8)) continue;
+      const k = el.dataset.rel, was = tall[k] || 1, now = Math.max(0.5, Math.min(3, was * ((r.width / w) / (r.height / hh))));
+      if (Math.abs(now - was) > 0.05) { tall[k] = now; again = true; }
+    }
+    const pl = $('.pk-seat.me .pk-plate')?.getBoundingClientRect();
+    if (pl && pl.height > 4 && !again) { const hang = pl.bottom - plan.ownY, ph = pl.height / plan.k; if ((Math.abs(hang - (S.ringHang ?? 1e9)) > 3 || Math.abs(ph - (S.ringPh ?? 1e9)) > 1.5) && Math.abs(hang) < 200) { S.ringHang = hang; S.ringPh = ph; S.ringKey = ''; again = true; } }
+    if (again) { S.ringAgain = (S.ringAgain || 0) + 1; try { render(); } finally { S.ringAgain--; } return; }
+  }
+  // Seat view on a computer: the list of side pots is a strip under the top bar, so the pot on the table stays small.
+  let strip = $('#pk-potline');
+  const stripText = ring && st.phase !== 'waiting' ? [st.bomb && live ? '💣 Bomb pot' : '', st.plo || dbl ? (st.plo ? 'PLO' : "Hold'em") + (dbl ? ' · 2 boards' : '') : '', potLine].filter(Boolean).join(' · ') : '';
+  if (stripText) { if (!strip) { strip = document.createElement('div'); strip.id = 'pk-potline'; document.body.append(strip); } if (strip.textContent !== stripText) strip.textContent = stripText; }
+  else strip?.remove();
   S.presence = people.map((p) => ({ id: p.id, name: p.name, look: p.look, seat: p.seat, seats: p.seats }));
   if (S.room) { S.room.setPeople(people, stools); S.room.setChips(chips); S.room.setOthers(S.others); }
   drawHud(st, mySeat, showing);
@@ -875,6 +976,8 @@ document.addEventListener('keydown', (e) => {
 }, true);
 wireGameSwitch('poker', () => S.code || params.get('room'), () => S.role === 'host');
 // Once the clock for a decision is used up, the plate counts the player's time bank down.
+// The picture of the table changes with the window and while the camera moves to your chair: the plates follow it.
+setInterval(() => { if (!S.st || !useRing()) return; const was = S.ringKey; ringNow(); if (S.ringKey !== was) render(); }, 500);
 setInterval(() => { const b = $('#broke-s'); if (b && S.brokeAt) b.textContent = Math.max(0, 20 - Math.floor((Date.now() - S.brokeAt) / 1000)); }, 500);
 setInterval(() => {
   const el = $('.pk-bank'), st = S.st;
