@@ -1,14 +1,14 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261121z';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261121z';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261121z';
-import { tickSound, winSound } from './fx.js?v=20261121z';
-import * as HX from './history.js?v=20261121z';
-import { webglOK, initRoom } from './room3d.js?v=20261121z';
-import { watchOffice } from './common.js?v=20261121z';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261121z';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261121za';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261121za';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261121za';
+import { tickSound, winSound } from './fx.js?v=20261121za';
+import * as HX from './history.js?v=20261121za';
+import { webglOK, initRoom } from './room3d.js?v=20261121za';
+import { watchOffice } from './common.js?v=20261121za';
+import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261121za';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');

@@ -549,6 +549,7 @@ export class Table {
     this.seats[seatIdx] = emptySeat(clientId);
     this.fixSeat(p);
     this.ev('sit', clientId, `seat ${seatIdx + 1}`);
+    this.regroup();
   }
 
   // A player can sit as the dealer. The dealer still follows the fixed rules,
@@ -653,6 +654,7 @@ export class Table {
     if (this.inRound() && go.some((i) => this.seats[i].hands.length)) throw new Error('Finish this round first.');
     for (const i of go) { this.ev('leave seat', clientId, `seat ${i + 1}`); this.seats[i] = null; }
     this.fixSeat(p);
+    this.regroup();
   }
 
   disconnect(clientId) {
@@ -894,6 +896,66 @@ export class Table {
       if (seat.out) this.seats[i].out = true; // a seat that sits out stays out until its player comes back in
     }
     for (const p of Object.values(this.players)) if (p.leaving) { p.leaving = false; this.ev('leave seat (agreed to sit out)', p.id); }
+    this.regroup();
+  }
+
+  // A player with several seats always has them side by side. Between rounds, with no bets down, the
+  // seats are moved so that every player's seats form one block. Of all ways to do that, the one that
+  // moves the fewest seats is used, so players stay where they are when they can.
+  regroup() {
+    if (this.inRound()) return false;
+    const n = this.seats.length, old = this.seats.map((x) => (x ? x.playerId : null));
+    if (this.seats.some((x) => x && (x.hands.length || x.ready || x.bet.main || sumValues(x.bet.sides)))) return false;
+    const ids = [...new Set(old.filter(Boolean))];
+    const sizes = ids.map((id) => old.filter((x) => x === id).length);
+    const together = ids.every((id, k) => old.lastIndexOf(id) - old.indexOf(id) + 1 === sizes[k]);
+    if (together || ids.length > 7) return false;
+    const free = n - sizes.reduce((a, b) => a + b, 0);
+    let best = null, bestCost = Infinity;
+    const used = ids.map(() => false), plan = [];
+    const seatsBy = Object.fromEntries(ids.map((id) => [id, this.seatsOf(id)]));
+    // Blocks go down left to right; `at` is the next seat, `gaps` the empty seats still to place.
+    const walk = (at, gaps, cost) => {
+      if (cost > bestCost) return;
+      if (plan.length === ids.length) {
+        let c = cost; for (let i = at; i < n; i++) if (old[i] !== null) c++;
+        // Equal number of moved seats: the plan that moves them the shortest way wins.
+        let far = 0;
+        for (const b of plan) { const was = seatsBy[b.id], to = was.map((_, j) => b.from + j), open = to.filter((i) => !was.includes(i)); was.filter((i) => !to.includes(i)).forEach((i, j) => { far += Math.abs(open[j] - i); }); }
+        c += far / 1000;
+        if (c < bestCost) { bestCost = c; best = plan.map((x) => ({ ...x })); }
+        return;
+      }
+      for (let g = 0; g <= gaps; g++) {
+        let c = cost; for (let i = at; i < at + g; i++) if (old[i] !== null) c++;
+        for (let k = 0; k < ids.length; k++) {
+          if (used[k]) continue;
+          let c2 = c; const from = at + g;
+          for (let i = from; i < from + sizes[k]; i++) if (old[i] !== ids[k]) c2++;
+          used[k] = true; plan.push({ id: ids[k], from });
+          walk(from + sizes[k], gaps - g, c2);
+          plan.pop(); used[k] = false;
+        }
+      }
+    };
+    walk(0, free, 0);
+    if (!best) return false;
+    const next = Array(n).fill(null);
+    for (const b of best) {
+      const was = this.seatsOf(b.id), map = {};
+      // A seat already inside the new block stays where it is; the others fill the places left in the block.
+      const to = was.map((_, j) => b.from + j), stay = was.filter((i) => to.includes(i)), open = to.filter((i) => !was.includes(i));
+      for (const i of stay) map[i] = i;
+      was.filter((i) => !stay.includes(i)).forEach((i, j) => { map[i] = open[j]; });
+      for (const i of was) next[map[i]] = this.seats[i];
+      const p = this.players[b.id];
+      if (p && p.lastBets) p.lastBets = Object.fromEntries(Object.entries(p.lastBets).map(([i, v]) => [map[i] ?? i, v]));
+      const moved = was.filter((i) => map[i] !== i);
+      if (moved.length) this.ev('seats moved together', b.id, moved.map((i) => `seat ${i + 1} to ${map[i] + 1}`).join(', '));
+    }
+    this.seats = next;
+    for (const p of Object.values(this.players)) this.fixSeat(p);
+    return true;
   }
 
   // The dealer buys in by itself, with no request to the host: whenever the dealer owes chips or holds

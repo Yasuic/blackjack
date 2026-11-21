@@ -433,12 +433,13 @@ const da = t.players.a.chips, dd = t.players.d.chips;
   t.hostId = 'h'; t.frozen = true;
   t.join('a', 'Ann', 1000); t.join('b', 'Bob', 1000);
   t.sit('a', 2); t.sit('a', 4, true); t.sit('b', 3);
-  assert.deepEqual(t.seatsOf('a'), [2, 4]); assert.equal(t.players.a.seat, 2);
-  t.setBet('a', { main: 600, sides: {}, ready: true, seat: 2 });
-  assert.throws(() => t.setBet('a', { main: 500, sides: {}, ready: true, seat: 4 }), /Not enough chips/);
-  t.setBet('a', { main: 100, sides: {}, ready: true, seat: 4 });
+  // Seats of one player are always side by side: seat 4 was asked for, and the two seats are moved together.
+  const [s1, s2] = t.seatsOf('a'); assert.equal(s2, s1 + 1); assert.equal(t.players.a.seat, s1); assert.equal(t.seatsOf('b').length, 1);
+  t.setBet('a', { main: 600, sides: {}, ready: true, seat: s1 });
+  assert.throws(() => t.setBet('a', { main: 500, sides: {}, ready: true, seat: s2 }), /Not enough chips/);
+  t.setBet('a', { main: 100, sides: {}, ready: true, seat: s2 });
   t.setBet('b', { main: 50, sides: {}, ready: true });
-  assert.equal(t.seats[2].bet.main, 600); assert.equal(t.seats[4].bet.main, 100);
+  assert.equal(t.seats[s1].bet.main, 600); assert.equal(t.seats[s2].bet.main, 100);
   t.deal();
   assert.equal(t.players.a.chips, 300);
   let guard = 0;
@@ -449,13 +450,25 @@ const da = t.players.a.chips, dd = t.players.d.chips;
   }
   assert.equal(t.phase, 'settled');
   const h = t.hist[t.hist.length - 1];
-  assert.deepEqual(h.seats.map((x) => x.seat), [3, 4, 5]);
-  assert.equal(t.rebetFor('a', 2).main, Math.min(600, t.players.a.chips)); assert.ok(t.players.lastBets === undefined && t.players.a.lastBets[4].main === 100);
+  assert.deepEqual(h.seats.map((x) => x.seat), [s1 + 1, s2 + 1, t.seatsOf('b')[0] + 1].sort((x, y) => x - y));
+  assert.equal(t.rebetFor('a', s1).main, Math.min(600, t.players.a.chips)); assert.ok(t.players.lastBets === undefined && t.players.a.lastBets[s2].main === 100);
   t.startBetting();
-  t.standUp('a', 4);
-  assert.deepEqual(t.seatsOf('a'), [2]);
+  t.standUp('a', s2);
+  assert.deepEqual(t.seatsOf('a'), [s1]);
   t.standUp('a'); assert.equal(t.players.a.seat, null);
-  console.log('ok two seats');
+    // Seats 2, 3, 4 and 7 against 1, 5, 6 become 1 to 4 and 5 to 7, and last round's bets follow their seats.
+  {
+    const u = new G.Table({ startChips: 1000, seats: 7 });
+    u.join('v', 'Vic', 1000); u.join('j', 'Arjun', 1000);
+    u.seats = [0, 1, 1, 1, 0, 0, 1].map((x) => ({ playerId: x ? 'v' : 'j', bet: { main: 0, sides: {} }, ready: false, hands: [], sideResults: [], staked: 0, returned: 0, net: null, insurance: 0, insuranceDecided: false }));
+    u.players.v.lastBets = { 1: { main: 5, sides: {} }, 6: { main: 25, sides: {} } };
+    assert.ok(u.regroup());
+    assert.deepEqual(u.seatsOf('v'), [0, 1, 2, 3]); assert.deepEqual(u.seatsOf('j'), [4, 5, 6]);
+    assert.equal(u.players.v.seat, 0); assert.equal(u.players.j.seat, 4);
+    assert.equal(u.players.v.lastBets[1].main, 5); assert.equal(u.players.v.lastBets[0].main, 25); // seat 2 stayed, seat 7 went to seat 1
+    assert.ok(!u.regroup(), 'already together: nothing moves');
+  }
+console.log('ok two seats');
 }
 
 // Frozen ledger: chips and buy-ins go back when it stops; the shoe carries on; rounds stay in history.
