@@ -1,13 +1,13 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120zzq';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261120zzq';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120zzq';
-import { tickSound, winSound } from './fx.js?v=20261120zzq';
-import * as HX from './history.js?v=20261120zzq';
-import { webglOK, initRoom } from './room3d.js?v=20261120zzq';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120zzq';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120zzr';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261120zzr';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120zzr';
+import { tickSound, winSound } from './fx.js?v=20261120zzr';
+import * as HX from './history.js?v=20261120zzr';
+import { webglOK, initRoom } from './room3d.js?v=20261120zzr';
+import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120zzr';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -3265,25 +3265,27 @@ function relayThrow(from, msg) {
   if (now - (lastThrow[from] || 0) < 1000) return;
   lastThrow[from] = now;
   // Throwing poop at the dealer is free for everyone.
-  const fx = { t: 'fx', from, to, item };
+  // The seat that was tapped, when the player holds more than one.
+  const seat = Number.isInteger(msg.seat) && S.table.seats[msg.seat]?.playerId === to ? msg.seat : undefined;
+  const fx = { t: 'fx', from, to, item, seat };
   for (const conn of Object.values(S.conns)) if (conn.open) conn.send(fx);
   showThrow(fx);
 }
 
 // Where a player is on my screen: their seat, the dealer seat, or the bottom middle if they are just watching.
-function placeOf(id) {
+function placeOf(id, at) {
   const st = S.state;
   if (!st) return null;
   if (id === 'house' || st.banker?.id === id) return $('#dealer-zone .cards') || $('#dealer-zone');
-  const seat = st.seats.findIndex((x) => x && x.playerId === id);
+  const seat = Number.isInteger(at) && st.seats[at]?.playerId === id ? at : st.seats.findIndex((x) => x && x.playerId === id);
   if (seat >= 0) return $(`#seat-${seat} .who`) || $(`#seat-${seat}`);
   return { left: innerWidth / 2 - 20, top: innerHeight - 60, width: 40, height: 40 };
 }
 
-function showThrow({ from, to, item }) {
+function showThrow({ from, to, item, seat }) {
   const def = THROWS[item];
   if (!def) return;
-  const a = placeOf(from), b = placeOf(to);
+  const a = placeOf(from), b = placeOf(to, seat);
   if (!a || !b) return;
   const ra = a.getBoundingClientRect ? a.getBoundingClientRect() : a;
   const rb = b.getBoundingClientRect ? b.getBoundingClientRect() : b;
@@ -3317,6 +3319,7 @@ function showThrow({ from, to, item }) {
 
 // Pick-what-to-throw popup when you tap another player's name.
 function openThrow(target, anchor) {
+  const seatEl = anchor.closest('.seat[id^="seat-"]'), seat = seatEl ? Number(seatEl.id.slice(5)) : undefined;
   closeThrow();
   const st = S.state;
   const p = st.players.find((x) => x.id === target);
@@ -3332,7 +3335,7 @@ function openThrow(target, anchor) {
   box.addEventListener('click', (e) => {
     const b = e.target.closest('[data-throw]');
     if (!b) return;
-    send({ t: 'throw', item: b.dataset.throw, to: target });
+    send({ t: 'throw', item: b.dataset.throw, to: target, seat });
     closeThrow();
   });
 }
@@ -3475,13 +3478,13 @@ document.addEventListener('click', (e) => {
 document.addEventListener('click', (e) => {
   if (!S.aim || !S.state || e.target.closest('#throw-pop, .float-throw')) return;
   const st = S.state;
-  let to = null;
+  let to = null, seat;
   const seatEl = e.target.closest('.seat[id^="seat-"]');
-  if (seatEl) to = st.seats[Number(seatEl.id.slice(5))]?.playerId || null;
+  if (seatEl) to = st.seats[seat = Number(seatEl.id.slice(5))]?.playerId || null;
   else if (e.target.closest('#dealer-zone')) to = st.banker ? st.banker.id : 'house';
   if (!to || to === S.myId) return;
   e.stopPropagation(); e.preventDefault();
-  send({ t: 'throw', item: S.aim, to });
+  send({ t: 'throw', item: S.aim, to, seat });
   stopAim();
 }, true);
 // Phone: tap a small seat to see it large, tap again anywhere to put it back.

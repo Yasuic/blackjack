@@ -1536,12 +1536,16 @@ body.room3d:has(.room.walking) .hud3d .tray:has(.chip-rack), body.room3d:has(.ro
 .seat.mini .hands:not(.totals-only) .hand.drop { animation-name: hand-drop-s; }
 @keyframes hand-lift-s { from { transform: none; } to { transform: translateY(-5px) scale(1.06); } }
 @keyframes hand-drop-s { from { transform: translateY(-5px) scale(1.06); } to { transform: none; } }
-/* In the 3D room the cards rise straight up from the felt, toward you. */
-.felt.in3d .hands:not(.totals-only) .hand.active { transform: translateZ(26px) scale(1.06); }
+/* In the 3D room each hand (cards and total) stands up off the felt and always faces the viewer, like the names do.
+   The hand in play rises a little higher. */
+.felt.in3d .hands:not(.totals-only) .hand { transform: rotate(calc(-1 * var(--r, 0deg))) var(--bb, none); transform-origin: 50% 100%; }
+.felt.in3d .hands:not(.totals-only) .hand .meta { transform: none; }
+.felt.in3d .dealer-hand .cards { transform: var(--bb, none); transform-origin: 50% 100%; }
+.felt.in3d .hands:not(.totals-only) .hand.active { transform: rotate(calc(-1 * var(--r, 0deg))) var(--bb, none) translateY(-16px) scale(1.06); }
 .felt.in3d .hands:not(.totals-only) .hand.active.lift { animation-name: hand-lift-3d; }
 .felt.in3d .hands:not(.totals-only) .hand.drop { animation-name: hand-drop-3d; }
-@keyframes hand-lift-3d { from { transform: none; } to { transform: translateZ(26px) scale(1.06); } }
-@keyframes hand-drop-3d { from { transform: translateZ(26px) scale(1.06); } to { transform: none; } }
+@keyframes hand-lift-3d { from { transform: rotate(calc(-1 * var(--r, 0deg))) var(--bb, none); } to { transform: rotate(calc(-1 * var(--r, 0deg))) var(--bb, none) translateY(-16px) scale(1.06); } }
+@keyframes hand-drop-3d { from { transform: rotate(calc(-1 * var(--r, 0deg))) var(--bb, none) translateY(-16px) scale(1.06); } to { transform: rotate(calc(-1 * var(--r, 0deg))) var(--bb, none); } }
 @media (prefers-reduced-motion: reduce) { .hand.active.lift, .hand.drop { animation: none !important; } }
 
 /* Sit out: a small plain arrow tag beside your own name plate, at the seat, outside the table's curve. */
