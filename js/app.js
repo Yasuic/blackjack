@@ -1,13 +1,13 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120zzt';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261120zzt';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120zzt';
-import { tickSound, winSound } from './fx.js?v=20261120zzt';
-import * as HX from './history.js?v=20261120zzt';
-import { webglOK, initRoom } from './room3d.js?v=20261120zzt';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120zzt';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120zzu';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261120zzu';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120zzu';
+import { tickSound, winSound } from './fx.js?v=20261120zzu';
+import * as HX from './history.js?v=20261120zzu';
+import { webglOK, initRoom } from './room3d.js?v=20261120zzu';
+import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120zzu';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -2099,7 +2099,7 @@ function seatHTML(st, s, i, focus, spot) {
   if (!s) {
     const canSit = me && !isBanker;
     const more = canSit && me.seat !== null;
-    return `<div class="seat empty ${cls}" id="seat-${i}" ${place}>${mini ? '' : `<div class="hands"></div>${spotAreaHTML(st, null, i, false, 0)}`}${canSit ? `<button class="btn small ${more ? 'add-seat' : ''}" data-act="sit" data-seat="${i}" ${more ? 'data-add="1" title="Play this seat as well. Each seat has its own bet and hand."' : ''}>${more ? '+ Seat' : 'Sit here'}</button>` : `<span class="seat-no">Seat ${i + 1}</span>`}</div>`;
+    return `<div class="seat empty ${cls}" id="seat-${i}" ${place}>${mini ? '' : `<div class="hands"></div>${spotAreaHTML(st, null, i, false, 0)}`}${canSit ? `<button class="btn small ${more ? 'add-seat' : ''}" data-act="sit" data-seat="${i}" ${more ? 'data-add="1" title="Play this seat as well. Each seat has its own bet and hand."' : ''}>${st.phase === 'betting' || st.phase === 'settled' ? '<span class="sit-float"><span>Sit<i>▼</i></span></span>' : ''}${more ? '+ Seat' : 'Sit here'}</button>` : `<span class="seat-no">Seat ${i + 1}</span>`}</div>`;
   }
   const isMe = s.playerId === S.myId;
   // Whose turn it is shows once the deal is finished, not while the first cards are still going round.

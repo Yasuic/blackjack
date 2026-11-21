@@ -1290,11 +1290,19 @@ body.room3d.in-room .hud3d .tray:has(.chip-rack) .tray-row { display: flex; }
 body.room3d.in-room .hud3d .tray:has(.chip-rack) .tray-row > .balance { display: none; }
 body.room3d.in-room .hud3d .tray:has(.chip-rack) { --tray-y: .42; }
 
-/* Not seated yet: a small arrow bobs over every open seat's button, so the next step is plain. */
+/* Before a deal every open seat has the word Sit and an arrow floating above it, bouncing up and down. */
 .seat.empty > [data-act=sit] { position: relative; overflow: visible; }
-.seat.empty > [data-act=sit]::before { content: '▼'; position: absolute; left: 50%; bottom: calc(100% + 4px); margin-left: -0.5em; width: 1em; text-align: center; color: var(--gold, #f1c76a); font-size: 16px; line-height: 1; text-shadow: 0 2px 4px rgba(0,0,0,.7); pointer-events: none; animation: sit-arrow 0.9s ease-in-out infinite; }
-@keyframes sit-arrow { 0%, 100% { transform: translateY(-7px); } 50% { transform: translateY(0); } }
-@media (prefers-reduced-motion: reduce) { .seat.empty > [data-act=sit]::before { animation: none; } }
+.sit-float { position: absolute; left: 50%; bottom: calc(100% + 6px); width: 60px; margin-left: -30px; text-align: center; pointer-events: none; transform-origin: 50% 100%; }
+.sit-float > span { display: block; color: var(--gold, #f1c76a); font-size: 17px; font-weight: 800; letter-spacing: 1px; line-height: 1; text-shadow: 0 2px 5px rgba(0,0,0,.85), 0 0 10px rgba(0,0,0,.6); animation: sit-arrow 0.9s ease-in-out infinite; }
+.sit-float i { display: block; font-style: normal; font-size: 15px; margin-top: 1px; }
+@keyframes sit-arrow { 0%, 100% { transform: translateY(-9px); } 50% { transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .sit-float > span { animation: none; } }
+.felt.in3d .seat.empty > [data-act=sit] { transform-style: preserve-3d; }
+.felt.in3d .sit-float { transform: rotate(calc(-1 * var(--r, 0deg))) var(--bb, none); }
+/* See-through buttons would press the standing word flat, so in the 3D room the button keeps its full strength. */
+.felt.in3d .seat.empty .btn.add-seat { opacity: 1 !important; }
+.felt.in3d .sit-float > span { font-size: 24px; }
+.felt.in3d .sit-float i { font-size: 20px; }
 
 /* 3D room on a phone. The chip tray floats over the felt, so only its buttons take taps: a tap between
    them goes to the table underneath. */
