@@ -1,10 +1,10 @@
 // The poker page: a Texas Hold'em table for up to 9 in the big meeting room. The host's browser runs
 // the table (js/poker.js); every other browser sends its moves there and is told only what it may see.
-import { PokerTable, POKER_SEATS, pokerDeck, cardText } from './poker.js?v=20261121v';
-import { sha256 } from './game.js?v=20261121v';
-import { chipSound, cardSound, hitSound, standSound, potSound, tickSound, turnSound } from './fx.js?v=20261121v';
-import { webglOK, initRoom } from './room3d.js?v=20261121v';
-import { params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame } from './common.js?v=20261121v';
+import { PokerTable, POKER_SEATS, pokerDeck, cardText } from './poker.js?v=20261121w';
+import { sha256 } from './game.js?v=20261121w';
+import { chipSound, cardSound, hitSound, standSound, potSound, tickSound, turnSound } from './fx.js?v=20261121w';
+import { webglOK, initRoom } from './room3d.js?v=20261121w';
+import { params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame } from './common.js?v=20261121w';
 
 const PREFIX = 'bjt-pk-';
 const app = $('#app');
@@ -715,13 +715,16 @@ function drawHud(st, mySeat, showing) {
     </div>`;
     if (o.canRaise && S.raiseOpen === key) h += `<div class="pk-raise">
       <div class="pk-presets"><button data-act="raise-back" class="back">‹ Back</button><button data-act="preset" data-v="${o.minTo}">Min</button><button data-act="preset" data-v="${frac(1 / 3)}">⅓ pot</button><button data-act="preset" data-v="${frac(0.5)}">½ pot</button><button data-act="preset" data-v="${frac(2 / 3)}">⅔ pot</button><button data-act="preset" data-v="${frac(1)}">Pot</button><button data-act="preset" data-v="${o.maxTo}">${o.allIn === false ? 'Max' : 'All in'}</button></div>
-      <div class="pk-slide"><input type="range" id="raise-range" min="${o.minTo}" max="${o.maxTo}" step="${Math.max(1, Math.min(st.settings.bigBlind, o.maxTo - o.minTo) || 1)}" value="${to}" /><input type="number" id="raise-num" min="${o.minTo}" max="${o.maxTo}" value="${to}" inputmode="numeric" /></div>
+      <div class="pk-slide"><button class="pk-step" data-act="raise-step" data-d="-1" title="One big blind less">−</button><input type="range" id="raise-range" min="${o.minTo}" max="${o.maxTo}" step="${Math.max(1, Math.min(st.settings.bigBlind, o.maxTo - o.minTo) || 1)}" value="${to}" /><button class="pk-step" data-act="raise-step" data-d="1" title="One big blind more">+</button><input type="number" id="raise-num" min="${o.minTo}" max="${o.maxTo}" value="${to}" inputmode="numeric" /><span class="pk-bb" id="raise-bb">${bbText(to, st)}</span></div>
     </div>`;
   } else if (seat && st.runAsk && ((st.runAsk.by === mySeat && !st.runAsk.n) || (st.runAsk.n && st.runAsk.need.includes(mySeat) && !st.runAsk.yes.includes(mySeat)))) {
     const a = st.runAsk;
     h += a.by === mySeat
       ? `<div class="pk-acts pk-runask">${Array.from({ length: a.max }, (_, k) => `<button class="pk-act ${k ? 'raise' : 'check'}" data-act="runpick" data-n="${k + 1}">${['Once', 'Twice', '3 times'][k]}</button>`).join('')}</div>`
       : `<div class="pk-acts pk-runask"><button class="pk-act call" data-act="runans" data-yes="1">Yes, ${a.n} times</button><button class="pk-act fold" data-act="runans" data-yes="0">No, once</button></div>`;
+  } else if (seat && seat.out && seat.stack > 0 && !(seat.inHand && live && !seat.folded)) {
+    // Away: one large button, in the same place as Fold, Call and Raise, deals you in again from the next hand.
+    h += '<div class="pk-acts back"><button class="pk-act call" data-act="away">I\'m back</button></div>';
   } else if (seat && live && !showing && !st.runAsk && seat.inHand && !seat.folded && !seat.allIn && seat.cards.length) {
     // Not your turn yet: pick a move ahead of time. It is played the moment your turn comes, and a second tap takes it back.
     const pre = S.pre && S.pre.hand === st.handNo ? S.pre.a : '';
@@ -753,6 +756,8 @@ function drawHud(st, mySeat, showing) {
   tray.innerHTML = h;
   if (typing !== null && $('#raise-num')) { const n = $('#raise-num'); n.value = typing; n.focus(); }
 }
+// An amount in big blinds, as a short tag beside the amount box ("3.5 BB").
+const bbText = (v, st) => `${Math.round((v / (st.settings.bigBlind || 1)) * 10) / 10} BB`;
 function setRaise(v, from) {
   const o = S.st?.options;
   if (!o?.canRaise) return;
@@ -762,6 +767,7 @@ function setRaise(v, from) {
   const to = Math.max(o.minTo, Math.min(o.maxTo, v));
   if (from !== 'range' && $('#raise-range')) $('#raise-range').value = to;
   if (from !== 'num' && $('#raise-num')) $('#raise-num').value = to;
+  if ($('#raise-bb')) $('#raise-bb').textContent = bbText(to, S.st);
   const b = $('#raise-txt');
   if (b) b.textContent = `${to >= o.maxTo && o.allIn !== false ? 'All in ' : o.isBet ? 'Bet ' : 'Raise to '}${amt(to)}`;
 }
@@ -895,8 +901,9 @@ document.addEventListener('click', (e) => {
     case 'pre': { const a = el.dataset.a; S.pre = S.pre && S.pre.a === a && S.pre.hand === st.handNo ? null : { a, hand: st.handNo }; render(); break; }
     case 'raise': { if (Date.now() - (S.dragEnd || 0) < 350) break; const o = st.options; if (!o?.canRaise) break;
       // The first tap opens the small raise panel (sizes and a slider); the second tap sends the amount shown.
-      if (S.raiseOpen !== S.raiseFor) { S.raiseOpen = S.raiseFor; render(); break; } const to = Math.max(o.minTo, Math.min(o.maxTo, Math.round(Number($('#raise-num')?.value ?? S.raiseTo)))); send({ t: 'act', a: o.isBet ? 'bet' : 'raise', amount: to }); break; }
+      if (S.raiseOpen !== S.raiseFor) { S.raiseOpen = S.raiseFor; render(); if (!phone()) { const n = $('#raise-num'); if (n) { n.focus(); n.select(); } } break; } const to = Math.max(o.minTo, Math.min(o.maxTo, Math.round(Number($('#raise-num')?.value ?? S.raiseTo)))); send({ t: 'act', a: o.isBet ? 'bet' : 'raise', amount: to }); break; }
     case 'preset': setRaise(el.dataset.v); break;
+    case 'raise-step': { const o = st.options; if (o?.canRaise) setRaise(Math.max(o.minTo, Math.min(o.maxTo, Math.max(o.minTo, Math.min(o.maxTo, S.raiseTo)) + Number(el.dataset.d) * (st.settings.bigBlind || 1)))); break; }
     case 'show': send({ t: 'show', which: el.dataset.w === undefined ? 'both' : Number(el.dataset.w) }); break;
     case 'rabbit': send({ t: 'rabbit' }); break;
     case 'away': { const s = st.seats.find((x) => x && x.id === S.myId); send({ t: 'away', on: !s.out }); break; }
@@ -923,7 +930,9 @@ document.addEventListener('click', (e) => {
       break;
     }
     case 'vaway': send({ t: 'vaway', id: el.dataset.id, on: el.dataset.on === '1' }); $('#modal').close(); break;
-    case 'stand': send({ t: 'stand' }); break;
+    case 'stand': closeMenu(); modal(`<h3>Leave your seat?</h3><p>${st.phase !== 'waiting' && st.phase !== 'done' && st.seats.find((x) => x && x.id === S.myId)?.inHand ? 'Your hand will be folded. ' : ''}You take your chips with you and can sit again later.</p><div class="row"><button class="btn" data-act="stand-no">Stay</button><button class="btn primary" data-act="stand-go">Leave seat</button></div>`); break;
+    case 'stand-go': $('#modal').close(); send({ t: 'stand' }); break;
+    case 'stand-no': $('#modal').close(); break;
     case 'start': if (t) { S.started = true; S.paused = false; try { t.startHand(); } catch (er) { toast(er.message); } push(); } break;
     case 'hostrun': if (S.role !== 'host') break; if (S.started && !S.paused) { S.paused = true; toast('Stopped. The hand in play finishes, then no new hand is dealt.'); push(); } else if (t) { S.started = true; S.paused = false; if (!t.inHand()) { try { t.startHand(); S.doneAt = 0; } catch (er) { toast(er.message); } } push(); } break;
     case 'pause': S.paused = !S.paused; if (!S.paused) S.started = true; closeMenu(); push(); break;

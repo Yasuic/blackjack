@@ -584,3 +584,9 @@ body.room3d .pfelt.ring:not(.tall) .pk-mid.many .pk-board .pk-pot { position: st
 .pk-acts.pre .pk-act.fold { border-color: rgba(255,120,120,.55); color: #ffb3b3; }
 .pk-acts.pre .pk-act.call { border-color: rgba(126,240,182,.55); color: #c8ffe6; }
 .pk-acts.pre .pk-act.on { opacity: 1; border-color: var(--gold); color: #1b1300; background: var(--gold) !important; }
+/* Raise panel: minus and plus beside the slider (one big blind a tap) and the amount in big blinds. */
+.pk-step { flex: none; width: 34px; height: 34px; border-radius: 8px; background: var(--panel-2); color: var(--text); border: 1px solid var(--line); font: 800 18px/1 Inter, sans-serif; cursor: pointer; }
+.pk-step:hover { border-color: var(--gold); color: var(--gold); }
+.pk-bb { flex: none; background: var(--gold); color: #1b1300; border-radius: 6px; padding: 3px 7px; font: 800 12px "Space Grotesk", sans-serif; white-space: nowrap; }
+/* Away: one large button where the action buttons are. */
+.pk-acts.back .pk-act { min-width: clamp(160px, 22vw, 320px) !important; }
