@@ -1,9 +1,9 @@
 // The poker page: a Texas Hold'em table for up to 9 in the big meeting room. The host's browser runs
 // the table (js/poker.js); every other browser sends its moves there and is told only what it may see.
-import { PokerTable, POKER_SEATS, pokerDeck, cardText } from './poker.js?v=20261121m';
-import { sha256 } from './game.js?v=20261121m';
-import { webglOK, initRoom } from './room3d.js?v=20261121m';
-import { params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame } from './common.js?v=20261121m';
+import { PokerTable, POKER_SEATS, pokerDeck, cardText } from './poker.js?v=20261121n';
+import { sha256 } from './game.js?v=20261121n';
+import { webglOK, initRoom } from './room3d.js?v=20261121n';
+import { params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame } from './common.js?v=20261121n';
 
 const PREFIX = 'bjt-pk-';
 const app = $('#app');
@@ -133,6 +133,7 @@ function doMove(id, m) {
   const t = S.table;
   switch (m.t) {
     case 'sit': t.sit(id, Number(m.seat), m.buyIn); break;
+    case 'move': t.moveSeat(id, Number(m.seat)); break;
     case 'stand': t.standUp(id); break;
     case 'act': if (t.waitCards) throw new Error('One moment: the table just moved to a new host.'); t.act(id, m.a, m.amount); break;
     case 'cards': t.giveCards(id, m.cards, m.salt); break;
@@ -145,6 +146,8 @@ function doMove(id, m) {
     case 'rabbit': t.rabbitHunt(id); break;
     case 'straddle': t.setStraddle(id, !!m.on); break;
     case 'runs': t.setRuns(id, m.n); break;
+    case 'runpick': t.runPick(id, m.n); break;
+    case 'runans': t.runAnswer(id, !!m.yes); break;
     case 'seed': t.setClientSeed(id, m.seed, m.commit); break;
     default: break;
   }
@@ -191,6 +194,8 @@ function hostClock() {
   }
   if (t.inHand()) {
     S.doneAt = 0;
+    // The run it question waits 20 seconds for each step, then the board is dealt once.
+    if (t.runAsk && !t.runAsk.done) { if (now - t.runAsk.at > 20000) { t.runTimeout(); push(); } return; }
     if (t.turn !== null) {
       const id = t.seats[t.turn].id, away = t.players[id]?.connected === false;
       let limit = t.settings.turnTimer;
@@ -281,6 +286,7 @@ function showTable() {
       ${gameSwitchHTML('poker')}
       <span id="conn-pill" class="pill">Connecting</span>
       <span class="spacer"></span>
+      <button class="btn small primary" id="host-run" data-act="hostrun" hidden></button>
       <button class="pill fair-pill" data-act="fair" title="How the deck is kept fair">🔐<span class="fp-t"> Fair deck</span></button>
       <button class="btn small gold" data-act="copy">🔗 Invite</button>
       <div class="menu-wrap" id="menu-wrap">
@@ -436,6 +442,7 @@ function render() {
     stools.push({ seat: i, x: P.x, y: P.y });
     if (!seat) {
       if (mySeat < 0) h += `<button class="pk-sit pk-stand" style="left:${A.x}%;top:${A.y}%" data-act="sit" data-seat="${i}"><span class="sit-arrow">Sit ▼</span>Seat ${i + 1}</button>`;
+      else if (!live) h += `<button class="pk-sit pk-move pk-stand" style="left:${A.x}%;top:${A.y}%" data-act="move" data-seat="${i}" title="Move to this seat with your chips"><span class="sit-arrow">Move ▼</span>Seat ${i + 1}</button>`;
       else h += `<div class="pk-empty" style="left:${A.x}%;top:${A.y}%">Empty</div>`;
       continue;
     }
@@ -530,11 +537,15 @@ function drawHud(st, mySeat, showing) {
   else if (mySeat < 0) status = 'Tap an empty seat to join the game.';
   else if (o) status = `Your turn${seat.hand && !seat.hand.includes(' | ') ? ' · ' + esc(seat.hand) : ''}`;
   else if (live && st.turn !== null) status = `Waiting for ${esc(st.seats[st.turn]?.name || '')}`;
+  else if (st.runAsk) { const a = st.runAsk, nm = esc(st.seats[a.by]?.name || ''); status = !a.n ? (a.by === mySeat ? 'All in. How many times do you want to run it?' : `All in. ${nm} picks how many times to run it…`) : (a.need.includes(mySeat) && !a.yes.includes(mySeat) ? `${nm} asks to run it ${a.n} times. Do you agree?` : `Run it ${a.n} times? Waiting for ${esc(a.need.filter((q) => !a.yes.includes(q)).map((q) => st.seats[q]?.name || '').join(', '))}…`); }
   else if (showing) status = 'All in. The cards are coming out…';
   else if (st.phase === 'done') status = st.result?.wins?.length ? st.result.wins.map((w) => `${esc(st.seats[w.seat]?.name || 'A player')} wins ${amt(w.amount)}${w.hand ? ' with ' + esc(w.hand) : ''}`).filter((x, i, a) => a.indexOf(x) === i).slice(0, 3).join(' · ') : 'Hand over';
   else status = st.canStart ? (isHost ? 'Press Start to deal the first hand.' : 'Waiting for the host to start.') : 'Two players with chips are needed to play.';
   const bounty = st.result?.bounty?.length ? ` · 7-2 bounty: ${st.result.bounty.map((b) => `${esc(st.seats[b.seat]?.name || '')} +${money(b.amount)}`).join(', ')}` : '';
   top.innerHTML = `<div class="status">${status}${bounty}</div>`;
+  // The host's Start and Stop button at the top right: Start deals, Stop holds the game after the hand in play.
+  const hr = $('#host-run');
+  if (hr) { const running = S.started && !S.paused; hr.hidden = !isHost; hr.textContent = running ? '⏸ Stop' : '▶ Start'; hr.title = running ? 'Stop dealing after this hand' : 'Deal the next hand and keep dealing'; hr.classList.toggle('primary', !running); hr.disabled = !running && !st.canStart; }
   let h = '';
   if (seat && seat.cards.length && seat.cards[0]) h += `<div class="pk-myhand${seat.cards.length > 2 ? ' four' : ''}">${seat.cards.map((c) => cardHTML(c, 'big')).join('')}${seat.hand && !showing ? `<span class="${seat.hand.includes(' | ') ? 'two' : ''}">${seat.hand.includes(' | ') ? seat.hand.split(' | ').map((x, k) => `<em>Board ${k + 1}</em> ${esc(x)}`).join('<br>') : esc(seat.hand)}</span>` : ''}</div>`;
   if (o) {
@@ -551,6 +562,11 @@ function drawHud(st, mySeat, showing) {
       <div class="pk-presets"><button data-act="preset" data-v="${o.minTo}">Min</button><button data-act="preset" data-v="${frac(1 / 3)}">⅓ pot</button><button data-act="preset" data-v="${frac(0.5)}">½ pot</button><button data-act="preset" data-v="${frac(2 / 3)}">⅔ pot</button><button data-act="preset" data-v="${frac(1)}">Pot</button><button data-act="preset" data-v="${o.maxTo}">${o.allIn === false ? 'Max' : 'All in'}</button></div>
       <div class="pk-slide"><input type="range" id="raise-range" min="${o.minTo}" max="${o.maxTo}" step="${Math.max(1, Math.min(st.settings.bigBlind, o.maxTo - o.minTo) || 1)}" value="${to}" /><input type="number" id="raise-num" min="${o.minTo}" max="${o.maxTo}" value="${to}" inputmode="numeric" /></div>
     </div>`;
+  } else if (seat && st.runAsk && ((st.runAsk.by === mySeat && !st.runAsk.n) || (st.runAsk.n && st.runAsk.need.includes(mySeat) && !st.runAsk.yes.includes(mySeat)))) {
+    const a = st.runAsk;
+    h += a.by === mySeat
+      ? `<div class="pk-acts pk-runask">${Array.from({ length: a.max }, (_, k) => `<button class="pk-act ${k ? 'raise' : 'check'}" data-act="runpick" data-n="${k + 1}">${['Once', 'Twice', '3 times'][k]}</button>`).join('')}</div>`
+      : `<div class="pk-acts pk-runask"><button class="pk-act call" data-act="runans" data-yes="1">Yes, ${a.n} times</button><button class="pk-act fold" data-act="runans" data-yes="0">No, once</button></div>`;
   } else if (seat) {
     const b = [];
     if (st.phase === 'done' && seat.inHand && seat.cards[0] && !seat.shown) {
@@ -567,7 +583,6 @@ function drawHud(st, mySeat, showing) {
       <button class="btn small${seat.out ? ' gold' : ''}" data-act="away">${seat.out ? "✅ I'm back" : '💤<span> Away</span>'}</button>
       <button class="btn small" data-act="add">🪙<span> Chips</span></button>
       <button class="btn small" data-act="react">😀<span> React</span></button>
-      <button class="btn small" data-act="runs" title="How many times you like to deal the rest of the board when everyone is all in">🔁 <span>Run it </span>${seat.runs}×</button>
       <button class="btn small" data-act="bbview" title="Show amounts in big blinds or in chips">${bbOn() ? 'BB' : '$'}<span> view</span></button>
       ${st.settings.straddle ? `<button class="btn small" data-act="straddle">Straddle: ${seat.straddle ? 'on' : 'off'}</button>` : ''}
       <button class="btn small" data-act="stand">🚪<span> Leave seat</span></button>
@@ -623,7 +638,7 @@ function rulesHTML(st) {
     <p>7-2 bounty: ${s.sevenDeuce ? `win a hand holding seven-two and every player dealt in pays you ${money(s.sevenDeuce)}.` : 'off.'}</p>
     <p>Bomb pots: ${s.bombPotEvery ? `every ${s.bombPotEvery} hands. ` : 'when the host calls one. '}Everyone posts ${s.bombPotAnte} big blinds and the hand starts at the flop. Bomb pot game: ${s.bombGame === 'same' ? 'same as the table' : s.bombGame === 'plo' ? 'Omaha' : "Hold'em"}, ${s.bombBoards ? (s.bombBoards === 2 ? 'two boards' : 'one board') : 'boards as at the table'}.</p>
     <p>Rabbit hunt: ${s.rabbitHunt ? 'on. After a hand that ends early, a player in the hand may show the cards that would have come.' : 'off.'} Straddle: ${s.straddle ? 'allowed' : 'off'}.</p>
-    <p>All in before the river: each player picks how many times to run it (1 to 10, button Run it). The lowest pick among the players in the hand counts${s.runTimes < 10 ? `, at most ${s.runTimes}` : ''}, and the pot is shared equally between the runs (fewer runs when the deck has too few cards left). The hands turn face up with each one's chance to win and its outs.</p>
+    <p>All in before the river: the table asks how many times to run it. The player who went all in first picks once, twice or 3 times${s.runTimes < 3 ? ` (this table allows at most ${s.runTimes})` : ''}. For more than once, every other player in the hand must say yes; one no, or no answer in 20 seconds, means the board is dealt once. The pot is shared equally between the runs. The hands turn face up with each one's chance to win and its outs.</p>
     <p>Chips: you can add chips or take chips off at your own seat, only while you are not in a hand. Every change is written in the hand log and counted in the ledger.</p>
   </div>`;
 }
@@ -633,7 +648,7 @@ function settingsHTML(st) {
   return `<h3>Table settings</h3><div class="pk-set">
     ${num('smallBlind', 'Small blind')}${num('bigBlind', 'Big blind', 1)}${num('ante', 'Ante (0 = none)')}${num('startStack', 'Starting chips', 1)}
     <label>Seconds per decision<select id="ps-turnTimer">${[0, 10, 15, 20, 30, 45, 60, 90].map((v) => `<option value="${v}"${v === s.turnTimer ? ' selected' : ''}>${v ? v : 'No clock'}</option>`).join('')}</select></label>
-    ${num('timeBank', 'Time bank per player, in seconds (0 = none)')}${num('sevenDeuce', '7-2 bounty per player (0 = off)')}${num('bombPotEvery', 'Bomb pot every N hands (0 = off)')}${num('bombPotAnte', 'Bomb pot size, in big blinds', 1)}${num('runTimes', 'Most times an all in may be run (1 to 10)', 1)}<label>All in showdown speed<select id="ps-showSpeed">${['fast', 'normal', 'long'].map((v) => `<option value="${v}"${v === s.showSpeed ? ' selected' : ''}>${v[0].toUpperCase() + v.slice(1)}</option>`).join('')}</select></label>
+    ${num('timeBank', 'Time bank per player, in seconds (0 = none)')}${num('sevenDeuce', '7-2 bounty per player (0 = off)')}${num('bombPotEvery', 'Bomb pot every N hands (0 = off)')}${num('bombPotAnte', 'Bomb pot size, in big blinds', 1)}${num('runTimes', 'Run it: most times a player may ask for (1 = always once)', 1)}<label>All in showdown speed<select id="ps-showSpeed">${['fast', 'normal', 'long'].map((v) => `<option value="${v}"${v === s.showSpeed ? ' selected' : ''}>${v[0].toUpperCase() + v.slice(1)}</option>`).join('')}</select></label>
     <label>Game<select id="ps-game"><option value="nlh"${s.game === 'nlh' ? ' selected' : ''}>No limit Hold'em (2 cards)</option><option value="plo"${s.game === 'plo' ? ' selected' : ''}>Pot limit Omaha (4 cards)</option></select></label>
     ${tick('doubleBoard', 'Two boards every hand (each board plays for half the pot)')}
     <label>Bomb pot game<select id="ps-bombGame">${[['same', 'Same as the table'], ['nlh', "Hold'em"], ['plo', 'Omaha (PLO)']].map(([v, l]) => `<option value="${v}"${s.bombGame === v ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
@@ -708,6 +723,7 @@ document.addEventListener('click', (e) => {
       modal(`<h3>Take seat ${seat + 1}</h3><div class="pk-set"><label>Chips to start with<input type="number" id="buyin" min="1" value="${st.settings.startStack}" inputmode="numeric" /></label><button class="btn primary" data-act="sit-go" data-seat="${seat}">Sit down</button></div>`);
       break;
     }
+    case 'move': send({ t: 'move', seat: Number(el.dataset.seat) }); break;
     case 'sit-go': send({ t: 'sit', seat: Number(el.dataset.seat), buyIn: Number($('#buyin').value) }); $('#modal').close(); break;
     case 'fold': send({ t: 'act', a: 'fold' }); break;
     case 'check': send({ t: 'act', a: 'check' }); break;
@@ -722,6 +738,8 @@ document.addEventListener('click', (e) => {
     case 'add-go': send({ t: 'add', amount: Number($('#addamt').value) }); $('#modal').close(); break;
     case 'take-go': send({ t: 'take', amount: Number($('#addamt').value) }); $('#modal').close(); break;
     case 'runs': modal(`<h3>Run it how many times?</h3><div class="pk-emoji runs">${[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => `<button data-act="runs-go" data-n="${n}">${n}×</button>`).join('')}</div><p class="hint">When everyone in a hand is all in before the last card, the rest of the board is dealt this many times and the pot is shared between the runs. The lowest pick among the players in the hand counts.</p>`); break;
+    case 'runpick': send({ t: 'runpick', n: Number(el.dataset.n) }); break;
+    case 'runans': send({ t: 'runans', yes: el.dataset.yes === '1' }); break;
     case 'runs-go': send({ t: 'runs', n: Number(el.dataset.n) }); $('#modal').close(); break;
     case 'bbview': safeSet('pk-bb', bbOn() ? '0' : '1'); render(); break;
     case 'react': modal(`<h3>Reaction</h3><div class="pk-emoji">${EMOJI.map((x) => `<button data-act="react-go" data-e="${x}">${x}</button>`).join('')}</div>`); break;
@@ -739,6 +757,7 @@ document.addEventListener('click', (e) => {
     case 'vaway': send({ t: 'vaway', id: el.dataset.id, on: el.dataset.on === '1' }); $('#modal').close(); break;
     case 'stand': send({ t: 'stand' }); break;
     case 'start': if (t) { S.started = true; S.paused = false; try { t.startHand(); } catch (er) { toast(er.message); } push(); } break;
+    case 'hostrun': if (S.role !== 'host') break; if (S.started && !S.paused) { S.paused = true; toast('Stopped. The hand in play finishes, then no new hand is dealt.'); push(); } else if (t) { S.started = true; S.paused = false; if (!t.inHand()) { try { t.startHand(); S.doneAt = 0; } catch (er) { toast(er.message); } } push(); } break;
     case 'pause': S.paused = !S.paused; if (!S.paused) S.started = true; closeMenu(); push(); break;
     case 'bomb': if (t) { t.setBombNext(!t.bombNext); push(); } break;
     case 'ledger': closeMenu(); modal(ledgerHTML(st)); break;

@@ -1,6 +1,6 @@
 // No-limit Texas Hold'em for up to 9 players. Pure rules: the host's browser owns one PokerTable and
 // every action goes through it. Nothing here touches the page or the network.
-import { SUITS, RANKS, sha256, fairSeed, fairShoe, MAX_CHIPS } from './game.js?v=20261121m';
+import { SUITS, RANKS, sha256, fairSeed, fairShoe, MAX_CHIPS } from './game.js?v=20261121n';
 
 export const POKER_SEATS = 9;
 export const POKER_DEFAULTS = {
@@ -210,6 +210,18 @@ export class PokerTable {
     p.totalIn += amount;
     this.addLog(`${p.name} sat down with ${amount}.`);
   }
+  // Move to an empty seat between hands. The chips, the stats and the away mark go along; the button stays where it is.
+  moveSeat(id, seatIdx) {
+    const from = this.seatOf(id);
+    if (from < 0) throw new Error('Take a seat first.');
+    if (this.inHand()) throw new Error('You can move between hands, before the deal.');
+    if (!Number.isInteger(seatIdx) || seatIdx < 0 || seatIdx >= POKER_SEATS) throw new Error('No such seat.');
+    if (this.seats[seatIdx]) throw new Error('That seat is taken.');
+    this.seats[seatIdx] = this.seats[from]; this.seats[from] = null;
+    // The last hand's result still names seats: keep it pointing at this player.
+    for (const w of [...(this.result?.wins || []), ...(this.result?.bounty || [])]) if (w.seat === from) w.seat = seatIdx;
+    this.addLog(`${this.name(seatIdx)} moved from seat ${from + 1} to seat ${seatIdx + 1}.`);
+  }
   // Leave the seat. In a hand the cards are folded first; the stack leaves the table with the player.
   standUp(id) {
     const i = this.seatOf(id);
@@ -311,13 +323,13 @@ export class PokerTable {
     this.plo = game === 'plo';
     this.dbl = bomb && s.bombBoards ? s.bombBoards === 2 : s.doubleBoard;
     this.cur.plo = this.plo; this.cur.dbl = this.dbl;
-    this.board = []; this.board2 = []; this.rabbit2 = null; this.pot = 0; this.result = null; this.rabbit = null; this.bomb = bomb; this.allInRun = false; this.runout = null; this.runs = 1; this.runBase = null; this.boards = null;
+    this.board = []; this.board2 = []; this.rabbit2 = null; this.pot = 0; this.result = null; this.rabbit = null; this.bomb = bomb; this.allInRun = false; this.runAsk = null; this.allInSeq = 0; for (const q of this.seats) if (q) q.allInAt = 0; this.runout = null; this.runs = 1; this.runBase = null; this.boards = null;
     for (const i of inIdx) { const x = this.seats[i]; x.inHand = true; x.bank = Math.min(this.settings.timeBank, (x.bank ?? this.settings.timeBank) + (this.handNo > 1 ? 10 : 0)); }
     this.addLog(`Hand ${this.handNo}${bomb ? ' (bomb pot)' : ''}${this.plo ? ', pot limit Omaha' : ''}${this.dbl ? ', two boards' : ''}. ${this.name(this.button)} has the button.`);
     const post = (i, amount, what) => {
       const x = this.seats[i], pay = Math.min(x.stack, amount);
       x.stack -= pay; x.bet += pay; x.total += pay;
-      if (x.stack === 0) x.allIn = true;
+      if (x.stack === 0) { x.allIn = true; x.allInAt ||= ++this.allInSeq; }
       if (pay && what) this.addLog(`${this.name(i)} posts ${what} ${pay}${x.allIn ? ' and is all in' : ''}.`);
       return pay;
     };
@@ -411,7 +423,7 @@ export class PokerTable {
       if (o.canCheck) throw new Error('There is nothing to call.');
       const pay = o.toCall;
       x.stack -= pay; x.bet += pay; x.total += pay; x.acted = true;
-      if (x.stack === 0) x.allIn = true;
+      if (x.stack === 0) { x.allIn = true; x.allInAt ||= ++this.allInSeq; }
       if (this.phase === 'preflop' && !this.bomb) x.vp = true;
       this.addLog(`${nm} calls ${pay}${x.allIn ? ' and is all in' : ''}.`);
     } else if (type === 'raise' || type === 'bet') {
@@ -421,7 +433,7 @@ export class PokerTable {
       if (to < o.minTo) throw new Error(`The smallest ${o.isBet ? 'bet' : 'raise'} is to ${o.minTo}.`);
       const pay = to - x.bet, by = to - this.currentBet;
       x.stack -= pay; x.bet = to; x.total += pay; x.acted = true;
-      if (x.stack === 0) x.allIn = true;
+      if (x.stack === 0) { x.allIn = true; x.allInAt ||= ++this.allInSeq; }
       if (by >= this.minRaise) {
         // A full bet or raise: everyone else may act again.
         this.minRaise = by;
@@ -480,17 +492,58 @@ export class PokerTable {
         const need = 5 - this.board.length, first = need + (need === 5 ? 3 : need === 2 ? 2 : 1);
         this.runBase = [...this.board];
         // Each player picks how many times they like to run it (1 to 10); the lowest pick among the players in the hand counts.
-        const want = Math.min(this.settings.runTimes, ...live.map((i) => this.seats[i].runs || 2));
-        this.runs = this.dbl ? 1 : 1 + Math.max(0, Math.min(want - 1, Math.floor((this.deck.length - first) / need)));
+        const most = this.dbl ? 1 : 1 + Math.max(0, Math.min(this.settings.runTimes - 1, Math.floor((this.deck.length - first) / need)));
+        if (PokerTable.autoRun) { // tests: each seat's stored pick, the lowest counts
+          this.runs = Math.min(most, ...live.map((i) => this.seats[i].runs || 2));
+        } else if (most > 1) {
+          // Run it once, twice or three times is a question. The player who went all in first picks; with more
+          // than once, every other player in the hand must agree, otherwise the board is dealt once.
+          const by = [...live].filter((i) => this.seats[i].allIn).sort((a, b) => (this.seats[a].allInAt || 1e9) - (this.seats[b].allInAt || 1e9))[0] ?? live[0];
+          this.runs = 1;
+          this.runAsk = { by, max: Math.min(3, most), n: 0, yes: [], need: live.filter((i) => i !== by), at: Date.now() };
+          this.turn = null;
+          return; // the hand waits for the answer: runPick, runAnswer or runTimeout
+        } else this.runs = 1;
       }
-      if (!PokerTable.noChances) this.runout.push(this.chances(live));
-      this.nextStreet();
-      this.endStreet();
+      this.runGo();
       return;
     }
     this.nextStreet();
     this.seekTurn(this.button);
   }
+  // Deals the rest of the board once the number of runs is settled.
+  runGo() {
+    const live = this.liveSeats();
+    if (!PokerTable.noChances) this.runout.push(this.chances(live));
+    this.nextStreet();
+    this.endStreet();
+  }
+  runSettle(n, why) {
+    const a = this.runAsk;
+    if (!a || a.done) return;
+    a.done = true; this.runs = n;
+    this.addLog(why);
+    this.runGo();
+  }
+  // The first all in player says how many times to deal the rest of the board.
+  runPick(id, n) {
+    const a = this.runAsk, i = this.seatOf(id);
+    if (!a || a.done || a.n || i !== a.by) throw new Error('It is not your choice.');
+    n = clampInt(n, 1, a.max, 1);
+    if (n === 1) { this.runSettle(1, `${this.name(i)} runs it once.`); return; }
+    a.n = n; a.at = Date.now();
+    this.addLog(`${this.name(i)} asks to run it ${n} times.`);
+  }
+  // Every other player in the hand agrees or says no. One no means the board is dealt once.
+  runAnswer(id, yes) {
+    const a = this.runAsk, i = this.seatOf(id);
+    if (!a || a.done || !a.n || !a.need.includes(i) || a.yes.includes(i)) throw new Error('There is nothing to answer.');
+    if (!yes) { this.runSettle(1, `${this.name(i)} says no. The board is dealt once.`); return; }
+    a.yes.push(i);
+    if (a.need.every((q) => a.yes.includes(q))) this.runSettle(a.n, `Everyone agrees: the board is dealt ${a.n} times.`);
+  }
+  // Nobody answered in time: the board is dealt once.
+  runTimeout() { this.runSettle(1, 'No answer in time. The board is dealt once.'); }
   nextStreet() {
     this.draw(); // burn
     // With two boards the first board gets its cards, then the second.
@@ -763,6 +816,7 @@ export class PokerTable {
       pot: this.pot, minRaise: this.minRaise, pending: this.pending, moved: this.moved || 0, mySalt: me >= 0 ? this.seats[me].salt || null : null, wait: this.waitCards ? this.missingCards().map((i) => this.name(i)) : undefined, potTotal: this.potTotal(), pots: this.inHand() || done ? this.potsNow() : [], currentBet: this.currentBet, turn: this.turn,
       turnLeft: this.turn !== null && this.settings.turnTimer ? Math.max(0, this.settings.turnTimer * 1000 - (Date.now() - (this.turnStarted || Date.now()))) : null,
       hostId: this.hostId, awayVotes: this.awayVotes || {}, canStart: this.canStart(), bombNext: this.bombNext, result: this.result, rabbit: this.rabbit, allInRun: !!this.allInRun && !done ? true : undefined,
+      runAsk: this.runAsk && !this.runAsk.done ? { by: this.runAsk.by, max: this.runAsk.max, n: this.runAsk.n, yes: this.runAsk.yes, need: this.runAsk.need, left: Math.max(0, 20000 - (Date.now() - this.runAsk.at)) } : undefined,
       seats: this.seats.map((x, i) => x && {
         id: x.id, name: this.players[x.id]?.name, look: this.players[x.id]?.look, connected: this.players[x.id]?.connected !== false,
         stack: x.stack, bet: x.bet, total: x.total, bank: x.bank || 0, runs: x.runs || 2, shown: !!x.show, mask: x.mask || null, acted: !!x.acted, leaving: !!x.leaving, cc: x.cc || null, vp: !!x.vp, pf: !!x.pf, stats: this.players[x.id]?.stats || null, folded: x.folded, allIn: x.allIn, inHand: x.inHand, out: x.out, won: done ? x.won || 0 : 0, straddle: !!x.straddle,

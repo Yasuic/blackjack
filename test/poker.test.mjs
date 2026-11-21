@@ -1,6 +1,7 @@
 import { PokerTable, bestHand, bestOmaha, verifyHand, pokerDeck, cardText } from '../js/poker.js';
 let fails = 0, n = 0;
 const ok = (c, m) => { n++; if (!c) { fails++; console.log('FAIL', m); } };
+PokerTable.autoRun = true; // the old hands below use each seat's stored pick; the question is tested at the end
 const C = (s) => s.split(' ').map((x) => ({ r: x.slice(0, -1), s: x.slice(-1) }));
 const S = ['♠', '♥', '♦', '♣'];
 const h = (s) => bestHand(C(s.replace(/s/g, '♠').replace(/h/g, '♥').replace(/d/g, '♦').replace(/c/g, '♣')));
@@ -329,6 +330,46 @@ for (let g = 0; g < 240; g++) {
     if (t.result.early && t.dbl) { t.rabbitHunt(hole[0].id); ok(t.rabbit.length + t.board.length === 5 && t.rabbit2.length === t.rabbit.length && new Set([...rec.dealt, ...t.rabbit, ...t.rabbit2].map(cardText)).size === rec.dealt.length + t.rabbit.length * 2, 'rabbit on two boards'); }
   }
   void ledger0;
+}
+PokerTable.noChances = true; PokerTable.autoRun = false;
+{ // run it X times is a question: the first all in player picks, the others agree
+  const total = (t) => t.seats.reduce((a, x) => a + (x ? x.stack : 0), 0);
+  const allIn = () => { const t = mk(3, [300, 200, 500]); t.startHand(); const first = t.seats[t.turn].id; let g = 0; while (t.turn !== null && g++ < 20) { const id = t.seats[t.turn].id, o = t.options(id); if (o.canRaise) t.act(id, 'raise', o.maxTo); else t.act(id, 'call'); } return { t, first }; };
+  { const { t, first } = allIn();
+    ok(t.runAsk && !t.runAsk.done && t.phase !== 'done', 'the hand waits for the run it answer');
+    ok(t.seats[t.runAsk.by].id === first, 'the first all in player is asked');
+    ok(t.runAsk.max === 3 && t.runAsk.need.length === 2, 'up to three runs, two others must agree');
+    const other = t.seats[t.runAsk.need[0]].id;
+    let threw = false; try { t.runPick(other, 2); } catch { threw = true; } ok(threw, 'only the asked player picks');
+    threw = false; try { t.runAnswer(other, true); } catch { threw = true; } ok(threw, 'no answer before the pick');
+    ok(t.publicState(other).runAsk.by === t.runAsk.by, 'players see the question');
+    t.runPick(first, 3);
+    ok(t.phase !== 'done' && t.runAsk.n === 3, 'three asked, still waiting');
+    threw = false; try { t.runAnswer(first, true); } catch { threw = true; } ok(threw, 'the asker does not answer');
+    t.runAnswer(other, true); ok(t.phase !== 'done', 'one yes is not enough');
+    threw = false; try { t.runAnswer(other, true); } catch { threw = true; } ok(threw, 'no second answer');
+    t.runAnswer(t.seats[t.runAsk.need[1]].id, true);
+    ok(t.phase === 'done' && t.runs === 3 && t.result.boards?.length === 3, 'all agree: three boards');
+    ok(total(t) === 1000, 'chips kept with three runs'); }
+  { const { t, first } = allIn(); t.runPick(first, 2); t.runAnswer(t.seats[t.runAsk.need[1]].id, false);
+    ok(t.phase === 'done' && t.runs === 1 && !t.result.boards, 'one no: dealt once'); ok(total(t) === 1000, 'chips kept after a no'); }
+  { const { t, first } = allIn(); t.runPick(first, 1); ok(t.phase === 'done' && t.runs === 1, 'once needs no agreement'); }
+  { const { t } = allIn(); t.runTimeout(); ok(t.phase === 'done' && t.runs === 1, 'no pick in time: once'); t.runTimeout(); ok(t.phase === 'done', 'a late timeout does nothing'); }
+  { const { t, first } = allIn(); t.runPick(first, 9); ok(t.runAsk.n === 3, 'a pick above three counts as three'); t.runTimeout(); ok(t.runs === 1 && total(t) === 1000, 'no answers in time: once'); }
+  { const t = mk(2, 300, { runTimes: 1 }); t.startHand(); t.act(t.seats[t.turn].id, 'raise', 300); t.act(t.seats[t.turn].id, 'call'); ok(t.phase === 'done' && !t.runAsk, 'a table set to once never asks'); }
+  { const t = mk(2, 300); t.startHand(); t.act(t.seats[t.turn].id, 'call'); t.act(t.seats[t.turn].id, 'check'); let g = 0; while (t.phase !== 'river' && g++ < 9) t.act(t.seats[t.turn].id, 'check'); t.act(t.seats[t.turn].id, 'bet', t.options(t.seats[t.turn].id).maxTo); t.act(t.seats[t.turn].id, 'call'); ok(t.phase === 'done' && !t.runAsk, 'all in on the river: no question'); }
+}
+{ // move to an empty seat before the deal; other players never get hidden cards
+  const t = mk(3, 300); t.startHand();
+  let threw = false; try { t.moveSeat('p0', 5); } catch { threw = true; } ok(threw, 'no move during a hand');
+  for (let v = 0; v < 3; v++) { const st = t.publicState('p' + v); ok(st.seats.every((x, i) => !x || i === v || x.cards.every((c) => c === null)), 'other hands are not sent to player ' + v); ok(!('deck' in st) && !JSON.stringify(st).includes('"salt":"'), 'no deck and no salts in the state ' + v); }
+  let g = 0; while (t.phase !== 'done' && g++ < 40) { const id = t.seats[t.turn].id; t.act(id, t.options(id).canCheck ? 'check' : 'fold'); }
+  const stack = t.seats[0].stack, btn = t.button;
+  threw = false; try { t.moveSeat('p0', 1); } catch { threw = true; } ok(threw, 'no move to a taken seat');
+  t.moveSeat('p0', 6);
+  ok(!t.seats[0] && t.seats[6].id === 'p0' && t.seats[6].stack === stack && t.button === btn, 'moved with the chips');
+  ok((t.result.wins || []).every((w) => t.seats[w.seat]), 'the last result still names a seated player');
+  t.startHand(); ok(t.seats[6].inHand && t.seats[6].cards.length === 2, 'dealt in at the new seat');
 }
 PokerTable.noChances = false; PokerTable.samples = 0;
 console.log(`${n - fails}/${n} poker checks passed`);

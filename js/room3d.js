@@ -162,7 +162,7 @@ function buildOffice(signText, midShift = 0, midScale = 1, skipRoom = null, live
     chrome: mk({ color: '#b9bec4', roughness: 0.25, metalness: 0.9 }),
     screen: mk({ color: '#0d0f12', roughness: 0.25, metalness: 0.2 }),
     // What the office screens show: the ARC Group logo, from the photo of it, lit like a screen that is on.
-    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261121m'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
+    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261121n'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
     dark: mk({ color: '#30353c', roughness: 0.6 }),
   };
   const group = new THREE.Group();
@@ -903,7 +903,7 @@ function buildStorefront() {
     lamp: lam('#c8161d', 0.6), bulb: lit('#ffe9a8'), red: lit('#c8161d'), gold: lit('#f4c542'), wood: lam('#7a5234', 0.35),
     glass: new THREE.MeshBasicMaterial({ color: '#dff3f7', transparent: true, opacity: 0.13, depthWrite: false }),
     awning: new THREE.MeshBasicMaterial({ map: canvasTexture(512, 64, (g, w, h) => { for (let i = 0; i < 16; i++) { g.fillStyle = i % 2 ? '#fff6e6' : '#f08a1c'; g.fillRect((i * w) / 16, 0, w / 16 + 1, h); } }), side: THREE.DoubleSide }),
-    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261121m') }),
+    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261121n') }),
     menu: new THREE.MeshBasicMaterial({ map: canvasTexture(256, 384, (g, w, h) => {
       g.fillStyle = '#c8161d'; g.fillRect(0, 0, w, h); g.fillStyle = '#f4c542'; g.fillRect(14, 14, w - 28, 44);
       const r = rng(11); g.fillStyle = '#fff3d6';
@@ -1643,6 +1643,20 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     clampGoal(); touch();
   }
 
+  // Seat lock, on by default: nothing you tap, drag, scroll or type moves you out of your chair. The button at the
+  // top unlocks it for looking and walking around; Reset view at the bottom always brings you back to the chair.
+  let locked = true;
+  try { locked = localStorage.getItem('bj-seat-lock') !== '0'; } catch { /* no storage: stay locked */ }
+  document.querySelectorAll('.room-lock, .room-reset').forEach((b) => b.remove());
+  const lockBtn = document.createElement('button'), resetBtn = document.createElement('button');
+  lockBtn.className = 'room-lock'; resetBtn.className = 'room-reset'; resetBtn.textContent = '🪑 Reset view'; resetBtn.title = 'Back to your chair';
+  const drawLock = () => { lockBtn.textContent = locked ? '🔒 Seat locked' : '🔓 Free view'; lockBtn.title = locked ? 'Taps and drags do not move you. Tap to unlock and look or walk around.' : 'Tap to lock yourself in your chair again.'; lockBtn.classList.toggle('on', locked); container.classList.toggle('seat-locked', locked); };
+  const setLock = (v) => { locked = !!v; try { localStorage.setItem('bj-seat-lock', locked ? '1' : '0'); } catch { /* fine */ } if (locked) { moveKeys.clear(); home(true); } drawLock(); };
+  lockBtn.addEventListener('click', (e) => { e.stopPropagation(); setLock(!locked); });
+  resetBtn.addEventListener('click', (e) => { e.stopPropagation(); home(true); });
+  document.body.append(lockBtn, resetBtn);
+  drawLock();
+
   // Drag to look or walk around, wheel or pinch to move in and out. Presses on buttons, chips and
   // betting circles go to the felt as normal.
   const pointers = new Map();
@@ -1653,7 +1667,7 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
   for (const ev of ['pointerdown', 'wheel']) container.addEventListener(ev, () => { tour = null; tourW = 1; }, { capture: true, passive: true });
   container.addEventListener('pointerdown', (e) => {
     if ((e.button > 0 && e.button !== 2) || e.target.closest(interactive)) return;
-    if (OVAL && seated && !walking) return; // the poker seat view is fixed: Walk around in the menu frees it
+    if (locked) return; // seat lock: taps and drags never move you
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     // Mouse: the left button drags you across the room, the right button turns the view. One finger turns the view.
     if (pointers.size === 1) drag = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: false, pan: e.pointerType === 'mouse' ? e.button !== 2 : (e.button === 2) !== walking, mouse: e.pointerType === 'mouse' && e.button === 0, onUi: false }; // walking: a plain drag moves you, the right button turns
@@ -1719,7 +1733,7 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
   const moveKeys = new Set(), KEYMAP = { w: 'f', arrowup: 'f', s: 'b', arrowdown: 'b', a: 'l', arrowleft: 'l', d: 'r', arrowright: 'r' };
   const typingNow = (e) => e.target?.matches?.('input, select, textarea') || e.ctrlKey || e.metaKey || e.altKey || document.querySelector('dialog[open]');
   const onKeyDown = (e) => {
-    if (!running || typingNow(e)) return;
+    if (!running || locked || typingNow(e)) return;
     const k = KEYMAP[e.key.toLowerCase()];
     if (k) { moveKeys.add(k); tour = null; tourW = 1; if (e.key.startsWith('Arrow')) e.preventDefault(); touch(); }
     else if (e.key === 'Escape' && walking) home(true);
@@ -1730,7 +1744,7 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
   container.addEventListener('pointercancel', endPointer);
   container.addEventListener('wheel', (e) => {
     e.preventDefault();
-    if (OVAL && seated && !walking) return;
+    if (locked) return;
     const d = e.deltaMode === 1 ? e.deltaY * 30 : e.deltaY;
     zoom(Math.exp(Math.max(-240, Math.min(240, d)) * 0.0011));
   }, { passive: false });
@@ -1922,6 +1936,7 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     // Walk mode: leave the chair and move through the whole office. A drag moves you, two fingers or the
     // right button turn and zoom. Reset view takes you back to your seat.
     walk(on) {
+      if (on && locked) setLock(false); // Walk around in the menu unlocks the seat
       if (!on) { home(true); return false; }
       standUp(); walking = true; container.classList.add('walking');
       goal.r = homeFit.r * 0.7; goal.phi = 1.05; rate = 4.5;

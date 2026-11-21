@@ -408,3 +408,7 @@ body.room3d .ro-grid.wide { top: 29%; left: 10%; right: 10%; grid-auto-rows: cal
 .ro-seat .pk-plate { cursor: default; }
 .ro-grid.tallg [data-spot=c1] { grid-column: 2; } .ro-grid.tallg [data-spot=c2] { grid-column: 3; } .ro-grid.tallg [data-spot=c3] { grid-column: 4; }
 .pfelt.tall .ro-cell:not(.dz) .ro-mine { left: auto; right: 4px; transform: translateY(-50%); }
+.pk-sit.pk-move { opacity: .8; border-style: dashed; }
+.pk-sit.pk-move:hover { opacity: 1; }
+.pk-runask .pk-act { min-width: 110px; }
+#host-run[hidden] { display: none; }

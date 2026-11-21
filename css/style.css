@@ -1660,3 +1660,13 @@ body.view-hidden .zoom-ctl { display: none !important; }
 }
 /* Flat phone table: taller small seats with larger cards. */
 .felt:not(.in3d) .seat.mini { width: 84px; height: 150px; }
+
+/* Seat lock (top) and Reset view (bottom): always on screen in the 3D room of every game. */
+.room-lock, .room-reset { display: none; position: fixed; z-index: 40; font: 600 12px Inter, sans-serif; color: #e9eef5; background: rgba(10,12,16,.82); border: 1px solid rgba(255,255,255,.22); border-radius: 999px; padding: 6px 12px; cursor: pointer; white-space: nowrap; }
+body.room3d .room-lock, body.room3d .room-reset { display: block; }
+.room-lock { top: 68px; left: 12px; }
+.room-lock.on { border-color: var(--gold); color: #ffe7a8; }
+.room-reset { bottom: 10px; right: 10px; }
+.room-lock:hover, .room-reset:hover { filter: brightness(1.25); }
+body.room3d .room.seat-locked { cursor: default; }
+@media (max-width: 600px) { .room-lock { top: 62px; left: 8px; padding: 5px 9px; font-size: 11px; } .room-reset { bottom: auto; top: 62px; right: 8px; padding: 5px 9px; font-size: 11px; } }
