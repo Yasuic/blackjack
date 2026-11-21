@@ -1627,3 +1627,14 @@ body.view-hidden .zoom-ctl { display: none !important; }
 .hurry-pop { position: fixed; z-index: 75; transform: translate(-50%, -50%) rotate(var(--tilt, 0deg)); background: rgba(20,8,4,.94); border: 2px solid #ff8a54; color: #ffd9c2; font-family: 'Space Grotesk', system-ui, sans-serif; font-weight: 800; font-size: 20px; letter-spacing: 1px; padding: 6px 14px; border-radius: 12px; white-space: nowrap; pointer-events: none; box-shadow: 0 10px 26px rgba(0,0,0,.6); animation: hurry-pop 1.5s ease-out both; }
 @keyframes hurry-pop { 0% { opacity: 0; scale: .5; } 12% { opacity: 1; scale: 1.15; } 22% { scale: 1; } 75% { opacity: 1; } 100% { opacity: 0; translate: 0 -26px; } }
 @media (max-width: 700px) { .hurry-pop { font-size: 15px; } .float-hurry { font-size: 11px; padding: 0 8px; } }
+
+.float-bus { border-color: rgba(255,90,84,.75); color: #ff9c97; }
+.hurry-pop.bus { border-color: #ff5a54; background: rgba(28,4,4,.95); color: #ffd0cd; font-size: 26px; letter-spacing: 2px; }
+@media (max-width: 700px) { .hurry-pop.bus { font-size: 19px; } }
+
+.float-split { border-color: rgba(126,240,182,.7); color: #a9f5cf; }
+.hurry-pop.split { border-color: #7ef0b6; background: rgba(4,22,14,.95); color: #d5ffe9; font-size: 24px; letter-spacing: 1.5px; }
+@media (max-width: 700px) { .hurry-pop.split { font-size: 17px; } }
+
+/* Phones: the shout buttons are part of the top row, as small picture only buttons. */
+@media (max-width: 700px) { body.in-room .hud-bar > .float-hurry span { display: none; } body.in-room .hud-bar > .float-hurry { padding: 0 6px; font-size: 14px; } }

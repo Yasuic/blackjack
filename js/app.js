@@ -1,13 +1,13 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120zzy';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261120zzy';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120zzy';
-import { tickSound, winSound } from './fx.js?v=20261120zzy';
-import * as HX from './history.js?v=20261120zzy';
-import { webglOK, initRoom } from './room3d.js?v=20261120zzy';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120zzy';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120zzz';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261120zzz';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120zzz';
+import { tickSound, winSound } from './fx.js?v=20261120zzz';
+import * as HX from './history.js?v=20261120zzz';
+import { webglOK, initRoom } from './room3d.js?v=20261120zzz';
+import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120zzz';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -387,7 +387,7 @@ function onHostMessage(conn, msg) {
   }
   if (!conn.clientId) return;
   if (msg.t === 'throw') { relayThrow(conn.clientId, msg); return; }
-  if (msg.t === 'hurry') { relayHurry(conn.clientId); return; }
+  if (msg.t === 'hurry') { relayHurry(conn.clientId, msg.say); return; }
   if (msg.t === 'chat') { relayChat(conn.clientId, msg); return; }
   if (msg.t === 'voice') { voiceSet(conn.clientId, conn.peer, !!msg.on, !!msg.mic); return; }
   if (msg.t === 'keys') { gotNonce(msg, conn.clientId); return; }
@@ -870,7 +870,7 @@ function wireGuestConn(conn) {
 function send(msg) {
   if (S.role === 'host' && msg.t === 'chat') { relayChat(S.myId, msg); return; }
   if (S.role === 'host' && msg.t === 'voice') { voiceSet(S.myId, S.peer?.id, !!msg.on, !!msg.mic); return; }
-  if (S.role === 'host' && msg.t === 'hurry') { relayHurry(S.myId); return; }
+  if (S.role === 'host' && msg.t === 'hurry') { relayHurry(S.myId, msg.say); return; }
   if (S.role === 'host' && msg.t === 'throw') relayThrow(S.myId, msg);
   else if (S.role === 'host') fresh(moveCount(msg), () => runAction(S.myId, msg, (err) => { toast(err); if (msg.t === 'bet') dropPend(); }));
   else if (S.conn?.open) S.conn.send(msg);
@@ -1076,7 +1076,9 @@ function buildLayout() {
     <div class="hud-bar" id="hud-bar">
     <details class="sb-guide" id="sb-guide"><summary>🎲 Side bets <span>▾</span></summary><div id="sb-guide-body"></div></details>
     <button class="float-throw" data-act="throw-open" title="Pick a reaction, then tap a player or the dealer">😀 Reactions</button>
-    <button class="float-hurry" data-act="hurry" title="Tell the others to hurry up. Press as often as you like.">⏰ Hurry up</button>
+    <button class="float-hurry" data-act="hurry" title="Tell the others to hurry up. Press as often as you like.">⏰<span> Hurry up</span></button>
+    <button class="float-hurry float-bus" data-act="hurry" data-say="bus" title="Shout BUSSSS!!! at the table. Press as often as you like.">💥<span> Bussss</span></button>
+    <button class="float-hurry float-split" data-act="hurry" data-say="split" title="Shout SPLIT THAT SHIT!!! at the table. Press as often as you like.">✂️<span> Split it</span></button>
     <div class="ledger ${safeGet('bj-ledger') !== '1' ? 'closed' : ''}" id="ledger"></div>
     <div class="zoom-ctl">${use3D() ? '<button class="view-btn" data-act="turn" data-d="1" title="Turn to the players on your left" aria-label="Look left">◀ Look left</button><button class="view-btn" data-act="turn" data-d="-1" title="Turn to the players on your right" aria-label="Look right">Look right ▶</button><button class="view-btn view-reset" data-act="view-reset" title="Back to your own seat">Reset view</button><button class="view-btn view-walk" data-act="walk" title="Leave your chair and move through the whole office" aria-label="Walk around">🚶 Walk around</button>' : ''}<label class="tilt-ctl" title="Camera angle: drag to tilt the table"><span>Angle</span><input type="range" id="tilt" min="0" max="50" step="1" /></label><button data-act="zoom" data-d="-1" aria-label="Zoom out">−</button><span id="zoom-val"></span><button data-act="zoom" data-d="1" aria-label="Zoom in">+</button></div>
     </div>
@@ -3043,7 +3045,7 @@ function runAct(el) {
     case 'ledger-toggle': { const l = $('#ledger'); l.classList.toggle('closed'); safeSet('bj-ledger', l.classList.contains('closed') ? '0' : '1'); renderLedger(S.state); break; }
     case 'buyin-answer': hostDo((t) => t.answerBuyIn(Number(el.dataset.id), el.dataset.yes === '1')); break;
     case 'throw-open': openThrowPanel(el); break;
-    case 'hurry': send({ t: 'hurry' }); break;
+    case 'hurry': send({ t: 'hurry', say: SHOUTS[el.dataset.say] ? el.dataset.say : 'hurry' }); break;
     case 'poop-dealer': send({ t: 'throw', item: 'poop', to: st.banker ? st.banker.id : 'house' }); el.closest('.badbeat')?.remove(); break;
     case 'view-reset': S.room?.home(); $('.view-walk')?.classList.remove('on'); break;
     case 'turn': S.room?.look(Number(el.dataset.d)); break;
@@ -3337,20 +3339,22 @@ function relayThrow(from, msg) {
 
 // "Hurry up": the host passes it to everyone. It may be pressed again and again (at most 8 a second per person).
 const lastHurry = {};
-function relayHurry(from) {
+const SHOUTS = { hurry: ['⏰', 'HURRY UP!'], bus: ['💥', 'BUSSSS!!!'], split: ['✂️', 'SPLIT THAT SHIT!!!'] };
+function relayHurry(from, say) {
   const p = S.table.players[from];
   if (!p) return;
   const now = Date.now();
   if (now - (lastHurry[from] || 0) < 120) return;
   lastHurry[from] = now;
-  const fx = { t: 'fx', kind: 'hurry', from, name: p.name };
+  const fx = { t: 'fx', kind: 'hurry', say: SHOUTS[say] ? say : 'hurry', from, name: p.name };
   for (const conn of Object.values(S.conns)) if (conn.open) conn.send(fx);
   showHurry(fx);
 }
-function showHurry({ from, name }) {
+function showHurry({ from, name, say }) {
   const el = document.createElement('div');
-  el.className = 'hurry-pop';
-  el.textContent = `⏰ ${from === S.myId ? 'You' : String(name || 'Someone').slice(0, 16)}: HURRY UP!`;
+  const [ico, words] = SHOUTS[say] || SHOUTS.hurry;
+  el.className = 'hurry-pop' + (say === 'bus' ? ' bus' : say === 'split' ? ' split' : '');
+  el.textContent = `${ico} ${from === S.myId ? 'You' : String(name || 'Someone').slice(0, 16)}: ${words}`;
   el.style.left = 50 + (Math.random() * 44 - 22) + '%';
   el.style.top = 24 + Math.random() * 30 + '%';
   el.style.setProperty('--tilt', (Math.random() * 16 - 8).toFixed(1) + 'deg');
@@ -3360,13 +3364,22 @@ function showHurry({ from, name }) {
 }
 // The Hurry up button stays right beside the Reactions button, wherever that is on this screen.
 function placeHurry() {
-  const a = $('.float-throw'), b = $('.float-hurry');
-  if (!a || !b) return;
-  const r = a.getBoundingClientRect();
-  b.hidden = !r.width;
-  b.style.left = Math.round(r.right + 6) + 'px';
-  b.style.top = Math.round(r.top) + 'px';
-  b.style.height = Math.round(r.height) + 'px';
+  const a = $('.float-throw'), bs = [...document.querySelectorAll('.float-hurry')];
+  if (!a || !bs.length) return;
+  if (getComputedStyle(bs[0]).position !== 'fixed') { for (const b of bs) { b.hidden = false; b.style.left = b.style.top = b.style.height = ''; } return; } // on phones they are part of the top row
+  // The bar these buttons are in may be zoomed, so the places are worked out in its own units.
+  const r = a.getBoundingClientRect(), k = r.width ? a.offsetWidth / r.width : 1, wide = innerWidth * k, h = a.offsetHeight;
+  // Side by side where there is room; on a narrow screen the later buttons go on a second line.
+  let x = a.offsetLeft + a.offsetWidth + 6, y = a.offsetTop;
+  for (const b of bs) {
+    b.hidden = !r.width;
+    b.style.height = h + 'px';
+    const w = b.offsetWidth;
+    if (x + w > wide - 4 || (b === bs[1] && innerWidth < 700)) { x = b === bs[1] ? bs[0].offsetLeft : a.offsetLeft; y += h + 4; }
+    b.style.left = Math.round(x) + 'px';
+    b.style.top = Math.round(y) + 'px';
+    x += w + 6;
+  }
 }
 setInterval(placeHurry, 500);
 
