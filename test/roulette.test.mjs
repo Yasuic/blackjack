@@ -69,5 +69,20 @@ ok(spinNumber('abc', { a: '1' }) === spinNumber('abc', { a: '1' }) && [0, 1, 2, 
   }
   keys.forEach((k, i) => { const edge = -net[i] / (N * 36); const tol = [0.09, 0.07, 0.055, 0.045, 0.04, 0.025, 0.025, 0.018, 0.018][i]; ok(Math.abs(edge - 1 / 37) < tol, `house edge on ${k} near 2.7%: ${(edge * 100).toFixed(2)}%`); });
 }
+{ // the wheel animation: the ball always ends in the pocket of the spin's number, with no jumps on the way
+  const { wheelState } = await import('../js/wheel.js');
+  const TAU = Math.PI * 2, norm = (a) => ((a % TAU) + TAU) % TAU;
+  let endOk = true, smooth = true, rimFirst = true;
+  for (let n = 0; n <= 36; n++) for (const seed of [1, 2, 57, 1234]) {
+    const T = 9, e = wheelState(n, seed, T, T), at = norm(e.ball - e.wheel), want = WHEEL.indexOf(n) * TAU / 37;
+    if (Math.min(Math.abs(at - want), TAU - Math.abs(at - want)) > 1e-6 || e.r > 0.6) endOk = false;
+    if (wheelState(n, seed, 0.1, T).r < 0.85) rimFirst = false;
+    let prev = wheelState(n, seed, 0, T);
+    for (let t = 0.005; t <= T; t += 0.005) { const s = wheelState(n, seed, t, T); if (Math.abs(s.ball - prev.ball) > 0.08 || Math.abs(s.r - prev.r) > 0.02) smooth = false; prev = s; }
+  }
+  ok(endOk, 'the ball ends in the pocket of the number, every number'); ok(smooth, 'the ball never jumps'); ok(rimFirst, 'the ball starts on the rim');
+  const a = wheelState(17, 5, 4.2, 9), b = wheelState(17, 5, 4.2, 9); ok(a.ball === b.ball && a.wheel === b.wheel, 'the same spin looks the same on every screen');
+}
+
 console.log(`${n - fails}/${n} roulette checks passed`);
 process.exit(fails ? 1 : 0);

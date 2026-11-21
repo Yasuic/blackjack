@@ -1,8 +1,9 @@
 // The roulette page: a European roulette table for up to 9 in Nigel's room. The host's browser runs
 // the table (js/roulette.js); every other browser sends its bets there and is told only what it may see.
-import { RouTable, ROU_SEATS, WHEEL, colorOf, betNumbers, betName, betPays, verifySpin } from './roulette.js?v=20261121n';
-import { webglOK, initRoom } from './room3d.js?v=20261121n';
-import { params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame } from './common.js?v=20261121n';
+import { RouTable, ROU_SEATS, WHEEL, colorOf, betNumbers, betName, betPays, verifySpin } from './roulette.js?v=20261121o';
+import { showSpin } from './wheel.js?v=20261121o';
+import { webglOK, initRoom } from './room3d.js?v=20261121o';
+import { params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame } from './common.js?v=20261121o';
 
 const PREFIX = 'bjt-ro-';
 const app = $('#app');
@@ -13,7 +14,7 @@ const phone = () => innerWidth < 700;
 const PHONE_FLAT = true;
 const use3D = () => { if (params.get('flat') === '1' || !webglOK()) return false; if (params.get('3d') === '1') return true; const v = safeGet('bj-3d'); return PHONE_FLAT && phone() ? v === '1' : v !== '0'; };
 const CHIPS = [1, 5, 25, 100, 500];
-const SPIN_MS = () => Number(params.get('spin')) || 5200; // how long the wheel turns on screen before the number is known
+const SPIN_MS = () => Number(params.get('spin')) || 9000; // how long the wheel turns on screen before the number is known
 
 // ---------- Landing ----------
 function showLanding(note = '') {
@@ -270,6 +271,8 @@ function drawWheel(st) {
     return;
   }
   const n = st.spin.n, at = WHEEL.indexOf(n), loops = 3;
+  // The big wheel pops up on every screen for each spin; the ball stops on this number.
+  { const gone = Date.now() - (S.show?.t0 || Date.now()); if (gone < SPIN_MS()) showSpin({ n, seed: st.round, ms: SPIN_MS(), elapsed: gone }); }
   const cells = [];
   for (let k = 0; k < loops * 37 + at + 5; k++) cells.push(WHEEL[k % 37]);
   layer.innerHTML = `<div class="ro-wheel pk-stand"><div class="ro-band" id="ro-band">${cells.map(cell).join('')}</div><span class="ro-mark"></span></div>`;
