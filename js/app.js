@@ -1,19 +1,22 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261121zb';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261121zb';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261121zb';
-import { tickSound, winSound } from './fx.js?v=20261121zb';
-import * as HX from './history.js?v=20261121zb';
-import { webglOK, initRoom } from './room3d.js?v=20261121zb';
-import { watchOffice } from './common.js?v=20261121zb';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261121zb';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261121zc';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261121zc';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261121zc';
+import { tickSound, winSound } from './fx.js?v=20261121zc';
+import * as HX from './history.js?v=20261121zc';
+import { webglOK, initRoom } from './room3d.js?v=20261121zc';
+import { watchOffice } from './common.js?v=20261121zc';
+import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261121zc';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
 const params = new URLSearchParams(location.search);
 const ROOM_PREFIX = 'bjt-';
+// The table's address at the meeting point. Each time the table changes hosts the number goes up by one,
+// so the new host never has to wait for the old host's address to be released.
+const hostAddr = (g) => ROOM_PREFIX + S.code + (g > 0 ? '-' + g : '');
 const CHIPS = [1, 5, 25, 100, 500];
 const VOTE_SECONDS = 20;
 
@@ -187,22 +190,42 @@ function startHost(resume, taken = null) {
   S.role = 'host';
   S.conns = {}; S.goneTimers = S.goneTimers || {}; S.keyDropped = {}; S.spareKeys = []; S.histSaved = undefined; S.snapSent = '';
   clearInterval(S.pinger);
+  // This browser slept (no timer ran for a while). Another player's browser may have taken the table
+  // meanwhile: ask at the next addresses, and join that table as a player when one answers.
+  S.tick = Date.now(); clearInterval(S.wakeCheck);
+  const look = (n) => {
+    if (S.role !== 'host' || n > 4) return;
+    const peer = S.peer;
+    if (!peer || peer.disconnected || peer.destroyed || !peer.open) { setTimeout(() => look(n + 1), 4000); return; }
+    for (let k = 1; k <= 3; k++) {
+      const g = (S.gen || 0) + k, c = peer.connect(hostAddr(g), { reliable: true });
+      c?.on('open', () => { try { c.close(); } catch {} if (S.role === 'host' && S.peer === peer) { try { peer.destroy(); } catch {} demoteToPlayer(g); } });
+      c?.on('error', () => {});
+      setTimeout(() => { try { c?.close(); } catch {} }, 12000);
+    }
+  };
+  S.wakeCheck = setInterval(() => {
+    const gap = Date.now() - S.tick; S.tick = Date.now();
+    if (gap >= 20000 && S.role === 'host') look(0);
+  }, 4000);
+  // The same check when the host's page was reloaded: the table may have moved on in the meantime.
+  if (resume && !taken) setTimeout(() => look(0), 1500);
   S.pinger = setInterval(() => Object.values(S.conns || {}).forEach((c) => {
     try { c?.open && c.send({ t: 'ping' }); } catch {}
     // A guest's browser answers every ping. When the answers stop, the tab is closed or asleep. The
     // link itself can take half a minute to notice, so the host does not wait for it.
     if (c?.answers && Date.now() - c.lastSeen > 9000) { connLost(c); try { c.close(); } catch {} }
   }), 4000);
-  if (taken) { S.code = taken.code; S.table = taken.table; }
+  if (taken) { S.code = taken.code; S.table = taken.table; S.gen = taken.gen || 0; }
   else if (resume) {
     try {
       const saved = JSON.parse(safeGet('bj-host'));
-      S.code = saved.code;
+      S.code = saved.code; S.gen = Number.isInteger(saved.gen) ? saved.gen : 0;
       S.table = Table.fromJSON(saved.table);
     } catch { S.table = null; }
   }
   if (!S.table) {
-    S.code = newCode();
+    S.code = newCode(); S.gen = 0;
     S.table = new Table();
   }
   resume = resume || !!taken;
@@ -229,13 +252,15 @@ function openHostRelay() {
   if (!relayWorks() || params.get('relay') === '0') return;
   const code = S.code;
   S.relay = hostRelay(code, relayUrl(), {
+    gen: S.gen || 0,
+    onBoss: (g) => { if (S.role === 'host' && S.code === code && g > (S.gen || 0)) { try { S.peer?.destroy(); } catch {} demoteToPlayer(g); } },
     onLink: (link) => { if (S.role !== 'host' || S.code !== code) { link.close(); return; } link.on('data', (msg) => onHostMessage(link, msg)); link.on('close', () => connLost(link)); },
     onOpen: () => { if (S.role === 'host' && !S.online) { S.online = true; render(); } },
     onClose: () => { if (S.role === 'host' && (!S.peer || S.peer.disconnected || S.peer.destroyed)) { S.online = false; render(); } },
   });
 }
 function openHostPeer(attempt) {
-  const peer = new Peer(ROOM_PREFIX + S.code, peerOptions());
+  const peer = new Peer(hostAddr(S.gen || 0), peerOptions());
   S.peer = peer;
   wireHostPeer(peer, attempt);
 }
@@ -275,7 +300,7 @@ function saveHostNow() {
   clearTimeout(S.saveT); S.saveT = null;
   if (S.role !== 'host' || !S.table) return;
   const j = S.table.toJSON();
-  safeSet('bj-host', JSON.stringify({ code: S.code, table: { ...j, hist: (j.hist || []).slice(-40) } }));
+  safeSet('bj-host', JSON.stringify({ code: S.code, gen: S.gen || 0, table: { ...j, hist: (j.hist || []).slice(-40) } }));
 }
 function saveHostSoon() { if (!S.saveT) S.saveT = setTimeout(saveHostNow, 500); }
 addEventListener('pagehide', saveHostNow);
@@ -291,28 +316,43 @@ function sendSnap() {
   if (!(t.phase === 'betting' || t.phase === 'settled')) return;
   const { shoe, shoeSize, fair, hist, evts, created, runCount, dealer, turn, pendingSettings, ...lite } = t.toJSON();
   const order = Object.values(t.players).filter((p) => p.id !== S.myId && p.connected && !p.kicked).map((p) => p.id);
-  const body = JSON.stringify({ order, table: lite });
+  const body = JSON.stringify({ order, table: lite, gen: S.gen || 0 });
   if (body === S.snapSent) return;
   S.snapSent = body;
-  const msg = { t: 'snap', snap: body };
+  const msg = { t: 'snap', snap: body, gen: S.gen || 0 };
   for (const conn of Object.values(S.conns)) if (conn.open) { try { conn.send(msg); } catch {} }
 }
 // A player's browser found no host at the table's address. After a short wait (longer for players
 // further down the list, so only one steps up) it opens the table itself.
 function maybeTakeOver() {
-  if (S.role !== 'player' || S.kicked || S.taking || S.conn?.open) return;
-  S.noHostAt ||= Date.now();
+  if (S.role !== 'player' || S.kicked || S.taking || S.conn?.open || S.online) return;
   let snap = null;
   try { snap = S.snap ? JSON.parse(S.snap) : null; } catch {}
+  const g = snap ? S.gen || 0 : 0, now = Date.now();
+  const dead = (x) => now - (S.dead?.[hostAddr(x)] || 0) < 30000;
+  // Two signs that the host is gone: the meeting point says nobody holds the table's address, or the
+  // second path is open and no host answers there. The first is the only one a brand new joiner may use.
+  // "No answer" has to hold on both paths: the host's browser did not even reply to the last direct call
+  // (a live host replies within a second, also when the direct link then fails), and it is silent on the second path.
+  if (S.conn && !S.conn.relay) { if (S.conn.peerConnection?.remoteDescription) S.noReplyAt = 0; else if (now - (S.lastTry || 0) > 5000) S.noReplyAt = now; }
+  const noReply = now - (S.noReplyAt || 0) < 20000;
+  const quiet = !!snap && noReply && S.relayNote?.openAt && now - S.relayNote.openAt > 6000;
+  if (!dead(g) && !quiet) return;
+  // Nobody may have taken the table already: the next address has to be empty too.
+  if (snap && !dead(g + 1)) return;
+  S.noHostAt ||= now;
   const at = snap ? snap.order.indexOf(S.myId) : -1;
   const rank = snap ? (at < 0 ? snap.order.length + 1 : at) : 2;
-  if (Date.now() - S.noHostAt < 6000 + rank * 6000) return;
+  if (now - S.noHostAt < (snap ? 2000 + rank * 4000 : 6000 + rank * 6000)) return;
   S.taking = true;
-  const peer = new Peer(ROOM_PREFIX + S.code, peerOptions());
+  const newGen = snap ? g + 1 : 0;
+  const peer = new Peer(hostAddr(newGen), peerOptions());
   const fail = () => { try { peer.destroy(); } catch {} S.taking = false; S.noHostAt = Date.now(); };
   const timer = setTimeout(fail, 12000);
   peer.on('error', () => { clearTimeout(timer); fail(); });
   peer.on('open', () => {
+    // Someone else got there first while this address was opening: stay a player.
+    if (S.online || S.conn?.open) { clearTimeout(timer); fail(); S.noHostAt = null; return; }
     clearTimeout(timer);
     peer.removeAllListeners('error');
     let table = null;
@@ -331,17 +371,19 @@ function maybeTakeOver() {
     try { S.conn?.close(); } catch {}
     try { S.peer?.destroy(); } catch {}
     clearInterval(S.watchdog);
-    S.conn = null; S.taking = false; S.noHostAt = null; S.why = '';
+    S.conn = null; S.taking = false; S.noHostAt = null; S.why = ''; S.dead = {};
+    for (const c of S.probes || []) { try { c.close(); } catch {} } S.probes = [];
     sessDel('bj-join-' + S.code);
-    startHost(true, { code: S.code, table, peer });
+    startHost(true, { code: S.code, table, peer, gen: newGen });
     toast(fresh ? 'Nobody was hosting, so the table opened in your browser. You are the host: keep this tab open.' : 'The host left. You are the host now: keep this tab open.');
   });
 }
 // This browser was the host, came back, and found the table running in someone else's browser.
-function demoteToPlayer() {
+function demoteToPlayer(gen) {
   const code = S.code;
+  S.gen = Number.isInteger(gen) ? gen : (S.gen || 0) + 1; S.dead = {};
   try { S.relay?.close(); } catch {} S.relay = null;
-  clearInterval(S.pinger);
+  clearInterval(S.pinger); clearInterval(S.wakeCheck);
   if (S.timer) { clearTimeout(S.timer.handle); S.timer = null; }
   Object.values(S.goneTimers || {}).forEach(clearTimeout);
   S.snap = S.snapSent || null; // if nobody is hosting after all, the table can still be opened again from this copy
@@ -384,7 +426,7 @@ function onHostMessage(conn, msg) {
     clearTimeout(S.goneTimers[id]); delete S.goneTimers[id];
     S.table.join(id, msg.name, msg.buyIn, msg.look);
     hostChanged();
-    if (S.snapSent) { try { conn.send({ t: 'snap', snap: S.snapSent }); } catch {} }
+    if (S.snapSent) { try { conn.send({ t: 'snap', snap: S.snapSent, gen: S.gen || 0 }); } catch {} }
     if (S.chat?.length) { try { conn.send({ t: 'chat-log', list: S.chat.slice(-40) }); } catch {} }
     try { conn.send({ t: 'voice-list', list: voiceList() }); } catch {}
     return;
@@ -746,10 +788,12 @@ function keepAlive() {
     if (S.conn && !S.conn.open && !S.online && Date.now() - (S.lastTry || 0) > 12000) { const c = S.conn; S.conn = null; S.linkTries = (S.linkTries || 0) + 1; try { c.close(); } catch {} }
     if (!S.conn && Date.now() - (S.lastTry || 0) > 4000) connectToHost();
     // Still no table after a few seconds: try the second path as well.
-    if (S.online) S.downAt = 0; else { S.downAt ||= Date.now(); if (Date.now() - S.downAt > 2500 || params.get('relay') === 'only') tryRelay(); }
+    if (S.online) S.downAt = 0; else { S.downAt ||= Date.now(); if (Date.now() - S.downAt > 2500 || params.get('relay') === 'only') tryRelay(); maybeTakeOver(); }
   }
 }
 setInterval(keepAlive, 5000);
+// While the table is out of reach, check every second whether it is this browser's turn to open it again.
+setInterval(() => { if (S.role === 'player' && !S.online && !S.kicked) maybeTakeOver(); }, 1000);
 addEventListener('online', keepAlive);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { keepAlive(); stayAwake(); } });
 // Keep the screen on while you are at a table, so a phone or laptop does not sleep in the middle of a hand.
@@ -782,9 +826,12 @@ function openGuestPeer() {
   peer.on('disconnected', () => { S.why = 'net'; setTimeout(keepAlive, 1500); });
   peer.on('error', (e) => {
     if (e.type === 'peer-unavailable') {
-      // The meeting point answered: no table with this code is open right now.
-      S.online = false; S.why = 'nohost'; S.conn = null;
-      render();
+      // The meeting point answered: nobody holds that address right now. Several addresses are asked at
+      // once (the table's own and the next few, in case the table changed hosts), so note which one it was.
+      const id = (/peer (\S+)/.exec(e.message || '') || [])[1] || hostAddr(S.gen || 0);
+      (S.dead ||= {})[id] = Date.now();
+      if (S.conn?.open || S.online) return;
+      if (!S.conn || S.conn.peer === id) { S.why = 'nohost'; S.conn = null; render(); }
       maybeTakeOver();
       return; // keepAlive tries again every few seconds
     }
@@ -799,7 +846,8 @@ async function tryRelay() {
   if (S.relayBusy || S.online || S.role !== 'player' || S.kicked || !relayWorks() || params.get('relay') === '0') return;
   S.relayBusy = true;
   try {
-    const link = await guestRelay(S.code, relayUrl(), S.myId, 15000);
+    S.relayNote = {};
+    const link = await guestRelay(S.code, relayUrl(), S.myId, 15000, S.relayNote);
     if (!link) return;
     if (S.online || S.role !== 'player') { link.close(); return; }
     const old = S.conn; S.conn = null;
@@ -812,7 +860,24 @@ function connectToHost() {
   if (params.get('relay') === 'only') return; // for testing the second path on its own
   if (!S.peer || S.peer.disconnected || S.peer.destroyed) return;
   S.lastTry = Date.now();
-  wireGuestConn(S.peer.connect(ROOM_PREFIX + S.code, { reliable: true }));
+  const g = S.gen || 0;
+  wireGuestConn(S.peer.connect(hostAddr(g), { reliable: true }));
+  // The table may have changed hosts while this browser was not looking: ask at the next addresses too.
+  // Whichever answers first is the table.
+  for (const c of S.probes || []) { try { if (!c.open || c !== S.conn) c.close(); } catch {} }
+  S.probes = [];
+  for (let k = 1; k <= (S.snap ? 3 : 5); k++) {
+    const c = S.peer.connect(hostAddr(g + k), { reliable: true });
+    if (!c) continue;
+    S.probes.push(c);
+    c.on('open', () => {
+      if (S.online || S.conn?.open || S.role !== 'player') { try { c.close(); } catch {} return; }
+      const old = S.conn; S.conn = null; try { old?.close(); } catch {}
+      S.gen = g + k; S.probes = S.probes.filter((x) => x !== c);
+      wireGuestConn(c);
+    });
+    c.on('error', () => {});
+  }
 }
 function wireGuestConn(conn) {
   S.conn = conn;
@@ -824,19 +889,21 @@ function wireGuestConn(conn) {
     pc.addEventListener('iceconnectionstatechange', () => { link.state = pc.iceConnectionState; });
     return true; };
   if (!watch()) setTimeout(watch, 300);
-  conn.on('open', () => {
+  const opened = () => {
     S.online = true;
     S.why = '';
-    S.retry = 0; S.noHostAt = null; S.linkTries = 0; S.viaRelay = !!conn.relay;
+    S.retry = 0; S.noHostAt = null; S.noReplyAt = 0; S.linkTries = 0; S.viaRelay = !!conn.relay;
     conn.send({ t: 'join', clientId: S.myId, name: S.name, buyIn: S.buyIn, look: S.look });
-  });
+  };
+  conn.on('open', opened);
+  if (conn.open && !conn.relay) opened(); // a link that opened before it was picked as the table's link
   conn.on('data', (msg) => {
     S.lastSeen = Date.now();
     if (msg.t === 'ping') { try { conn.send({ t: 'pong' }); } catch {} return; }
     if (msg.t === 'state') { setState(msg.state); render(); setTimerFromState(msg.state); }
     else if (msg.t === 'error') { toast(msg.msg); if (msg.bet) dropPend(); }
     else if (msg.t === 'hist') { S.guestHist = Array.isArray(msg.rounds) ? msg.rounds : []; S.guestHistTotal = msg.total || S.guestHist.length; drawHistPanel(true); if ($('#modal')?.open && $('#hist-list')) showHistory(); }
-    else if (msg.t === 'snap') S.snap = String(msg.snap || '').slice(0, 400000);
+    else if (msg.t === 'snap') { S.snap = String(msg.snap || '').slice(0, 400000); if (Number.isInteger(msg.gen) && msg.gen >= 0 && msg.gen < 100000) S.gen = msg.gen; }
     else if (msg.t === 'say') toast(String(msg.msg || '').slice(0, 200));
     else if (msg.t === 'chat') gotChat(msg);
     else if (msg.t === 'voice-list') gotVoiceList(msg.list);
@@ -866,7 +933,7 @@ function wireGuestConn(conn) {
   clearInterval(S.watchdog);
   S.lastSeen = Date.now();
   S.watchdog = setInterval(() => {
-    if (S.conn === conn && Date.now() - S.lastSeen > 12000) { try { conn.close(); } catch {} lost(); }
+    if (S.conn === conn && Date.now() - S.lastSeen > 9500) { try { conn.close(); } catch {} lost(); }
   }, 3000);
 }
 

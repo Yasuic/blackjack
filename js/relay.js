@@ -4,7 +4,7 @@
 // messages through the table owner's own online database service instead (its live message channel).
 // Everything sent this way is locked with a key that only the host and that one player hold, so
 // other people on the channel cannot read cards, bets or shuffle keys.
-import { BACKUP_URL, BACKUP_KEY } from './history.js?v=20261121zb';
+import { BACKUP_URL, BACKUP_KEY } from './history.js?v=20261121zc';
 
 const enc = new TextEncoder(), dec = new TextDecoder();
 const b64 = (buf) => { const a = new Uint8Array(buf); let s = ''; for (let i = 0; i < a.length; i += 0x8000) s += String.fromCharCode.apply(null, a.subarray(i, i + 0x8000)); return btoa(s); };
@@ -76,12 +76,17 @@ function makeLink(peerName, sendLocked) {
 }
 
 // The host's side: one locked link per player who comes in this way. onLink is called with each new link.
-export function hostRelay(code, urlOverride, { onLink, onOpen, onClose }) {
+// gen counts how often the table changed hosts. Every host says its number on the channel; a host that
+// hears a higher number knows the table moved on while it was away (onBoss).
+export function hostRelay(code, urlOverride, { onLink, onOpen, onClose, gen = 0, onBoss }) {
   const peers = {}; // player id -> { key, link, chain }
+  const boss = () => ch.send({ k: 'boss', f: 'host', g: gen });
+  let bossTimer = null;
   const ch = channel(code, urlOverride, {
-    onOpen, onClose,
+    onOpen: () => { boss(); clearInterval(bossTimer); bossTimer = setInterval(boss, 5000); onOpen?.(); }, onClose,
     onMsg: async (m) => {
       if (!m || typeof m !== 'object' || typeof m.f !== 'string' || m.f.length > 24) return;
+      if (m.k === 'boss') { if (Number.isInteger(m.g) && m.g > gen && m.g < gen + 50) onBoss?.(m.g); return; }
       const id = m.f;
       if (m.k === 'hi' && typeof m.pub === 'string' && m.pub.length < 200) {
         if (Object.keys(peers).length > 40 && !peers[id]) return;
@@ -105,17 +110,19 @@ export function hostRelay(code, urlOverride, { onLink, onOpen, onClose }) {
       if (m.k === 'd' && m.to === 'host' && p) p.chain = p.chain.then(async () => { const msg = await unlock(p.key, m); if (p.link.open) p.link.emit('data', msg); }).catch(() => {});
     },
   });
-  return { get open() { return ch.open; }, close() { for (const p of Object.values(peers)) { p.link.onShut = null; p.link.open = false; } ch.close(); } };
+  return { get open() { return ch.open; }, close() { clearInterval(bossTimer); for (const p of Object.values(peers)) { p.link.onShut = null; p.link.open = false; } ch.close(); } };
 }
 
 // A player's side. Resolves to a locked link once the host has answered, or null after `wait` milliseconds.
-export function guestRelay(code, urlOverride, myId, wait = 15000) {
+// note (optional) gets note.openAt: when the channel itself opened, so the caller can tell 'no host there' from 'no channel'.
+export function guestRelay(code, urlOverride, myId, wait = 15000, note = null) {
   return new Promise((resolve) => {
     let done = false, hello = null, pair = null, key = null, link = null, chain = Promise.resolve();
     const finish = (x) => { if (done) return; done = true; clearInterval(hello); clearTimeout(timer); if (!x) ch.close(); resolve(x); };
     const timer = setTimeout(() => finish(null), wait);
     const ch = channel(code, urlOverride, {
       onOpen: async () => {
+        if (note && !note.openAt) note.openAt = Date.now();
         if (link) { link.close(); return; } // the channel dropped and came back: start over from the game's side
         try { pair ||= await newPair(); } catch { finish(null); return; }
         const say = () => ch.send({ k: 'hi', f: myId, pub: pair.pub });
