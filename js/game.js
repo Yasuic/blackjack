@@ -353,11 +353,16 @@ export class Table {
     this.addLog('The shoe was shuffled.');
   }
   // Shuffle now between rounds; during a round the shuffle waits for the next deal.
-  askShuffle() {
-    if (!this.inRound()) { this.newShoe(); return true; }
-    if (!this.shuffleNext) this.addLog('The host asked for a shuffle before the next hand.');
+  askShuffle(by = 'The host') {
+    if (!this.inRound()) { this.newShoe(); if (by !== 'The host') this.addLog(`${by} asked for the shuffle.`); return true; }
+    if (!this.shuffleNext) this.addLog(`${by} asked for a shuffle before the next hand.`);
     this.shuffleNext = true;
     return false;
+  }
+  // The player who is the dealer may shuffle too.
+  dealerShuffle(clientId) {
+    if (this.banker !== clientId) throw new Error('Only the dealer can shuffle.');
+    return this.askShuffle(`${this.players[clientId].name} (dealer)`);
   }
   needsShuffle(players = this.seats.length) {
     const s = this.settings;

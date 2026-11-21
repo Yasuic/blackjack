@@ -1,13 +1,13 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120zzv';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261120zzv';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120zzv';
-import { tickSound, winSound } from './fx.js?v=20261120zzv';
-import * as HX from './history.js?v=20261120zzv';
-import { webglOK, initRoom } from './room3d.js?v=20261120zzv';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120zzv';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120zzw';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261120zzw';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120zzw';
+import { tickSound, winSound } from './fx.js?v=20261120zzw';
+import * as HX from './history.js?v=20261120zzw';
+import { webglOK, initRoom } from './room3d.js?v=20261120zzw';
+import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120zzw';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -497,6 +497,7 @@ function runAction(id, msg, onError) {
       }
       case 'leave-dealer': t.leaveDealer(id); break;
       case 'dealer-max': t.setDealerMax(id, msg.amount, msg.side); break;
+      case 'dealer-shuffle': t.dealerShuffle(id); break;
       case 'seed': t.setClientSeed(id, msg.seed); return; // nothing on the table changes, so no update is sent
       default: return;
     }
@@ -1886,7 +1887,7 @@ function feltHTML(st) {
   if (b) {
     const net = b.net && !S.dealing ? `<span class="net ${b.net > 0 ? 'up' : 'down'}">${b.net > 0 ? '+' : ''}${money(b.net)}</span>` : '';
     dealerSeat = `<div class="dealer-name" ${isBanker ? '' : `data-throw-at="${b.id}" title="Tap to throw something at the dealer"`}>${esc(b.name)}${isBanker ? ' (you)' : ''} is the dealer ${isBanker ? '' : `<span class="chips">${money(b.chips)}</span>`} ${net}
-</div>`;
+${isBanker && st.settings.decks !== 'csm' ? `<button class="btn small gold" data-act="d-shuffle" title="${st.phase === 'betting' || st.phase === 'settled' ? 'Shuffle the shoe now' : 'Shuffle the shoe before the next hand'}">🔀 Shuffle</button>` : ''}</div>`;
   } else {
     dealerSeat = `<div class="dealer-name">${st.frozen ? 'Dealer: house (automatic)' : 'No dealer yet'}
       ${me && !st.vote ? '<button class="btn small gold" data-act="sit-dealer">Ask to be dealer</button>' : ''}</div>`;
@@ -3047,6 +3048,7 @@ function runAct(el) {
     case 'mute': setMuted(!isMuted()); el.textContent = isMuted() ? '🔇 Sound: off' : '🔊 Sound: on'; if (!isMuted()) chipSound(); break;
     case 'sit-dealer': send({ t: 'sit-dealer' }); break;
     case 'leave-dealer': send({ t: 'leave-dealer' }); break;
+    case 'd-shuffle': send({ t: 'dealer-shuffle' }); toast(st.phase === 'betting' || st.phase === 'settled' ? 'The shoe was shuffled.' : 'The shoe will be shuffled before the next hand.'); break;
     case 'dealer-max': {
       const v = Math.round(Number($('#dealer-max')?.value)), sv = Math.round(Number($('#dealer-max-side')?.value));
       if (!(v >= st.settings.minBet)) { toast(`The maximum bet cannot be below the minimum bet of ${money(st.settings.minBet)}.`); break; }
