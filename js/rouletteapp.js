@@ -1,8 +1,8 @@
 // The roulette page: a European roulette table for up to 9 in Nigel's room. The host's browser runs
 // the table (js/roulette.js); every other browser sends its bets there and is told only what it may see.
-import { RouTable, ROU_SEATS, WHEEL, colorOf, betNumbers, betName, betPays, verifySpin } from './roulette.js?v=20261121l';
-import { webglOK, initRoom } from './room3d.js?v=20261121l';
-import { params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest } from './common.js?v=20261121l';
+import { RouTable, ROU_SEATS, WHEEL, colorOf, betNumbers, betName, betPays, verifySpin } from './roulette.js?v=20261121m';
+import { webglOK, initRoom } from './room3d.js?v=20261121m';
+import { params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame } from './common.js?v=20261121m';
 
 const PREFIX = 'bjt-ro-';
 const app = $('#app');
@@ -64,6 +64,7 @@ function startHost(code, resume) {
 function openHost(code) {
   S.net = createHost(PREFIX + code, {
     msg: hostMsg,
+    people: () => S.presence || [],
     gone: (id) => { S.table?.disconnect(id); push(); },
     status: (text, ok) => { S.conn = [text, ok]; drawConn(); },
     taken: () => { S.net.close(); clearInterval(S.clock); S.table = null; startGuest(code, true); },
@@ -153,7 +154,8 @@ function startGuest(code, again) {
       else if (m.t === 'kicked') { S.net.close(); showLanding('The host removed you from the table.'); }
     },
     status: (text, ok) => { S.conn = [text, ok]; drawConn(); },
-    nohost: () => { S.nohost = true; if (!S.st) render(); else watchHost(); },
+    // Nobody has opened this table yet: whoever walks up to it first opens it (and stays its host).
+    nohost: () => { S.nohost = true; if (!S.st) { render(); if (!again && params.get('from') && !S.openT) S.openT = setTimeout(() => { S.openT = null; if (S.role === 'guest' && S.nohost && !S.st && S.code === code) { S.net.close(); startHost(code, false); } }, 2500); } else watchHost(); },
   });
 }
 // The host's browser is gone: the next player in seat order takes the table over. Chips and bets stay.
@@ -228,9 +230,9 @@ function showTable() {
   if (d3) {
     document.body.classList.add('room3d');
     try {
-      S.room = initRoom($('#room'), felt, { phone: phone(), pixel: safeGet('bj-pixel') === '1', hud: $('#hud3d'), size: F, game: 'roulette', metres: F.H > F.W ? 1.3 : 2.0 });
+      S.room = initRoom($('#room'), felt, { phone: phone(), pixel: safeGet('bj-pixel') === '1', hud: $('#hud3d'), size: F, game: 'roulette', onGo: (g) => goToGame('roulette', g, S.code || params.get('room'), S.role === 'host'), metres: F.H > F.W ? 1.3 : 2.0 });
       if (params.has('roomdebug')) window.__room = S.room;
-      if (S.tourFor !== S.code) { S.tourFor = S.code; S.room.tour(2000); }
+      if (S.tourFor !== S.code) { S.tourFor = S.code; S.room.tour(params.get('from') ? 1500 : 2000, params.get('from')); }
     } catch (e) { console.error(e); S.room = null; document.body.classList.remove('room3d'); toast('The 3D room could not start on this device.'); }
   }
   drawConn();
@@ -344,7 +346,8 @@ function render() {
   }
   body.innerHTML = h;
   drawWheel(st);
-  if (S.room) { S.room.setPeople(people, stools); S.room.setChips(chips); }
+  S.presence = people.map((p) => ({ id: p.id, name: p.name, look: p.look, seat: p.seat, seats: p.seats }));
+  if (S.room) { S.room.setPeople(people, stools); S.room.setChips(chips); S.room.setOthers(S.others); }
   drawHud(st, me, turn, flatPhone);
   drawMenu(st);
 }
@@ -505,3 +508,7 @@ void cardHTML; void betName; void betPays;
   if (room && S.name && params.get('go') === '1') { startGuest(room); return; }
   showLanding();
 })();
+
+// The other tables of the office: who plays there is drawn at their table in the room.
+S.others = {};
+watchOffice('roulette', () => S.code, (g, list) => { S.others[g] = list.filter((p) => p.id.split('#')[0] !== S.myId); S.room?.setOthers(S.others); });

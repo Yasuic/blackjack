@@ -1,9 +1,9 @@
 // The poker page: a Texas Hold'em table for up to 9 in the big meeting room. The host's browser runs
 // the table (js/poker.js); every other browser sends its moves there and is told only what it may see.
-import { PokerTable, POKER_SEATS, pokerDeck, cardText } from './poker.js?v=20261121l';
-import { sha256 } from './game.js?v=20261121l';
-import { webglOK, initRoom } from './room3d.js?v=20261121l';
-import { params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest } from './common.js?v=20261121l';
+import { PokerTable, POKER_SEATS, pokerDeck, cardText } from './poker.js?v=20261121m';
+import { sha256 } from './game.js?v=20261121m';
+import { webglOK, initRoom } from './room3d.js?v=20261121m';
+import { params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame } from './common.js?v=20261121m';
 
 const PREFIX = 'bjt-pk-';
 const app = $('#app');
@@ -68,6 +68,7 @@ function startHost(code, resume) {
 function openHost(code) {
   S.net = createHost(PREFIX + code, {
     msg: hostMsg,
+    people: () => S.presence || [],
     gone: (id) => { S.table?.disconnect(id); S.goneAt[id] = Date.now(); push(); },
     status: (text, ok) => { S.conn = [text, ok]; drawConn(); },
     taken: () => { // someone already runs this table (your own other tab, or a player who took the table over): join it instead
@@ -243,7 +244,8 @@ function startGuest(code, again) {
       else if (m.t === 'kicked') { S.net.close(); showLanding('The host removed you from the table.'); }
     },
     status: (text, ok) => { S.conn = [text, ok]; drawConn(); },
-    nohost: () => { S.nohost = true; if (!S.st) render(); else watchHost(); },
+    // Nobody has opened this table yet: whoever walks up to it first opens it (and stays its host).
+    nohost: () => { S.nohost = true; if (!S.st) { render(); if (!again && params.get('from') && !S.openT) S.openT = setTimeout(() => { S.openT = null; if (S.role === 'guest' && S.nohost && !S.st && S.code === code) { S.net.close(); startHost(code, false); } }, 2500); } else watchHost(); },
   });
 }
 // A fresh seed of this browser for every hand, sent once the host's promise for that hand is seen.
@@ -297,9 +299,9 @@ function showTable() {
   if (d3) {
     document.body.classList.add('room3d');
     try {
-      S.room = initRoom($('#room'), felt, { phone: phone(), pixel: safeGet('bj-pixel') === '1', hud: $('#hud3d'), size: F, game: 'poker', metres: F.H > F.W ? 2.0 * F.W / F.H : 2.4 });
+      S.room = initRoom($('#room'), felt, { phone: phone(), pixel: safeGet('bj-pixel') === '1', hud: $('#hud3d'), size: F, game: 'poker', onGo: (g) => goToGame('poker', g, S.code || params.get('room'), S.role === 'host'), metres: F.H > F.W ? 2.0 * F.W / F.H : 2.4 });
       if (params.has('roomdebug')) window.__room = S.room;
-      if (S.tourFor !== S.code) { S.tourFor = S.code; S.room.tour(2000); }
+      if (S.tourFor !== S.code) { S.tourFor = S.code; S.room.tour(params.get('from') ? 1500 : 2000, params.get('from')); }
     } catch (e) { console.error(e); S.room = null; document.body.classList.remove('room3d'); toast('The 3D room could not start on this device.'); }
   }
   drawConn();
@@ -471,7 +473,8 @@ function render() {
   const potChips = st.phase === 'done' ? (showing ? potNow : 0) : st.pot;
   if (potChips > 0) chips.push({ seat: 99, main: potChips, balance: 0 });
   body.innerHTML = h;
-  if (S.room) { S.room.setPeople(people, stools); S.room.setChips(chips); }
+  S.presence = people.map((p) => ({ id: p.id, name: p.name, look: p.look, seat: p.seat, seats: p.seats }));
+  if (S.room) { S.room.setPeople(people, stools); S.room.setChips(chips); S.room.setOthers(S.others); }
   drawHud(st, mySeat, showing);
   drawMenu(st);
   keepHand(st);
@@ -829,3 +832,7 @@ addEventListener('resize', () => { clearTimeout(resizeT); resizeT = setTimeout(r
   void safeDel;
   showLanding();
 })();
+
+// The other tables of the office: who plays there is drawn at their table in the room.
+S.others = {};
+watchOffice('poker', () => S.code, (g, list) => { S.others[g] = list.filter((p) => p.id.split('#')[0] !== S.myId); S.room?.setOthers(S.others); });

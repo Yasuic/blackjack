@@ -1,13 +1,14 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261121l';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261121l';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261121l';
-import { tickSound, winSound } from './fx.js?v=20261121l';
-import * as HX from './history.js?v=20261121l';
-import { webglOK, initRoom } from './room3d.js?v=20261121l';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261121l';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261121m';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261121m';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261121m';
+import { tickSound, winSound } from './fx.js?v=20261121m';
+import * as HX from './history.js?v=20261121m';
+import { webglOK, initRoom } from './room3d.js?v=20261121m';
+import { watchOffice } from './common.js?v=20261121m';
+import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261121m';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -366,6 +367,8 @@ function connLost(conn) {
 }
 
 function onHostMessage(conn, msg) {
+  // Someone at another table of the office asks who sits here.
+  if (msg && msg.t === 'peek') { try { conn.send({ t: 'people', list: (S.presence || []).slice(0, 12) }); } catch {} return; }
   if (!msg || typeof msg !== 'object') return;
   conn.lastSeen = Date.now();
   if (msg.t === 'pong') { conn.answers = true; return; }
@@ -1089,10 +1092,10 @@ function buildLayout() {
   applyZoom();
   if (use3D()) {
     document.body.classList.add('room3d');
-    try { S.room = initRoom($('#room'), $('#felt'), { phone: innerWidth < 700, pixel: pixelOn(), hud: $('#hud3d'), size: innerWidth < 700 ? { W: Math.max(320, Math.min(460, innerWidth - 16)), H: 600 } : FELT }); }
+    try { S.room = initRoom($('#room'), $('#felt'), { phone: innerWidth < 700, pixel: pixelOn(), hud: $('#hud3d'), size: innerWidth < 700 ? { W: Math.max(320, Math.min(460, innerWidth - 16)), H: 600 } : FELT, onGo: (g) => { if (!['poker', 'baccarat', 'roulette'].includes(g)) return; if (S.goAsk?.g !== g || Date.now() - S.goAsk.t > 4000) { S.goAsk = { g, t: Date.now() }; toast(`Tap again to walk over to ${g[0].toUpperCase() + g.slice(1)}.`); return; } goGame(g); } }); }
     catch (e) { console.error(e); safeSet('bj-3d', '0'); toast('The 3D room could not start on this device.'); }
     // The first time you get to a table: a short walk round the office before your chair.
-    if (S.room && S.code && S.tourFor !== S.code) { S.tourFor = S.code; S.room.tour(2000); }
+    if (S.room && S.code && S.tourFor !== S.code) { S.tourFor = S.code; S.room.tour(params.get('from') ? 1500 : 2000, params.get('from')); }
     if (params.has('roomdebug')) window.__room = S.room; // lets a test read the camera and the frame rate
     if (S.room && !S.roomHint) { S.roomHint = true; setTimeout(() => toast(matchMedia('(pointer: coarse)').matches ? 'One finger turns the view. Two fingers slide it, and a pinch moves you in or out.' : 'Drag to look around. Scroll or pinch out to walk around the table.'), 1200); }
   }
@@ -1460,6 +1463,7 @@ function render(note) {
   // Once the cards are dealt, the picked chip is put down, so the next round starts with none picked.
   if (prev && prev.phase !== st.phase && !(st.phase === 'betting' || st.phase === 'settled')) S.chip = null;
   // The dealer sees the table from the dealer's side: dealer at the bottom, players across the top.
+  S.presence = roomPeople(st)[0].filter((p) => !p.isDealer && p.seat !== null).map((p) => ({ id: p.id, name: p.name, look: p.look, seat: p.seat, seats: p.seats }));
   if (S.room) S.room.setSide(myInfo(st).isBanker ? 'dealer' : 'player');
   $('#felt').classList.toggle('flip', myInfo(st).isBanker);
   setHTML($('#felt'), feltHTML(st));
@@ -1467,6 +1471,7 @@ function render(note) {
   if (S.room) {
     $('#hud-top').innerHTML = `<div class="status">${esc(statusText(st))} <span id="timer" class="timer" hidden></span></div>${dealMeInHTML(st)}`;
     S.room.setPeople(...roomPeople(st));
+    S.room.setOthers(S.others);
     S.room.setChips(st.seats.map((seat, i) => { const pl = seat && st.players.find((x) => x.seat === i); return seat ? { seat: i, main: seat.bet?.main || 0, balance: pl ? Math.max(0, pl.chips - betTotal(seat.bet)) : 0, mine: seat.playerId === S.myId,
         sides: Object.entries(seat.bet?.sides || {}).filter(([, v]) => v > 0).map(([k, v]) => [k === 'friendBust' ? `#seat-${i} .pvp-tag.mine` : `#sb-${i}-${k}`, v]) } : null; }).filter(Boolean));
   }
@@ -3678,8 +3683,16 @@ document.addEventListener('change', (e) => {
 // The game switch at the top left: the poker table of the same room code. The host of this table opens it.
 document.addEventListener('change', (e) => {
   if (e.target.id !== 'game-switch' || !['poker', 'baccarat', 'roulette'].includes(e.target.value)) return;
+  goGame(e.target.value);
+});
+function goGame(game) {
   const q = new URLSearchParams();
+  q.set('from', 'blackjack');
   if (S.code) { q.set('room', S.code); q.set('go', '1'); if (S.role === 'host') q.set('open', '1'); sessSet('games-from-bj', S.code); }
   for (const k of ['peerhost', 'peerport', 'peerpath', 'peersecure', '3d', 'flat', 'roomdebug']) if (params.get(k)) q.set(k, params.get(k));
-  location.href = e.target.value + '.html' + (q.toString() ? '?' + q : '');
-});
+  location.href = game + '.html' + (q.toString() ? '?' + q : '');
+}
+
+// The other tables of the office: who plays there is drawn at their table in the room.
+S.others = {};
+watchOffice('blackjack', () => S.code, (g, list) => { S.others[g] = list.filter((p) => p.id.split('#')[0] !== S.myId); S.room?.setOthers(S.others); });

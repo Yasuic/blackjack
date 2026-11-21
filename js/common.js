@@ -43,11 +43,12 @@ export function gameSwitchHTML(current) {
 }
 // Going to another game keeps the room code, so the same friends land at the same table of that game.
 // The host of this table opens the other game's table when nobody has yet (open=1).
-export function gameUrl(game, code, isHost) {
+export function gameUrl(game, code, isHost, from = null) {
   const q = new URLSearchParams();
   // A blackjack table with this code exists only when the switch started from blackjack.
   let fromBj = null; try { fromBj = sessionStorage.getItem('games-from-bj'); } catch {}
   if (code && (game !== 'blackjack' || fromBj === code)) { q.set('room', code); q.set('go', '1'); if (isHost) q.set('open', '1'); }
+  if (from) q.set('from', from); // the room then walks you over from that table
   for (const k of ['peerhost', 'peerport', 'peerpath', 'peersecure', '3d', 'flat', 'roomdebug']) if (params.get(k)) q.set(k, params.get(k));
   const qs = q.toString();
   return GAMES[game].page + (qs ? '?' + qs : '');
@@ -57,8 +58,16 @@ export function wireGameSwitch(current, getCode, getIsHost) {
     if (e.target.id !== 'game-switch') return;
     const g = e.target.value;
     if (g === current || !GAMES[g] || GAMES[g].soon) return;
-    location.href = gameUrl(g, getCode(), getIsHost());
+    location.href = gameUrl(g, getCode(), getIsHost(), current);
   });
+}
+// The same move, started by a tap on that game's table in the room.
+// The first tap only asks, so a stray tap during a hand never takes you away from your table.
+let goAsk = null;
+export function goToGame(current, g, code, isHost) {
+  if (g === current || !GAMES[g]) return;
+  if (!goAsk || goAsk.g !== g || Date.now() - goAsk.t > 4000) { goAsk = { g, t: Date.now() }; toast(`Tap again to walk over to ${GAMES[g].name}.`); return; }
+  location.href = gameUrl(g, code, isHost, current);
 }
 
 // ---------- The link between browsers ----------
@@ -82,6 +91,8 @@ export function createHost(peerId, on) {
     peer.on('connection', (conn) => {
       conn.on('data', (m) => {
         if (!m || typeof m !== 'object') return;
+        // Someone at another table of the office asks who sits here.
+        if (m.t === 'peek') { try { conn.send({ t: 'people', list: (on.people?.() || []).slice(0, 12) }); } catch {} return; }
         if (m.t === 'hello') {
           const id = String(m.id || '').slice(0, 24);
           if (!id) return;
@@ -108,6 +119,45 @@ export function createHost(peerId, on) {
     ids: () => [...conns.keys()],
     close() { dead = true; clearInterval(beat); try { peer.destroy(); } catch {} },
   };
+}
+// The other tables of the same office. Every game has its own table under the same code; this asks each of the
+// other three who sits there, every few seconds, so their people can be drawn at their table in the room.
+// onPeople(game, list) gets [{ id, name, look, seat, seats }], or [] when that table is not open.
+export const GAME_PREFIX = { blackjack: 'bjt-', poker: 'bjt-pk-', baccarat: 'bjt-bc-', roulette: 'bjt-ro-' };
+export function watchOffice(current, getCode, onPeople) {
+  let peer = null, dead = false;
+  const conns = {}, nextTry = {};
+  const games = Object.keys(GAME_PREFIX).filter((g) => g !== current);
+  const clean = (list) => (Array.isArray(list) ? list : []).slice(0, 12).filter((p) => p && typeof p === 'object' && Number.isInteger(p.seat) && p.seat >= 0 && p.seat < 12)
+    .map((p) => ({ id: String(p.id || '').slice(0, 40), name: String(p.name || 'Player').slice(0, 22), look: { skin: Number(p.look?.skin) || 0, hair: Number(p.look?.hair) || 0, flag: typeof p.look?.flag === 'string' ? p.look.flag.slice(0, 8) : undefined }, seat: p.seat, seats: Math.max(1, Math.min(12, Number(p.seats) || 9)) }));
+  const link = (g) => {
+    const code = getCode();
+    if (dead || !code || !peer || peer.destroyed || peer.disconnected || conns[g]) return;
+    const c = peer.connect(GAME_PREFIX[g] + code, { reliable: true });
+    conns[g] = c; c.game = g;
+    const drop = () => { if (conns[g] === c) { delete conns[g]; nextTry[g] = Date.now() + 7000; onPeople(g, []); } };
+    c.on('open', () => { try { c.send({ t: 'peek' }); } catch {} });
+    c.on('data', (m) => { if (m && m.t === 'people') onPeople(g, clean(m.list)); });
+    c.on('close', drop); c.on('error', drop);
+    setTimeout(() => { if (!c.open) { try { c.close(); } catch {} drop(); } }, 9000);
+  };
+  const tick = () => {
+    if (dead) return;
+    if (!peer || peer.destroyed) {
+      peer = new Peer(peerOptions());
+      peer.on('error', (e) => { if (e.type === 'peer-unavailable') { const g = games.find((x) => String(e.message || '').includes(GAME_PREFIX[x] + getCode()) && (x === 'blackjack' ? !/bjt-(pk|bc|ro)-/.test(String(e.message)) : true)); if (g && conns[g]) { const c = conns[g]; delete conns[g]; nextTry[g] = Date.now() + 7000; try { c.close(); } catch {} onPeople(g, []); } } });
+      peer.on('disconnected', () => { try { if (!dead && !peer.destroyed) peer.reconnect(); } catch {} });
+      return;
+    }
+    for (const g of games) {
+      const c = conns[g];
+      if (c && c.open) { try { c.send({ t: 'peek' }); } catch {} }
+      else if (!c && Date.now() >= (nextTry[g] || 0)) link(g);
+    }
+  };
+  const timer = setInterval(tick, 4000);
+  setTimeout(tick, 600); setTimeout(tick, 2200);
+  return { close() { dead = true; clearInterval(timer); try { peer?.destroy(); } catch {} } };
 }
 // A player's side. on: { msg(m), status(text, ok), open(), nohost() }. hello() gives the first message.
 export function createGuest(peerId, hello, on) {

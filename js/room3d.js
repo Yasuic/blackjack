@@ -123,6 +123,9 @@ function hashHue(id) { let h = 2166136261; for (const ch of String(id)) { h ^= c
 // Plan x runs along the front wall and plan y from the front wall to the windows.
 const OFFICE = {"sidePanes":[{"a":2.526,"b":2.7292},{"a":3.7274,"b":3.9306}],"cab2":{"x":6.5666,"y":6.7455,"width":1.9764,"depth":0.4572},"bump":{"x":-1.01,"y":0,"w":1.01,"d":5.067},"sofa":{"depth":0.433,"a":{"x":0,"y":5.067,"len":1.714},"b":{"x":0,"y":5.067,"len":2.959},"c":{"x":2.526,"y":1.497,"len":3.57}},"width":14.36,"depth":8.267,"divider":0.103,"pillars":[{"id":"p1","shape":"rect","x":0.182,"y":6.7808,"width":0.908,"depth":1.2002},{"id":"p2","shape":"square","x":7.593,"y":7.2027,"width":0.95,"depth":0.95},{"id":"p3","shape":"rect","x":13.398,"y":6.8218,"width":0.908,"depth":1.2002}],"cabinet":{"x":3.9306,"y":0,"width":3.4737,"depth":0.381},"walls":[{"id":"w6","type":"wall","x1":-1.01,"y1":0,"x2":1.4338,"y2":0},{"id":"g2","type":"glass","x1":2.399,"y1":0,"x2":11.419,"y2":0},{"id":"w7","type":"wall","x1":11.419,"y1":0,"x2":14.36,"y2":0},{"id":"n1","type":"window","x1":0,"y1":8.267,"x2":14.36,"y2":8.267,"thick":0.127},{"id":"n2","type":"window","x1":0,"y1":5.067,"x2":0,"y2":8.267},{"id":"n3","type":"window","x1":14.36,"y1":0,"x2":14.36,"y2":8.267},{"id":"g3","type":"glass","x1":2.399,"y1":0,"x2":2.399,"y2":5.067,"thick":0.127},{"id":"g4","type":"glass","x1":0,"y1":5.067,"x2":2.399,"y2":5.067},{"id":"g5","type":"glass","x1":11.419,"y1":0,"x2":11.419,"y2":3.272},{"id":"g7","type":"glass","x1":11.419,"y1":4.327,"x2":11.419,"y2":8.267},{"id":"w9","type":"wall","x1":11.419,"y1":4.224,"x2":14.36,"y2":4.224},{"id":"n2b","type":"window","x1":-1.01,"y1":0,"x2":-1.01,"y2":5.067,"thick":0.127},{"id":"w6b","type":"wall","x1":-1.01,"y1":5.067,"x2":0,"y2":5.067}],"doors":[{"id":"d1","x1":1.4338,"y1":0,"x2":2.399,"y2":0,"hinge":{"x":2.399,"y":0}},{"id":"d2","x1":2.7292,"y1":0,"x2":3.7274,"y2":0,"hinge":{"x":2.7292,"y":0}},{"id":"d3","x1":11.419,"y1":3.2906,"x2":11.419,"y2":4.224,"hinge":{"x":11.419,"y":4.224}},{"id":"d4","x1":11.419,"y1":4.327,"x2":11.419,"y2":5.2617,"hinge":{"x":11.419,"y":4.327}}],"rooms":[{"id":"bigBoard","x":-1.01,"y":0,"width":3.409,"depth":5.067},{"id":"eating","x":0,"y":5.067,"width":2.399,"depth":3.2},{"id":"openPlan","x":2.399,"y":0,"width":9.02,"depth":8.267},{"id":"printIT","x":6.168,"y":6.259,"width":2.294,"depth":2.008},{"id":"smallBoard","x":11.419,"y":0,"width":2.942,"depth":4.224},{"id":"securities","x":11.419,"y":4.327,"width":2.942,"depth":3.94}],"furniture":[{"id":"t1","room":"bigBoard","kind":"rrect","cx":0.737,"cy":2.234,"w":1.0,"d":2.243},{"id":"tv1","room":"bigBoard","kind":"tvh","cx":0.666,"cy":4.851,"w":0.639,"d":0.0},{"id":"et1","room":"eating","kind":"marble","cx":1.15,"cy":6.217,"w":0.65,"d":0.7},{"id":"et2","room":"eating","kind":"marble","cx":1.9,"cy":6.217,"w":0.65,"d":0.7},{"id":"dS","room":"openPlan","kind":"rect","cx":5.276,"cy":1.079,"w":0.6985,"d":1.397},{"id":"dT","room":"openPlan","kind":"rect","cx":5.974,"cy":1.079,"w":0.6985,"d":1.397},{"id":"dC","room":"openPlan","kind":"rect","cx":9.526,"cy":0.878,"w":0.8001,"d":1.6002,"top":"yellow"},{"id":"dF","room":"openPlan","kind":"rect","cx":10.326,"cy":0.878,"w":0.8001,"d":1.6002,"top":"yellow"},{"id":"dTh","room":"openPlan","kind":"rect","cx":3.845,"cy":7.392,"w":0.8001,"d":1.6002,"top":"yellow"},{"id":"dA","room":"openPlan","kind":"rect","cx":4.645,"cy":7.392,"w":0.8001,"d":1.6002,"top":"yellow"},{"id":"dG","room":"openPlan","kind":"rect","cx":9.343,"cy":7.146,"w":1.6002,"d":0.8001,"top":"yellow"},{"id":"sv","room":"printIT","kind":"rect","cx":7.08,"cy":7.514,"w":0.67,"d":0.562},{"id":"t2","room":"smallBoard","kind":"rrect","cx":12.957,"cy":2.061,"w":0.891,"d":2.196},{"id":"tv3","room":"smallBoard","kind":"tvh","cx":12.949,"cy":4.106,"w":0.639,"d":0.0},{"id":"t3","room":"securities","kind":"round","cx":13.235,"cy":5.642,"w":1.028,"d":1.028},{"id":"dN","room":"securities","kind":"rect","cx":11.849,"cy":7.417,"w":0.8001,"d":1.6002,"top":"yellow","hh":1.1},{"id":"tv4","room":"securities","kind":"tvh","cx":12.949,"cy":4.361,"w":0.639,"d":0.0},{"id":"c1","room":"openPlan","kind":"rect","cx":4.974,"cy":3.853,"w":1.397,"d":0.6985,"mid":true},{"id":"c2","room":"openPlan","kind":"rect","cx":6.371,"cy":3.853,"w":1.397,"d":0.6985,"mid":true},{"id":"c3","room":"openPlan","kind":"rect","cx":7.768,"cy":3.853,"w":1.397,"d":0.6985,"mid":true},{"id":"c4","room":"openPlan","kind":"rect","cx":9.165,"cy":3.853,"w":1.397,"d":0.6985,"mid":true},{"id":"c5","room":"openPlan","kind":"rect","cx":4.974,"cy":4.551,"w":1.397,"d":0.6985,"mid":true},{"id":"c6","room":"openPlan","kind":"rect","cx":6.371,"cy":4.551,"w":1.397,"d":0.6985,"mid":true},{"id":"c7","room":"openPlan","kind":"rect","cx":7.768,"cy":4.551,"w":1.397,"d":0.6985,"mid":true},{"id":"c8","room":"openPlan","kind":"rect","cx":9.165,"cy":4.551,"w":1.397,"d":0.6985,"mid":true}],"chairs":[{"room":"bigBoard","cx":-0.113,"cy":1.259},{"room":"bigBoard","cx":1.587,"cy":1.486},{"room":"bigBoard","cx":-0.113,"cy":1.909},{"room":"bigBoard","cx":1.587,"cy":2.234},{"room":"bigBoard","cx":-0.113,"cy":2.559},{"room":"bigBoard","cx":1.587,"cy":2.982},{"room":"bigBoard","cx":-0.113,"cy":3.209},{"room":"openPlan","cx":4.577,"cy":1.079},{"room":"openPlan","cx":6.673,"cy":1.079},{"room":"openPlan","cx":8.776,"cy":0.878},{"room":"openPlan","cx":11.076,"cy":0.878},{"room":"openPlan","cx":3.095,"cy":7.392},{"room":"openPlan","cx":5.395,"cy":7.392},{"room":"smallBoard","cx":12.162,"cy":1.329},{"room":"smallBoard","cx":13.753,"cy":1.512},{"room":"smallBoard","cx":12.162,"cy":2.061},{"room":"smallBoard","cx":13.753,"cy":2.61},{"room":"smallBoard","cx":12.162,"cy":2.793},{"room":"securities","cx":13.712,"cy":6.302},{"room":"securities","cx":12.758,"cy":6.301},{"room":"securities","cx":12.758,"cy":4.982},{"room":"securities","cx":13.711,"cy":4.982},{"room":"openPlan","cx":9.343,"cy":7.896},{"room":"eating","cx":1.29,"cy":6.847,"stool":true},{"room":"eating","cx":1.65,"cy":6.847,"stool":true},{"room":"eating","cx":2.01,"cy":6.847,"stool":true},{"room":"eating","cx":2.37,"cy":6.847,"stool":true},{"room":"securities","cx":12.599,"cy":7.417,"stand":true},{"room":"openPlan","cx":4.974,"cy":3.154,"mid":true},{"room":"openPlan","cx":6.371,"cy":3.154,"mid":true},{"room":"openPlan","cx":7.768,"cy":3.154,"mid":true},{"room":"openPlan","cx":9.165,"cy":3.154,"mid":true},{"room":"openPlan","cx":4.974,"cy":5.25,"mid":true},{"room":"openPlan","cx":6.371,"cy":5.25,"mid":true},{"room":"openPlan","cx":7.768,"cy":5.25,"mid":true},{"room":"openPlan","cx":9.165,"cy":5.25,"mid":true}]};
 // Plan position of the middle of the blackjack table.
+// Where each game's table stands in the office plan (metres), for drawing the tables that are not the live one.
+const OTHER_TABLES = { blackjack: { x: 4.36, y: 4.2, r: 0.8 }, poker: { x: 0.737, y: 2.234, w: 1, d: 2.243 }, baccarat: { x: 12.957, y: 2.061, w: 0.99, d: 2.196 }, roulette: { x: 13.1, y: 5.75, w: 1, d: 2 } };
+const TABLE_NAMES = { blackjack: '🃏 Blackjack', poker: '♠️ Poker', baccarat: '🎴 Baccarat', roulette: '🎡 Roulette' };
 const OFFICE_AT = { x: 4.16, y: 4.2 }; // x is set again from the table's real depth when the room is built
 // The one name plate in the room. Set it to '' to leave the plate out.
 const OFFICE_SIGN = 'WELCOME TO ARC GROUP!';
@@ -130,11 +133,11 @@ const OFFICE_SIGN_LINES = ['Hours: 8AM to infinity AM', 'Compensation: negative 
 
 // Builds the whole office as a handful of merged meshes (one per material). Units are metres with the
 // floor at y = 0; the caller scales and places the group. Scene X = -plan x, Z = -plan y.
-function buildOffice(signText, midShift = 0, midScale = 1, skipRoom = null) {
+function buildOffice(signText, midShift = 0, midScale = 1, skipRoom = null, live = 'blackjack') {
   // The middle desks and their chairs move along x by midShift. Where the room is too short for them (a deep phone table), the block is squeezed along x so that all eight desks stay.
   const D0 = OFFICE, mx = (x) => 4.276 + midShift + (x - 4.276) * midScale;
   // skipRoom: the meeting room whose own table and chairs are left out, because the live game table stands there.
-  const D = { ...D0, furniture: D0.furniture.filter((f) => !(skipRoom && f.room === skipRoom && (f.kind === 'rrect' || f.kind === 'round'))).map((f) => (f.mid ? { ...f, cx: mx(f.cx), w: f.w * midScale } : f)), chairs: D0.chairs.filter((c) => !(skipRoom && c.room === skipRoom)).map((c) => (c.mid ? { ...c, cx: mx(c.cx) } : c)) };
+  const D = { ...D0, furniture: D0.furniture.filter((f) => !(skipRoom && f.room === skipRoom && (f.kind === 'rrect' || f.kind === 'round'))).map((f) => (f.mid ? { ...f, cx: mx(f.cx), w: f.w * midScale } : f)), chairs: D0.chairs.filter((c) => !(skipRoom && c.room === skipRoom) && !(c.room === 'securities' && !c.stand) && c.room !== 'smallBoard').map((c) => (c.mid ? { ...c, cx: mx(c.cx) } : c)) };
   const Hh = { ceil: 2.7, door: 2.1, sill: 0.85, winTop: 2.55, cab: 2.7, desk: 0.749 };
   const TILE = { L: 1.2176, S: 0.6064 };
   const mk = (o) => new THREE.MeshStandardMaterial(o);
@@ -159,7 +162,7 @@ function buildOffice(signText, midShift = 0, midScale = 1, skipRoom = null) {
     chrome: mk({ color: '#b9bec4', roughness: 0.25, metalness: 0.9 }),
     screen: mk({ color: '#0d0f12', roughness: 0.25, metalness: 0.2 }),
     // What the office screens show: the ARC Group logo, from the photo of it, lit like a screen that is on.
-    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261121l'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
+    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261121m'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
     dark: mk({ color: '#30353c', roughness: 0.6 }),
   };
   const group = new THREE.Group();
@@ -330,6 +333,25 @@ function buildOffice(signText, midShift = 0, midScale = 1, skipRoom = null) {
     if (f.id === 'sv') { box(f.w, 0.95, f.d, M.dark, X, 0.475, Z); return; }
     surfaces.push(f);
     if (f.kind === 'marble') { box(f.w, 0.035, f.d, M.marble, X, Hh.desk - 0.0175, Z); cyl(0.035, 0.035, Hh.desk - 0.035, 10, M.chrome, X, (Hh.desk - 0.035) / 2, Z); box(0.42, 0.02, 0.42, M.leg, X, 0.01, Z); return; }
+    // The games that are not being played on this screen still stand in the office: a baccarat table in the small
+    // meeting room, a roulette table in Nigel's room. (The poker table is drawn below, the blackjack table after the loop.)
+    if (f.id === 't2' || f.id === 't3') {
+      const G = (M.games ||= { rail: mk({ color: '#3a2114', roughness: 0.7 }), felt: mk({ color: '#0f6b3f', roughness: 0.95 }), line: mk({ color: '#d9c27a', roughness: 0.6 }), dark: mk({ color: '#15171c', roughness: 0.5 }), red: mk({ color: '#c62f2f', roughness: 0.5 }), card: mk({ color: '#fbfaf6', roughness: 0.5 }) });
+      const rou = f.id === 't3', cx = rou ? -OTHER_TABLES.roulette.x : X, cz = rou ? -OTHER_TABLES.roulette.y : Z, w = rou ? 1.0 : f.w + 0.1, d = rou ? 2.0 : f.d, top = Hh.desk, rad = rou ? 0.16 : 0.3;
+      const ring = roundRect(w + 0.16, d + 0.16, rad + 0.08); ring.holes.push(roundRect(w - 0.04, d - 0.04, rad - 0.02));
+      const rg = new THREE.ExtrudeGeometry(ring, { depth: 0.07, bevelEnabled: false, curveSegments: 10 }); rg.rotateX(-Math.PI / 2); emit(rg, G.rail, at(cx, top - 0.045, cz), true);
+      const fg = new THREE.ExtrudeGeometry(roundRect(w, d, rad), { depth: 0.04, bevelEnabled: false, curveSegments: 10 }); fg.rotateX(-Math.PI / 2); emit(fg, G.felt, at(cx, top - 0.04, cz), true);
+      [-1, 1].forEach((sg) => { cyl(0.08, 0.11, top - 0.04, 12, G.rail, cx, (top - 0.04) / 2, cz + sg * d * 0.27); cyl(0.26, 0.28, 0.03, 16, M.leg, cx, 0.015, cz + sg * d * 0.27, false); });
+      if (rou) { // the number layout as a striped strip, and the wheel at one end
+        for (let i = 0; i < 12; i++) for (let j = 0; j < 3; j++) box(0.085, 0.002, 0.085, (i + j) % 2 ? G.red : G.dark, cx - 0.1 + j * 0.1, top + 0.001, cz - 0.75 + i * 0.1, false);
+        cyl(0.3, 0.32, 0.07, 28, G.rail, cx, top + 0.035, cz + 0.62); cyl(0.25, 0.25, 0.012, 28, G.dark, cx, top + 0.074, cz + 0.62, false); cyl(0.17, 0.17, 0.014, 28, G.red, cx, top + 0.076, cz + 0.62, false); cyl(0.05, 0.03, 0.06, 12, G.line, cx, top + 0.1, cz + 0.62, false);
+      } else { // two hands of cards in the middle and the betting line
+        box(0.012, 0.002, d - 0.5, G.line, cx + 0.2, top + 0.001, cz, false);
+        for (let k = 0; k < 2; k++) for (let i = 0; i < 2; i++) box(0.089, 0.002, 0.064, G.card, cx - 0.12, top + 0.0015, cz + (k ? 0.22 : -0.22) + (i - 0.5) * 0.08, false);
+        box(0.1, 0.05, 0.14, G.dark, cx - 0.3, top + 0.025, cz + 0.6, false); // the shoe
+      }
+      return;
+    }
     if (f.kind === 'round') { cyl(f.w / 2, f.w / 2, 0.035, 32, M.wood, X, Hh.desk - 0.0175, Z); cyl(0.04, 0.04, Hh.desk - 0.05, 10, M.leg, X, (Hh.desk - 0.05) / 2, Z); cyl(0.28, 0.3, 0.03, 20, M.leg, X, 0.015, Z, false); return; }
     if (f.id === 't1') { // the big meeting room is a poker room: a padded oval table with a green cloth, chips and cards
       const P = (M.poker ||= { rail: mk({ color: '#2a1810', roughness: 0.75 }), felt: mk({ color: '#0f6b3f', roughness: 0.95 }), line: mk({ color: '#d9c27a', roughness: 0.6 }), back: mk({ color: '#b3202a', roughness: 0.5 }), card: mk({ color: '#fbfaf6', roughness: 0.5 }),
@@ -732,6 +754,16 @@ function buildOffice(signText, midShift = 0, midScale = 1, skipRoom = null) {
     }
     return walkers.some((q) => q.state === 'go' || q.state === 'back');
   };
+  if (live !== 'blackjack') { // the blackjack table in the open office, round side to the sofa, flat side to the desks
+    const G = (M.games ||= { rail: mk({ color: '#3a2114', roughness: 0.7 }), felt: mk({ color: '#0f6b3f', roughness: 0.95 }), line: mk({ color: '#d9c27a', roughness: 0.6 }), dark: mk({ color: '#15171c', roughness: 0.5 }), red: mk({ color: '#c62f2f', roughness: 0.5 }), card: mk({ color: '#fbfaf6', roughness: 0.5 }) });
+    const B = OTHER_TABLES.blackjack, R = B.r, top = Hh.desk;
+    const half = (r) => { const sh = new THREE.Shape(); sh.moveTo(0, -r); sh.absarc(0, 0, r, -Math.PI / 2, Math.PI / 2, false); sh.lineTo(-0.12, r); sh.lineTo(-0.12, -r); sh.closePath(); return sh; };
+    const rg = new THREE.ExtrudeGeometry(half(R + 0.09), { depth: 0.07, bevelEnabled: false, curveSegments: 20 }); rg.rotateX(-Math.PI / 2); emit(rg, G.rail, at(-B.x, top - 0.05, -B.y), true);
+    const fg = new THREE.ExtrudeGeometry(half(R), { depth: 0.04, bevelEnabled: false, curveSegments: 20 }); fg.rotateX(-Math.PI / 2); emit(fg, G.felt, at(-B.x, top - 0.015, -B.y), true);
+    [-1, 1].forEach((sg) => { cyl(0.07, 0.1, top - 0.05, 12, G.rail, -B.x + 0.3, (top - 0.05) / 2, -B.y + sg * R * 0.5); cyl(0.2, 0.22, 0.03, 14, M.leg, -B.x + 0.3, 0.015, -B.y + sg * R * 0.5, false); });
+    box(0.1, 0.05, 0.14, G.dark, -B.x - 0.02, top + 0.05, -B.y - R * 0.6, false); // the shoe by the dealer
+    for (let i = 0; i < 2; i++) box(0.089, 0.002, 0.064, G.card, -B.x + 0.1, top + 0.027, -B.y + (i - 0.5) * 0.08, false);
+  }
   { // A dark bottle of hand sanitizer with a pump, on the round table.
     const t = D.furniture.find((f) => f.id === 't3');
     if (t) { const x = -(t.cx - 0.12), z = -(t.cy + 0.08), y = Hh.desk; cyl(0.032, 0.034, 0.13, 14, col('#2a1a12', 0.35), x, y + 0.065, z); cyl(0.014, 0.02, 0.025, 10, col('#111316', 0.5), x, y + 0.1425, z, false); cyl(0.005, 0.005, 0.04, 6, col('#111316', 0.5), x, y + 0.175, z, false); box(0.045, 0.012, 0.016, col('#111316', 0.5), x + 0.015, y + 0.198, z, false); box(0.04, 0.05, 0.002, col('#e9e6df', 0.8), x, y + 0.06, z + 0.034, false); }
@@ -871,7 +903,7 @@ function buildStorefront() {
     lamp: lam('#c8161d', 0.6), bulb: lit('#ffe9a8'), red: lit('#c8161d'), gold: lit('#f4c542'), wood: lam('#7a5234', 0.35),
     glass: new THREE.MeshBasicMaterial({ color: '#dff3f7', transparent: true, opacity: 0.13, depthWrite: false }),
     awning: new THREE.MeshBasicMaterial({ map: canvasTexture(512, 64, (g, w, h) => { for (let i = 0; i < 16; i++) { g.fillStyle = i % 2 ? '#fff6e6' : '#f08a1c'; g.fillRect((i * w) / 16, 0, w / 16 + 1, h); } }), side: THREE.DoubleSide }),
-    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261121l') }),
+    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261121m') }),
     menu: new THREE.MeshBasicMaterial({ map: canvasTexture(256, 384, (g, w, h) => {
       g.fillStyle = '#c8161d'; g.fillRect(0, 0, w, h); g.fillStyle = '#f4c542'; g.fillRect(14, 14, w - 28, 44);
       const r = rng(11); g.fillStyle = '#fff3d6';
@@ -953,7 +985,8 @@ function buildStorefront() {
 // game: 'poker' puts an oval table in the big meeting room, 'baccarat' puts the table in the small meeting room,
 // 'roulette' puts it in Nigel's room.
 // metres: how wide the felt is in the room (a blackjack felt is 1.61 m).
-export function initRoom(container, feltEl, { phone, pixel = false, hud = null, size = null, game = 'blackjack', metres = 1.61 } = {}) {
+// onGo(game): called when the player taps another game's table in the room.
+export function initRoom(container, feltEl, { phone, pixel = false, hud = null, size = null, game = 'blackjack', metres = 1.61, onGo = null } = {}) {
   OVAL = game === 'poker';
   // The felt keeps the size and shape its own style sheet gives it, so the 3D table always matches the
   // flat one: the height and the rounded end are read from the page, not fixed here. On a phone the felt
@@ -1059,8 +1092,9 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
   else if (game === 'roulette') { OFFICE_AT.x = 13.1; OFFICE_AT.y = 5.75; } // Nigel's room, where its round table stood
   else { OFFICE_AT.x = 3.11 + 0.45 + halfDepth; OFFICE_AT.y = 4.2; }
   const dealerEnd = OFFICE_AT.x + halfDepth + 0.42;
-  const midShift = inRoom ? 0 : Math.max(0, dealerEnd - 4.276), midScale = inRoom ? 1 : Math.min(1, (11.05 - 4.276 - midShift) / 5.5875);
-  const office = buildOffice(OFFICE_SIGN, midShift, midScale, inRoom);
+  // In the other games the blackjack table still stands in the open office, so the middle desks leave room for it.
+  const midShift = inRoom ? 0.6 : Math.max(0, dealerEnd - 4.276), midScale = inRoom ? 1 : Math.min(1, (11.05 - 4.276 - midShift) / 5.5875);
+  const office = buildOffice(OFFICE_SIGN, midShift, midScale, inRoom, game);
   office.scale.setScalar(S);
   { const sm = office.userData.snowMat?.(); if (sm) sm.size = 0.026 * S; }
   // Turned a quarter: plan x runs away from the players (toward the dealer and the desks), plan y to their right.
@@ -1203,6 +1237,60 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
   function disposeTree(o) {
     o.traverse((c) => { if (c.isSprite) { c.material.map?.dispose(); c.material.dispose(); } else if (c.geometry?.type === 'TorusGeometry') c.geometry.dispose(); else if (c.material && c.material !== trousers && c.material !== stoolLeather && c.material !== brass) c.material.dispose?.(); });
   }
+
+  // People playing at the other tables of the office: map of game -> [{ id, name, look, seat, seats }].
+  const otherGroup = new THREE.Group(); scene.add(otherGroup);
+  let otherKey = '';
+  function setOthers(map = {}) {
+    const key = JSON.stringify(map);
+    if (key === otherKey) return;
+    otherKey = key;
+    disposeTree(otherGroup); otherGroup.clear();
+    const yTop = FLOOR + 0.749 * S; // those tables are office height, a little lower than the live one
+    const w = (ox, oy) => office.localToWorld(new THREE.Vector3(-ox, 0, -oy));
+    for (const [g, list] of Object.entries(map)) {
+      const T = OTHER_TABLES[g];
+      if (g === game || !T || !Array.isArray(list)) continue;
+      for (const p of list) {
+        const n = p.seats || 9;
+        let ox, oy;
+        if (g === 'blackjack') { const t = ((p.seat + 0.5) / n - 0.5) * 2.7; ox = T.x - (T.r + 0.34) * Math.cos(t); oy = T.y + (T.r + 0.34) * Math.sin(t); }
+        else { const a = ((p.seat + 0.5) / n) * Math.PI * 2, c = Math.cos(a), sn = Math.sin(a), k = 1 / Math.max(Math.abs(c) / (T.w / 2 + 0.36), Math.abs(sn) / (T.d / 2 + 0.36)); ox = T.x + c * k; oy = T.y + sn * k; } // on the rim of the table's rectangle
+        const c = w(T.x, T.y), s = w(ox, oy), nx = s.x - c.x, nz = s.z - c.z;
+        const f = makeFigure(p, false, 96);
+        f.scale.setScalar(U * 0.86); f.position.set(s.x, yTop, s.z); f.rotation.y = Math.atan2(-nx, -nz);
+        otherGroup.add(f);
+      }
+    }
+    // A name tag over each of the other tables, with how many people play there. A tap on it takes you to that table.
+    for (const g of Object.keys(OTHER_TABLES)) {
+      if (g === game) continue;
+      const T = OTHER_TABLES[g], n = Array.isArray(map[g]) ? map[g].length : 0, c = w(T.x - (g === 'blackjack' ? 0.3 : 0), T.y);
+      const sp = makeLabel(`${TABLE_NAMES[g]}${n ? ' · ' + n + ' playing' : ''}`);
+      sp.material.sizeAttenuation = false; sp.scale.set(0.2, 0.05, 1); // the same size on the screen however far the table is
+      sp.position.set(c.x, yTop + 0.95 * S, c.z);
+      sp.userData.go = g;
+      otherGroup.add(sp);
+    }
+    touch();
+  }
+  setTimeout(() => setOthers({ boot: 1 }), 0); // the name tags show even before anyone is found at those tables
+  // A tap on another table (or its name tag) goes there. Taps on the live felt and on buttons never count.
+  container.addEventListener('click', (e) => {
+    if (!onGo || container.classList.contains('was-drag') || feltEl.contains(e.target) || e.target.closest('button, a, input, select, textarea, label, [data-act]')) return;
+    const r = container.getBoundingClientRect(), yTop = FLOOR + 0.749 * S;
+    let best = null, bd = 1e9;
+    for (const sp of otherGroup.children) {
+      if (!sp.userData.go) continue;
+      for (const dy of [0, -0.95 * S]) { // the tag itself and the table under it
+        tmp.set(sp.position.x, sp.position.y + dy, sp.position.z).project(camera);
+        if (tmp.z > 1 || tmp.z < -1) continue;
+        const d = Math.hypot((tmp.x * 0.5 + 0.5) * r.width - (e.clientX - r.left), (-tmp.y * 0.5 + 0.5) * r.height - (e.clientY - r.top));
+        if (d < bd) { bd = d; best = sp.userData.go; }
+      }
+    }
+    if (best && bd < Math.max(46, r.height * 0.07)) onGo(best);
+  });
 
   let peopleRev = 0, flipped = false; // flipped: the felt is laid out for the dealer and turned to face them
   let peopleKey = '', figs = new Map(), stoolGroup = null, myFig = null, myStool = null, sidePts = [], seatEdge = new Map();
@@ -1716,9 +1804,10 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
       // Once round the office, looking in at its middle, then down into the chair for the last part.
       const q = Math.min(1, (now - tour.t0) / tour.ms), wv = ease((q - 0.5) / 0.5), mix = (a, b) => a + (b - a) * wv;
       tourW = wv;
-      cur.theta = goal.theta + Math.PI * 2 * (1 - ease(q));
+      // Coming from another table: a straight walk from that table to this chair, with no turn round the office.
+      cur.theta = goal.theta + (tour.from ? 0.7 : Math.PI * 2) * (1 - ease(q));
       cur.phi = mix(1.2, goal.phi); cur.r = mix(tour.r, goal.r); cur.yaw = goal.yaw * wv; cur.pitch = goal.pitch * wv;
-      cur.t.lerpVectors(OFFC, goal.t, wv);
+      cur.t.lerpVectors(tour.from || OFFC, goal.t, tour.from ? ease(q) : wv);
       dirty = Math.max(dirty, 2);
       if (q >= 1) { tour = null; tourW = 1; }
     } else if (!settled) {
@@ -1811,19 +1900,23 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     },
     home: () => home(true),
     // Played once when you join a table. A tap, a drag or the wheel ends it early.
-    tour(ms = 2000) {
+    tour(ms = 2000, fromGame = null) {
       if (!homeFit || walking || matchMedia('(prefers-reduced-motion: reduce)').matches) return false;
-      tour = { t0: performance.now(), ms, r: Math.max(ALL.x1 - ALL.x0, ALL.z1 - ALL.z0) * 0.45 };
+      const F = fromGame && fromGame !== game && OTHER_TABLES[fromGame];
+      tour = { t0: performance.now(), ms, r: F ? 2.6 * S : Math.max(ALL.x1 - ALL.x0, ALL.z1 - ALL.z0) * 0.45, from: F ? office.localToWorld(new THREE.Vector3(-F.x, 0, -F.y)).setY(0) : null };
       touch();
       return true;
     },
     touring: () => !!tour,
+    // For tests: where the other tables' name tags are on the screen.
+    tagsOnScreen() { const r = container.getBoundingClientRect(); camera.updateMatrixWorld(); return otherGroup.children.filter((sp) => sp.userData.go).map((sp) => { tmp.copy(sp.position).project(camera); return { go: sp.userData.go, x: Math.round(r.left + (tmp.x * 0.5 + 0.5) * r.width), y: Math.round(r.top + (-tmp.y * 0.5 + 0.5) * r.height), z: tmp.z }; }); },
     // For tests: put the camera at a point of the office plan (x, height, y in metres) looking at another.
     debugTrip(who, kind) { office.userData.trip?.(who, kind); touch(); },
     debugLook(a, b) { dbgCam = a ? { p: new THREE.Vector3(-a[0], a[1], -a[2]), t: new THREE.Vector3(-b[0], b[1], -b[2]) } : null; touch(); },
     zoomBy(d) { zoom(d > 0 ? 0.86 : 1.16); },
     look,
     setPeople,
+    setOthers,
     setChips,
     // One card leaves the shoe: the dealer's hand moves with it.
     // Walk mode: leave the chair and move through the whole office. A drag moves you, two fingers or the
@@ -1841,7 +1934,7 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     dbg: () => ({ gl, scene, camera, figs }),
     setPixel(on) { pixelOn = !!on; applyPixel(); },
     // For checks and tests: where the camera is and how fast the room is drawing.
-    info: () => ({ calls: gl.info.render.calls, triangles: gl.info.render.triangles, fps, seated, side, pos: camera.position.toArray().map(Math.round), yaw: cur.yaw, r: Math.round(cur.r), home: homeFit && Math.round(homeFit.r), phi: homeFit && homeFit.phi, people: figs.size }),
+    info: () => ({ calls: gl.info.render.calls, triangles: gl.info.render.triangles, fps, seated, side, pos: camera.position.toArray().map(Math.round), yaw: cur.yaw, r: Math.round(cur.r), home: homeFit && Math.round(homeFit.r), phi: homeFit && homeFit.phi, people: figs.size, others: otherGroup.children.length }),
     // Jump straight to where the camera is heading (used by tests, which cannot wait for the glide).
     settle() { for (const key of ['theta', 'phi', 'r', 'yaw', 'pitch']) cur[key] = goal[key]; cur.t.copy(goal.t); touch(); },
     stop() { running = false; },
