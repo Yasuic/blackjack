@@ -1,9 +1,9 @@
 // The poker page: a Texas Hold'em table for up to 9 in the big meeting room. The host's browser runs
 // the table (js/poker.js); every other browser sends its moves there and is told only what it may see.
-import { PokerTable, POKER_SEATS, pokerDeck, cardText } from './poker.js?v=20261121k';
-import { sha256 } from './game.js?v=20261121k';
-import { webglOK, initRoom } from './room3d.js?v=20261121k';
-import { params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest } from './common.js?v=20261121k';
+import { PokerTable, POKER_SEATS, pokerDeck, cardText } from './poker.js?v=20261121l';
+import { sha256 } from './game.js?v=20261121l';
+import { webglOK, initRoom } from './room3d.js?v=20261121l';
+import { params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest } from './common.js?v=20261121l';
 
 const PREFIX = 'bjt-pk-';
 const app = $('#app');

@@ -159,7 +159,7 @@ function buildOffice(signText, midShift = 0, midScale = 1, skipRoom = null) {
     chrome: mk({ color: '#b9bec4', roughness: 0.25, metalness: 0.9 }),
     screen: mk({ color: '#0d0f12', roughness: 0.25, metalness: 0.2 }),
     // What the office screens show: the ARC Group logo, from the photo of it, lit like a screen that is on.
-    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261121k'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
+    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261121l'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
     dark: mk({ color: '#30353c', roughness: 0.6 }),
   };
   const group = new THREE.Group();
@@ -871,7 +871,7 @@ function buildStorefront() {
     lamp: lam('#c8161d', 0.6), bulb: lit('#ffe9a8'), red: lit('#c8161d'), gold: lit('#f4c542'), wood: lam('#7a5234', 0.35),
     glass: new THREE.MeshBasicMaterial({ color: '#dff3f7', transparent: true, opacity: 0.13, depthWrite: false }),
     awning: new THREE.MeshBasicMaterial({ map: canvasTexture(512, 64, (g, w, h) => { for (let i = 0; i < 16; i++) { g.fillStyle = i % 2 ? '#fff6e6' : '#f08a1c'; g.fillRect((i * w) / 16, 0, w / 16 + 1, h); } }), side: THREE.DoubleSide }),
-    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261121k') }),
+    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261121l') }),
     menu: new THREE.MeshBasicMaterial({ map: canvasTexture(256, 384, (g, w, h) => {
       g.fillStyle = '#c8161d'; g.fillRect(0, 0, w, h); g.fillStyle = '#f4c542'; g.fillRect(14, 14, w - 28, 44);
       const r = rng(11); g.fillStyle = '#fff3d6';
@@ -1423,8 +1423,8 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
       probe.lookAt(0, 0, sgn * tz);
       probe.updateMatrixWorld();
       let lo = Infinity, hi = -Infinity, sd = 0;
-      for (const p of outline) { tmp.copy(p).project(probe); hi = Math.max(hi, tmp.y); sd = Math.max(sd, Math.abs(tmp.x)); }
-      for (const p of nearEdge) { tmp.copy(p).project(probe); lo = Math.min(lo, tmp.y); }
+      for (const p of outline) { if (tmp.copy(p).applyMatrix4(probe.matrixWorldInverse).z > -20) { sd = Infinity; continue; } tmp.copy(p).project(probe); hi = Math.max(hi, tmp.y); sd = Math.max(sd, Math.abs(tmp.x)); } // a point behind the eye is out of sight
+      for (const p of nearEdge) { if (tmp.copy(p).applyMatrix4(probe.matrixWorldInverse).z > -20) { lo = -Infinity; continue; } tmp.copy(p).project(probe); lo = Math.min(lo, tmp.y); }
       return { lo, hi, sd };
     };
     // How far towards the player the camera must aim so the near rail sits just above the buttons.
@@ -1433,6 +1433,33 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
       for (let j = 0; j < 14; j++) { const m = (a + b) / 2; if (box(phi, r, m).lo < bottom) a = m; else b = m; }
       return b;
     };
+    // Poker: the view of a player in the chair, low over the near rail and looking across the table, not from above.
+    // The far side and both ends of the table must be in sight; the rail right under your chin may be out of it.
+    const pov = OVAL && !tall; // an upright phone keeps the higher view, so the far seats stay readable
+    if (pov) {
+      const tz = H * (tall ? 0.1 : 0.16);
+      if (leanR) return { phi: homeFit.phi, r: leanR, tz };
+      const farPts = outline.filter((p) => sgn * p.z < H * (tall ? 0.36 : 0.22));
+      const fits = (phi, r) => {
+        probe.position.set(0, r * Math.cos(phi), sgn * (tz + r * Math.sin(phi))); probe.lookAt(0, 0, sgn * tz); probe.updateMatrixWorld();
+        for (const p of farPts) {
+          if (tmp.copy(p).applyMatrix4(probe.matrixWorldInverse).z > -20) return false;
+          tmp.copy(p).project(probe);
+          if (Math.abs(tmp.x) > sideMax || tmp.y > topMax) return false;
+        }
+        return true;
+      };
+      // The lowest view from which the table fits with the eye still inside the room: the wall is close behind the chair.
+      const wall = (sgn > 0 ? ALL.z1 : -ALL.z0) - 30;
+      let best = null;
+      for (let phi = tall ? 0.8 : 1.02; phi >= 0.4; phi -= 0.04) {
+        let rLo = 200, rHi = 9000;
+        for (let i = 0; i < 18; i++) { const r = (rLo + rHi) / 2; if (fits(phi, r)) rHi = r; else rLo = r; }
+        best = { phi, r: rHi, tz };
+        if (tz + rHi * Math.sin(phi) <= wall) break;
+      }
+      return best;
+    }
     if (leanR) return { phi: homeFit.phi, r: leanR, tz: align(homeFit.phi, leanR) };
     let best = null;
     // Start low, like sitting at the table, and look from higher only when the screen is tall and narrow.
@@ -1538,6 +1565,7 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
   for (const ev of ['pointerdown', 'wheel']) container.addEventListener(ev, () => { tour = null; tourW = 1; }, { capture: true, passive: true });
   container.addEventListener('pointerdown', (e) => {
     if ((e.button > 0 && e.button !== 2) || e.target.closest(interactive)) return;
+    if (OVAL && seated && !walking) return; // the poker seat view is fixed: Walk around in the menu frees it
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     // Mouse: the left button drags you across the room, the right button turns the view. One finger turns the view.
     if (pointers.size === 1) drag = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: false, pan: e.pointerType === 'mouse' ? e.button !== 2 : (e.button === 2) !== walking, mouse: e.pointerType === 'mouse' && e.button === 0, onUi: false }; // walking: a plain drag moves you, the right button turns
@@ -1614,6 +1642,7 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
   container.addEventListener('pointercancel', endPointer);
   container.addEventListener('wheel', (e) => {
     e.preventDefault();
+    if (OVAL && seated && !walking) return;
     const d = e.deltaMode === 1 ? e.deltaY * 30 : e.deltaY;
     zoom(Math.exp(Math.max(-240, Math.min(240, d)) * 0.0011));
   }, { passive: false });
@@ -1625,7 +1654,7 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     const w = container.clientWidth, h = container.clientHeight;
     if (!w || !h) return;
     camera.aspect = w / h;
-    camera.fov = w / h < 0.8 ? 56 : 42;
+    camera.fov = w / h < 0.8 ? 56 : OVAL ? 58 : 42; // poker looks across the table from the chair, so it sees wider
     camera.updateProjectionMatrix();
     css.setSize(w, h);
     applyPixel();
@@ -1659,7 +1688,7 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
   // Focusing a button on the felt must never scroll the view sideways.
   for (const el of [container, css.domElement]) el.addEventListener('scroll', () => { el.scrollTop = 0; el.scrollLeft = 0; });
   camera.aspect = (container.clientWidth || 1) / (container.clientHeight || 1);
-  camera.fov = camera.aspect < 0.8 ? 56 : 42;
+  camera.fov = camera.aspect < 0.8 ? 56 : OVAL ? 58 : 42;
   camera.updateProjectionMatrix();
   home(false);
   resize();
@@ -1812,7 +1841,7 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     dbg: () => ({ gl, scene, camera, figs }),
     setPixel(on) { pixelOn = !!on; applyPixel(); },
     // For checks and tests: where the camera is and how fast the room is drawing.
-    info: () => ({ calls: gl.info.render.calls, triangles: gl.info.render.triangles, fps, seated, side, pos: camera.position.toArray().map(Math.round), yaw: cur.yaw, r: Math.round(cur.r), home: homeFit && Math.round(homeFit.r), people: figs.size }),
+    info: () => ({ calls: gl.info.render.calls, triangles: gl.info.render.triangles, fps, seated, side, pos: camera.position.toArray().map(Math.round), yaw: cur.yaw, r: Math.round(cur.r), home: homeFit && Math.round(homeFit.r), phi: homeFit && homeFit.phi, people: figs.size }),
     // Jump straight to where the camera is heading (used by tests, which cannot wait for the glide).
     settle() { for (const key of ['theta', 'phi', 'r', 'yaw', 'pitch']) cur[key] = goal[key]; cur.t.copy(goal.t); touch(); },
     stop() { running = false; },
