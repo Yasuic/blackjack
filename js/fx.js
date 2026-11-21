@@ -239,6 +239,19 @@ export function tickSound(last = false) {
   o.stop(t + 0.1);
 }
 
+// Your turn: two short soft notes, the second higher.
+export function turnSound() {
+  if (muted) return;
+  const ac = audio();
+  if (!ac) return;
+  [[660, 0], [880, 0.11]].forEach(([hz, at]) => {
+    const t = ac.currentTime + 0.01 + at, o = ac.createOscillator(), g = ac.createGain();
+    o.type = 'sine'; o.frequency.value = hz;
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.16, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+    o.connect(g).connect(ac.destination); o.start(t); o.stop(t + 0.18);
+  });
+}
+
 // Win: a bright rising chime (major arpeggio with a soft bell tone) and a shower of chips.
 export function winSound(big = false) {
   if (muted) return;

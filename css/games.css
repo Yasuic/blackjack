@@ -579,3 +579,8 @@ body.room3d .pfelt.ring:not(.tall) .pk-spot.pot { top: var(--rp, 40%); }
 /* Several boards (run it twice or more, two boards) in the seat view: they share the room of one board, in one to three columns. */
 body.room3d .pfelt.ring:not(.tall) .pk-mid.many .pk-board { top: var(--rb, 75%) !important; display: grid; grid-template-columns: repeat(var(--cols, 1), auto); justify-items: center; align-items: center; gap: calc(3px * var(--k)) calc(12px * var(--k)); --cw: calc(var(--rcw, 28) * 1px * var(--k)) !important; }
 body.room3d .pfelt.ring:not(.tall) .pk-mid.many .pk-board .pk-pot { position: static !important; transform: none !important; grid-column: 1 / -1; margin: 0 0 calc(2px * var(--k)) !important; }
+/* Moves picked ahead of time, in the same place as Fold, Call and Raise: dim outlines until one is picked. */
+.pk-acts.pre .pk-act { background: rgba(10,12,16,.72) !important; color: #cfd6de; border: 2px solid rgba(255,255,255,.3); box-shadow: none; opacity: .8; font-size: clamp(13px, 2vh, 20px) !important; }
+.pk-acts.pre .pk-act.fold { border-color: rgba(255,120,120,.55); color: #ffb3b3; }
+.pk-acts.pre .pk-act.call { border-color: rgba(126,240,182,.55); color: #c8ffe6; }
+.pk-acts.pre .pk-act.on { opacity: 1; border-color: var(--gold); color: #1b1300; background: var(--gold) !important; }

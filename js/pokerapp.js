@@ -1,10 +1,10 @@
 // The poker page: a Texas Hold'em table for up to 9 in the big meeting room. The host's browser runs
 // the table (js/poker.js); every other browser sends its moves there and is told only what it may see.
-import { PokerTable, POKER_SEATS, pokerDeck, cardText } from './poker.js?v=20261121u';
-import { sha256 } from './game.js?v=20261121u';
-import { chipSound, cardSound, hitSound, standSound, potSound, tickSound } from './fx.js?v=20261121u';
-import { webglOK, initRoom } from './room3d.js?v=20261121u';
-import { params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame } from './common.js?v=20261121u';
+import { PokerTable, POKER_SEATS, pokerDeck, cardText } from './poker.js?v=20261121v';
+import { sha256 } from './game.js?v=20261121v';
+import { chipSound, cardSound, hitSound, standSound, potSound, tickSound, turnSound } from './fx.js?v=20261121v';
+import { webglOK, initRoom } from './room3d.js?v=20261121v';
+import { params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame } from './common.js?v=20261121v';
 
 const PREFIX = 'bjt-pk-';
 const app = $('#app');
@@ -478,10 +478,23 @@ function seatLayout(st) {
 }
 // Sounds for what just happened at the table: the deal, each new board card, and each player's move.
 function playSounds(st) {
-  const now = { hand: st.handNo, phase: st.phase, board: st.board.length + (st.board2?.length || 0), seats: st.seats.map((x) => x && { id: x.id, bet: x.bet, total: x.total, folded: x.folded, allIn: x.allIn, acted: x.acted, inHand: x.inHand }) };
+  const now = { hand: st.handNo, phase: st.phase, mine: !!st.options, cur: st.currentBet || 0, board: st.board.length + (st.board2?.length || 0), seats: st.seats.map((x) => x && { id: x.id, bet: x.bet, total: x.total, folded: x.folded, allIn: x.allIn, acted: x.acted, inHand: x.inHand }) };
   const was = S.snd; S.snd = now;
   if (!was) return;
+  // What each player just did, shown over the name for two seconds (check, call, bet, raise, fold) and then gone.
+  if (now.hand !== was.hand) S.said = {};
+  else now.seats.forEach((x, i) => {
+    const o = was.seats[i];
+    if (!x || !o || x.id !== o.id || !x.inHand) return;
+    let say = '';
+    if (x.folded && !o.folded) say = 'Fold';
+    else if (x.allIn && !o.allIn) say = '';                                   // "All in" stays on the plate by itself
+    else if (x.total > o.total) say = now.cur > was.cur ? (was.cur > 0 ? 'Raise ' : 'Bet ') + amt(x.bet) : 'Call ' + amt(x.bet);
+    else if (x.acted && !o.acted && now.board === was.board && now.phase === was.phase) say = 'Check';
+    if (say) { (S.said ||= {})[i] = { text: say, until: Date.now() + 2000 }; clearTimeout(S.saidT); S.saidT = setTimeout(() => { if (S.st) render(); }, 2080); }
+  });
   try {
+    if (now.mine && !was.mine) turnSound(); // your turn starts: a short beep for you only
     if (now.hand !== was.hand && now.phase !== 'waiting' && now.phase !== 'done') { cardSound(); setTimeout(cardSound, 140); setTimeout(cardSound, 280); return; } // a new hand is dealt
     if (now.hand !== was.hand) return;
     if (now.board > was.board) { const n = Math.min(3, now.board - was.board); for (let k = 0; k < n; k++) setTimeout(cardSound, k * 200); } // one sound a card, in step with the cards coming out // flop, turn, river
@@ -556,7 +569,6 @@ function render() {
     if (!seat) {
       if (mySeat < 0) h += `<button class="pk-sit pk-stand" style="left:${A.x}%;top:${A.y}%" data-act="sit" data-seat="${i}"><span class="sit-arrow">Sit ▼</span>Seat ${i + 1}</button>`;
       else if (!live) h += `<button class="pk-sit pk-move pk-stand" style="left:${A.x}%;top:${A.y}%" data-act="move" data-seat="${i}" title="Move to this seat with your chips">Move here</button>`;
-      else h += `<div class="pk-empty" style="left:${A.x}%;top:${A.y}%">Empty</div>`;
       continue;
     }
     const me = seat.id === S.myId, turn = live && st.turn === i, inH = seat.inHand && !seat.folded;
@@ -567,23 +579,22 @@ function render() {
       else { bubble = 'All in'; bcls = 'allin'; }
     }
     else if (done && winBy[i]) { bubble = `+${amt(winBy[i])}${!many && seat.hand ? ' · ' + esc(shortHand(seat.hand)) : ''}`; bcls = 'win'; }
-    else if (seat.inHand && seat.folded) { bubble = 'Fold'; bcls = 'fold'; }
-    else if (seat.allIn && seat.inHand && !done) { bubble = 'All in'; bcls = 'allin'; }
-    else if (turn) { if (!(R && me)) { bubble = 'Thinking…'; bcls = 'turn'; } }
+    else if (seat.allIn && seat.inHand && !seat.folded && !done) { bubble = 'All in'; bcls = 'allin'; }
     else if (!seat.connected) { bubble = 'Offline'; bcls = 'fold'; }
     else if (seat.out) { bubble = 'Away'; bcls = 'fold'; }
-    else if (live && inH && seat.bet > 0 && seat.bet >= st.currentBet) { bubble = st.phase === 'preflop' && seat.bet <= st.settings.bigBlind ? 'In' : 'Called'; bcls = 'in'; }
     else if (seat.hand && done && seat.shown) { bubble = esc(shortHand(seat.hand)); bcls = 'in'; }
-    else if (live && inH) { bubble = 'In'; bcls = 'in'; }
+    // Nothing stays over a name while a player is simply in the hand or has folded: the last move shows for two seconds,
+    // a folded player's plate is dimmed with no cards, and the player to act has a glowing plate with a time bar.
+    else if (live && S.said?.[i] && S.said[i].until > Date.now()) { bubble = esc(S.said[i].text); bcls = S.said[i].text === 'Fold' ? 'fold say' : 'in say'; }
     if (votes[seat.id]?.length && !seat.out) bubble += ` · away vote ${votes[seat.id].length}`;
     // Your own cards are in the panel at the bottom, so in the 3D room they are not stood on the felt as well.
     const hideMine = me;
-    const cards = !hideMine && seat.cards.length ? seat.cards.map((c) => cardHTML(c, (me ? 'mine ' : '') + (inBest(i, c) ? 'hi' : ''))).join('') : '';
+    const cards = !hideMine && seat.cards.length && !(seat.folded && live) ? seat.cards.map((c) => cardHTML(c, (me ? 'mine ' : '') + (inBest(i, c) ? 'hi' : ''))).join('') : '';
     const timer = turn && st.turnLeft !== null ? `<i class="pk-bank" data-bank="${seat.bank}"></i><i class="pk-timer"><i style="animation-duration:${Math.max(0.1, (st.turnLeft - (Date.now() - S.at)) / 1000)}s;width:${100 - Math.min(100, (Math.max(0, st.turnLeft - (Date.now() - S.at)) / (st.settings.turnTimer * 1000)) * 100)}%"></i></i>` : '';
     h += `<div class="pk-seat pk-stand${!me ? ' far' : ''}${me ? ' me' : ''}${turn ? ' turn' : ''}${seat.inHand && seat.folded ? ' folded' : ''}${!seat.inHand && live ? ' idle' : ''}${bcls === 'win' ? ' won' : ''}${R ? ' ' + R.side : ''}" style="left:${A.x}%;top:${A.y}%;--ds:${ds.toFixed(2)}${R ? ';--dsy:' + (ds * (S.ringTall?.[rel(i)] || 1)).toFixed(3) : ''}" data-seat="${i}" data-rel="${rel(i)}">
       ${bubble ? `<div class="pk-bubble ${bcls}">${bubble}</div>` : ''}
       <div class="pk-cards${seat.folded ? ' dim' : ''}${seat.cards.length > 2 ? ' four' : ''}">${cards}</div>
-      <button class="pk-plate" data-act="seat-menu" data-seat="${i}"><b>${R && st.button === i && st.handNo > 0 ? '<i class="pk-d" title="Dealer button">D</i>' : ''}${esc(seat.name)}${me ? ' <em>YOU</em>' : ''}</b><span>${amt(seat.stack - (showing ? seat.won || 0 : 0))}</span>${statLine(seat.stats)}${timer}</button>${me ? '<button class="pk-react" data-act="react" title="Reaction">😀</button>' : ''}
+      <button class="pk-plate" data-act="seat-menu" data-seat="${i}"><b>${R && st.button === i && st.handNo > 0 ? '<i class="pk-d" title="Dealer button">D</i>' : ''}${esc(seat.name)}${me ? ' <em>YOU</em>' : ''}</b><span>${amt(seat.stack - (showing ? seat.won || 0 : 0))}</span>${timer}</button>${me ? '<button class="pk-react" data-act="react" title="Reaction">😀</button>' : ''}
     </div>`;
     h += `<div class="pk-spot${seat.bet ? ' has' : ''}" id="spot-${i}" style="left:${B.x}%;top:${B.y}%;--ds:${R ? R.bs.toFixed(2) : 1}">${seat.bet ? `<span class="pk-amt pk-stand">${amt(seat.bet)}</span>` : ''}</div>`;
     if (!R && st.button === i && st.handNo > 0) { h += `<div class="pk-dbtn" style="left:calc(${B.x}% + ${(P.y > 50 ? 1 : -1) * (phone() ? 30 : 52)}px);top:${B.y}%">D</div>`; }
@@ -685,6 +696,13 @@ function drawHud(st, mySeat, showing) {
   if (hr) { const running = S.started && !S.paused; hr.hidden = !isHost; hr.textContent = running ? '⏸ Stop' : '▶ Start'; hr.title = running ? 'Stop dealing after this hand' : 'Deal the next hand and keep dealing'; hr.classList.toggle('primary', !running); hr.disabled = !running && !st.canStart; }
   let h = '';
   if (seat && seat.cards.length && seat.cards[0]) h += `<div class="pk-handrow"><div class="pk-myhand${seat.cards.length > 2 ? ' four' : ''}">${seat.cards.map((c) => cardHTML(c, 'big')).join('')}</div>${badge}</div>`;
+  if (S.pre && S.pre.hand !== st.handNo) S.pre = null;
+  if (o && S.pre) {
+    // The move picked ahead of time. "Check" only checks: with a bet to call it is dropped and you choose yourself.
+    const a = S.pre.a; S.pre = null;
+    const move = a === 'cf' ? (o.canCheck ? 'check' : 'fold') : a === 'call' ? (o.canCheck ? 'check' : 'call') : o.canCheck ? 'check' : '';
+    if (move) setTimeout(() => { if (S.st?.options && S.st.handNo === st.handNo) send({ t: 'act', a: move }); }, 300);
+  }
   if (o) {
     const key = st.handNo + '|' + st.phase + '|' + st.currentBet + '|' + o.minTo;
     if (o.canRaise && (S.raiseFor !== key || S.raiseTo === null)) { S.raiseFor = key; S.raiseTo = o.minTo; }
@@ -704,6 +722,10 @@ function drawHud(st, mySeat, showing) {
     h += a.by === mySeat
       ? `<div class="pk-acts pk-runask">${Array.from({ length: a.max }, (_, k) => `<button class="pk-act ${k ? 'raise' : 'check'}" data-act="runpick" data-n="${k + 1}">${['Once', 'Twice', '3 times'][k]}</button>`).join('')}</div>`
       : `<div class="pk-acts pk-runask"><button class="pk-act call" data-act="runans" data-yes="1">Yes, ${a.n} times</button><button class="pk-act fold" data-act="runans" data-yes="0">No, once</button></div>`;
+  } else if (seat && live && !showing && !st.runAsk && seat.inHand && !seat.folded && !seat.allIn && seat.cards.length) {
+    // Not your turn yet: pick a move ahead of time. It is played the moment your turn comes, and a second tap takes it back.
+    const pre = S.pre && S.pre.hand === st.handNo ? S.pre.a : '';
+    h += `<div class="pk-acts pre"><button class="pk-act fold${pre === 'cf' ? ' on' : ''}" data-act="pre" data-a="cf">Check / Fold</button><button class="pk-act check${pre === 'check' ? ' on' : ''}" data-act="pre" data-a="check">Check</button><button class="pk-act call${pre === 'call' ? ' on' : ''}" data-act="pre" data-a="call">Call any</button></div>`;
   } else if (seat) {
     const b = [];
     if (st.phase === 'done' && seat.inHand && seat.cards[0] && !seat.shown) {
@@ -870,6 +892,7 @@ document.addEventListener('click', (e) => {
     case 'check': send({ t: 'act', a: 'check' }); break;
     case 'call': send({ t: 'act', a: 'call' }); break;
     case 'raise-back': S.raiseOpen = null; render(); break;
+    case 'pre': { const a = el.dataset.a; S.pre = S.pre && S.pre.a === a && S.pre.hand === st.handNo ? null : { a, hand: st.handNo }; render(); break; }
     case 'raise': { if (Date.now() - (S.dragEnd || 0) < 350) break; const o = st.options; if (!o?.canRaise) break;
       // The first tap opens the small raise panel (sizes and a slider); the second tap sends the amount shown.
       if (S.raiseOpen !== S.raiseFor) { S.raiseOpen = S.raiseFor; render(); break; } const to = Math.max(o.minTo, Math.min(o.maxTo, Math.round(Number($('#raise-num')?.value ?? S.raiseTo)))); send({ t: 'act', a: o.isBet ? 'bet' : 'raise', amount: to }); break; }
@@ -971,6 +994,8 @@ document.addEventListener('keydown', (e) => {
   const k = e.key.toLowerCase();
   if (k === 'f') send({ t: 'act', a: 'fold' });
   else if (k === 'c') send({ t: 'act', a: o.canCheck ? 'check' : 'call' });
+  else if (k === 'k' && o.canCheck) send({ t: 'act', a: 'check' });
+  else if (k === 'r' && o.canRaise) { if (!$('.pk-raise')) $('[data-act=raise]')?.click(); }
   else return;
   e.stopImmediatePropagation(); e.preventDefault();
 }, true);
