@@ -592,7 +592,7 @@ export class Table {
   }
 
   applySettings(patch) {
-    if (this.inRound()) { this.pendingSettings = patch; return; }
+    if (this.inRound()) { this.pendingSettings = { ...(this.pendingSettings || {}), ...patch }; return; }
     this.pendingSettings = null;
     // Someone may have sat down in a seat that was going away while the vote or the round was running.
     try { this.updateSettings(patch); } catch (e) { this.addLog(`The settings stay the same. ${e.message}`); return; }

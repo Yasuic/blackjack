@@ -1637,4 +1637,8 @@ body.view-hidden .zoom-ctl { display: none !important; }
 @media (max-width: 700px) { .hurry-pop.split { font-size: 17px; } }
 
 /* Phones: the shout buttons are part of the top row, as small picture only buttons. */
-@media (max-width: 700px) { body.in-room .hud-bar > .float-hurry span { display: none; } body.in-room .hud-bar > .float-hurry { padding: 0 6px; font-size: 14px; } }
+@media (max-width: 700px) { body.in-room .hud-bar > .float-hurry span { display: none; } body.in-room .hud-bar > .float-hurry { padding: 0 3px; font-size: 13px; border-radius: 8px; } }
+
+.float-insure { border-color: rgba(122,180,255,.75); color: #b9d6ff; }
+.hurry-pop.insure { border-color: #7ab4ff; background: rgba(4,12,28,.95); color: #dbe9ff; font-size: 24px; letter-spacing: 1.5px; }
+@media (max-width: 700px) { .hurry-pop.insure { font-size: 17px; } }
