@@ -1,4 +1,5 @@
 import { BacTable, bacRound, bacPay, bacTotal, verifyShoe, cardText } from '../js/baccarat.js';
+BacTable.noPeel = true; // the older checks below deal and pay in one step; the peel is checked at the end
 let fails = 0, n = 0;
 const ok = (c, m) => { n++; if (!c) { fails++; console.log('FAIL', m); } };
 const C = (s) => s.split(' ').map((x) => ({ r: x.slice(0, -1), s: x.slice(-1) }));
@@ -86,5 +87,46 @@ for (let bt = 0; bt <= 7; bt++) for (let v = 0; v <= 9; v++) {
   m.deal(); ok(m.phase === 'done' && m.pays.p0, 'moved table deals from a new shoe');
 }
 { const { bankChecks } = await import('./bank.helper.mjs'); bankChecks(ok, BacTable, ['player', 'banker', 'tie', 'ppair', 'bpair'], 'canDeal', 'deal'); }
+{ // the peel: cards are dealt face down, only the peeler of a side is told its cards, nobody else before they are turned
+  BacTable.noPeel = false;
+  let thirds = 0, leaks = 0, wrongWho = 0, paidEarly = 0, sums = 0, rounds = 0;
+  const t = new BacTable(); for (let i = 0; i < 4; i++) t.join('p' + i, 'P' + i);
+  for (let r = 0; r < 300; r++) {
+    for (let i = 0; i < 4; i++) if (t.players['p' + i].chips < 100) t.addChips('p' + i, 1000);
+    t.bet('p0', 'player', 20); t.bet('p1', 'player', 50); t.bet('p2', 'banker', 30); t.bet('p3', 'tie', 5);
+    const chipsBefore = t.chipsTotal();
+    t.deal(); rounds++;
+    if (t.phase !== 'peel' || t.peel.who.P !== 'p1' || t.peel.who.B !== 'p2') wrongWho++;
+    let guard = 0;
+    while (t.phase === 'peel' && guard++ < 20) {
+      const full = t.full, closed = t.peelKeys().filter((k) => !t.peel.open[k]);
+      for (const viewer of ['p0', 'p1', 'p2', 'p3', 'nobody']) {
+        const st = t.publicState(viewer), txt = JSON.stringify({ ...st, peel: { ...st.peel, mine: null } });
+        // no face down card may be in what a viewer is told, outside the peeler's own cards
+        for (const k of closed) { const c = full[k[0]][Number(k[1])]; if (st.hand[k[0]][Number(k[1])] !== null) leaks++; if (st.peel.mine[k] && t.peel.who[k[0]] !== viewer) leaks++; if (t.peel.who[k[0]] === viewer && (!st.peel.mine[k] || st.peel.mine[k].r !== c.r)) leaks++; }
+        if (t.peel.stage === 1 && (st.hand.P.length !== 2 || st.hand.B.length !== 2)) leaks++; // a third card is not shown to exist before the first four are turned
+        if ('full' in st || 'shoe' in st || txt.includes('"winner"') || Object.keys(st.pays).length) leaks++;
+      }
+      if (t.chipsTotal() !== chipsBefore) paidEarly++;
+      let threw = false; try { t.openCard('p0', closed[0]); } catch { threw = true; } if (!threw) leaks++; // p0 peels nothing
+      if (closed[0][0] === 'P') t.openCard('p1', closed[0]); else t.openCard('p2', closed[0]);
+      if (t.phase === 'peel' && t.peel.stage === 2) thirds++;
+    }
+    if (t.phase !== 'done' || !t.hand.winner) wrongWho++;
+    sums += t.ledgerSum();
+    t.next();
+  }
+  ok(wrongWho === 0, 'the largest bet on each side peels, and every round ends paid'); ok(leaks === 0, 'no face down card reaches a browser that may not see it');
+  ok(paidEarly === 0, 'no chips move before every card is turned'); ok(thirds > 50, 'third cards are peeled in a second step'); ok(sums === 0, 'the frozen ledger stays at zero through peels');
+  // nobody peels: the clock turns the cards one by one; a slow peeler is timed out
+  t.bet('p3', 'tie', 5); t.deal(); ok(t.peel.who.P === null && t.peel.who.B === null, 'no bet on Player or Banker: nobody peels');
+  let now = Date.now(), turns = 0; while (t.phase === 'peel' && turns < 20) { now += 700; if (t.peelTick(now)) turns++; }
+  ok(t.phase === 'done' && turns >= 4 && turns <= 6, 'the clock turns the cards one by one'); t.next();
+  t.bet('p1', 'player', 10); t.deal(); ok(!t.peelTick(Date.now() + 700) || t.peel.open.B0, 'the clock turns only the side nobody peels');
+  now = Date.now() + 13000; turns = 0; while (t.phase === 'peel' && turns < 20) { now += 13000; t.peelTick(now); turns++; } ok(t.phase === 'done', 'a slow peeler is timed out'); t.next();
+  t.bet('p1', 'player', 10); const had = t.chipsTotal(); t.deal(); const m = BacTable.fromPublic(t.publicState('p2'), 'p2');
+  ok(m.phase === 'betting' && m.chipsTotal() === had && !Object.keys(m.bets).length, 'a table that moves during a peel calls the round off and returns the bets');
+  BacTable.noPeel = true;
+}
 console.log(`${n - fails}/${n} baccarat checks passed`);
 process.exit(fails ? 1 : 0);

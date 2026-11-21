@@ -1,7 +1,7 @@
 // Baccarat (punto banco) for up to 9 players against the house. Pure rules: the host's browser owns one
 // BacTable and every bet goes through it. Nothing here touches the page or the network.
-import { sha256, fairShoe, MAX_CHIPS } from './game.js?v=20261121r';
-import { isFrozen, bankJoin, setBank, clearBank, bankGone, bankSettle, ledgerNet, ledgerSum, bankAdopt } from './bank.js?v=20261121r';
+import { sha256, fairShoe, MAX_CHIPS } from './game.js?v=20261121s';
+import { isFrozen, bankJoin, setBank, clearBank, bankGone, bankSettle, ledgerNet, ledgerSum, bankAdopt } from './bank.js?v=20261121s';
 
 export const BAC_SEATS = 9;
 export const BAC_DEFAULTS = {
@@ -210,6 +210,51 @@ export class BacTable {
     if (!this.cur || this.shoe.length < 16) this.newShoe();
     this.round++;
     const res = bacRound(() => this.draw());
+    // The cards are dealt face down. Nobody's browser is told a card before it is turned over, except the player
+    // who peels that side (the largest bet on Player or on Banker), who is told only the cards of that side.
+    const top = (spot) => { let best = null, amt = 0; for (const id of Object.keys(this.bets)) { const b = this.bets[id][spot] || 0; if (b > amt && this.players[id] && !this.players[id].kicked) { amt = b; best = id; } } return best; };
+    this.full = res;
+    this.peel = { stage: 1, open: { P0: false, B0: false, P1: false, B1: false }, who: { P: BacTable.noPeel ? null : top('player'), B: BacTable.noPeel ? null : top('banker') }, at: Date.now(), last: Date.now() };
+    this.hand = null;
+    this.phase = 'peel';
+    if (BacTable.noPeel) { for (const k of Object.keys(this.peel.open)) this.peel.open[k] = true; this.peelAdvance(); }
+  }
+  // The keys of the cards on the table now, in the order they are turned when nobody peels them.
+  peelKeys() { return this.peel ? ['P0', 'B0', 'P1', 'B1', 'P2', 'B2'].filter((k) => k in this.peel.open) : []; }
+  // A player turns one card of the side they peel.
+  openCard(id, key) {
+    if (this.phase !== 'peel' || !(key in this.peel.open) || this.peel.open[key]) return false;
+    if (this.peel.who[key[0]] !== id) throw new Error('This card is not yours to turn.');
+    this.peel.open[key] = true; this.peel.last = Date.now();
+    this.peelAdvance();
+    return true;
+  }
+  // The host's clock: cards nobody peels turn one by one, and a peeler who takes too long has the cards turned for them.
+  peelTick(now = Date.now(), wait = 12000, step = 650) {
+    if (this.phase !== 'peel') return false;
+    const closed = this.peelKeys().filter((k) => !this.peel.open[k]);
+    const auto = closed.find((k) => !this.peel.who[k[0]] || this.players[this.peel.who[k[0]]]?.connected === false || now - this.peel.at >= wait);
+    if (!auto || now - this.peel.last < step) return false;
+    this.peel.open[auto] = true; this.peel.last = now;
+    this.peelAdvance();
+    return true;
+  }
+  peelAdvance() {
+    const p = this.peel;
+    if (Object.values(p.open).some((v) => !v)) return;
+    if (p.stage === 1 && (this.full.P[2] || this.full.B[2])) {
+      p.stage = 2; p.at = Date.now(); p.last = Date.now();
+      if (this.full.P[2]) p.open.P2 = false;
+      if (this.full.B[2]) p.open.B2 = false;
+      if (BacTable.noPeel) { for (const k of Object.keys(p.open)) p.open[k] = true; this.finish(); }
+      return;
+    }
+    this.finish();
+  }
+  // Every card is face up: pay the bets.
+  finish() {
+    const res = this.full;
+    this.full = null; this.peel = null;
     this.hand = res;
     this.pays = {};
     let allStaked = 0, allBack = 0;
@@ -244,17 +289,24 @@ export class BacTable {
     const tot = { player: 0, banker: 0, tie: 0, ppair: 0, bpair: 0 };
     for (const b of Object.values(this.bets)) for (const k of BAC_KEYS) tot[k] += b[k] || 0;
     return {
-      game: 'baccarat', settings: this.settings, phase: this.phase, round: this.round, hostId: this.hostId, hand: this.hand, pays: this.pays,
+      game: 'baccarat', settings: this.settings, phase: this.phase, round: this.round, hostId: this.hostId, hand: this.phase === 'peel' ? this.peelView() : this.hand, pays: this.pays,
+      peel: this.phase === 'peel' ? { stage: this.peel.stage, open: { ...this.peel.open }, who: { ...this.peel.who }, left: Math.max(0, 12000 - (Date.now() - this.peel.at)),
+        mine: Object.fromEntries(this.peelKeys().filter((k) => !this.peel.open[k] && this.peel.who[k[0]] === forId).map((k) => [k, this.full[k[0]][Number(k[1])]])) } : null,
       bets: this.bets, lastBets: this.lastBets, totals: tot, canDeal: this.canDeal(), history: this.history.slice(-72),
       betLeft: this.betStart !== null && this.settings.betTime ? Math.max(0, this.settings.betTime * 1000 - (Date.now() - this.betStart)) : null,
       cardsLeft: undefined, shoeNo: this.shoeNo,
       players: Object.values(this.players).filter((p) => !p.kicked).map((p) => ({ id: p.id, name: p.name, connected: p.connected, chips: p.chips, totalIn: p.totalIn, look: p.look, seat: p.seat, net: ledgerNet(this, p), base: this.base?.[p.id] || null })),
       bankId: this.bankId, frozen: this.frozen, roundFrozen: !!this.roundFrozen, ledgerSum: this.ledgerSum(),
       fair: { nextCommit: this.fair.next.commit, mySeed: !!this.fair.seeds[forId], seeds: Object.keys(this.fair.seeds).filter((id) => id !== this.hostId).length,
-        cur: this.cur ? { shoe: this.cur.shoe, commit: this.cur.commit, decks: this.cur.decks, dealt: this.cur.dealt.length } : null,
+        cur: this.cur ? { shoe: this.cur.shoe, commit: this.cur.commit, decks: this.cur.decks, dealt: this.cur.dealt.length - (this.full ? this.full.P.length + this.full.B.length : 0) } : null, // cards of a round still face down are not counted yet: the count would tell if a third card is coming
         past: this.past.map((r) => ({ shoe: r.shoe, commit: r.commit, serverSeed: r.serverSeed, clientSeeds: r.clientSeeds, decks: r.decks, dealt: r.dealt })) },
       log: this.log.slice(-50),
     };
+  }
+  // During the peel: only the cards already turned. A card still face down is null, and a third card not yet dealt is left out.
+  peelView() {
+    const side = (k) => this.peelKeys().filter((x) => x[0] === k).map((x) => (this.peel.open[x] ? this.full[k][Number(x[1])] : null));
+    return { P: side('P'), B: side('B'), peel: true };
   }
   static restore(j) { const t = new BacTable(); Object.assign(t, j); if (!('bankId' in j)) t.base = null; bankAdopt(t); return t; }
   // Another player's browser takes the table over from what everyone is told. Chips, bets and results stay;
@@ -267,6 +319,11 @@ export class BacTable {
     t.bankId = st.bankId || null; t.base = {}; t.roundFrozen = !!st.roundFrozen;
     for (const p of st.players) if (p.base) t.base[p.id] = { ...p.base };
     if (!('bankId' in st)) { t.base = null; bankAdopt(t); }
+    if (t.phase === 'peel') { // the face down cards were only in the old host's browser: the round is called off and every bet goes back
+      for (const id of Object.keys(t.bets)) if (t.players[id]) t.players[id].chips = r2(t.players[id].chips + t.staked(id));
+      t.bets = {}; t.phase = 'betting'; t.hand = null; t.round = Math.max(0, t.round - 1);
+      t.addLog('The table moved to a new host while cards were face down. That round is called off and the bets went back.');
+    }
     if (t.canDeal()) t.betStart = Date.now();
     if (t.phase === 'done') t.doneAt = Date.now();
     return t;

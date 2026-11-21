@@ -1,8 +1,8 @@
 // The baccarat page: a punto banco table for up to 9 in the small meeting room. The host's browser runs
 // the table (js/baccarat.js); every other browser sends its bets there and is told only what it may see.
-import { BacTable, BAC_SEATS, BAC_SPOTS, BAC_KEYS, verifyShoe, cardText } from './baccarat.js?v=20261121r';
-import { webglOK, initRoom } from './room3d.js?v=20261121r';
-import { params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML } from './common.js?v=20261121r';
+import { BacTable, BAC_SEATS, BAC_SPOTS, BAC_KEYS, verifyShoe, cardText } from './baccarat.js?v=20261121s';
+import { webglOK, initRoom } from './room3d.js?v=20261121s';
+import { params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML } from './common.js?v=20261121s';
 
 const PREFIX = 'bjt-bc-';
 const app = $('#app');
@@ -78,7 +78,7 @@ function hostMsg(id, m) {
   try {
     if (m.t === 'hello') { if (t.players[id]?.kicked) { S.net.send(id, { t: 'kicked' }); return; } t.join(id, m.name, m.look); }
     else if (!t.players[id] || t.players[id].kicked) return;
-    else doMove(id, m);
+    else if (doMove(id, m) === 'quiet') return; // a peel in motion changes nothing at the table
   } catch (e) { S.net.send(id, { t: 'err', msg: e.message }); }
   push();
 }
@@ -91,6 +91,8 @@ function doMove(id, m) {
     case 'add': t.addChips(id, m.amount); break;
     case 'take': t.takeChips(id, m.amount); break;
     case 'bank': if (m.on) t.setBank(id); else if (id === t.bankId || id === t.hostId) t.clearBank(id); break;
+    case 'peel': t.openCard(id, String(m.key)); break;
+    case 'peelmove': relayPeel(id, String(m.key), Number(m.f)); return 'quiet';
     case 'seed': t.setClientSeed(id, m.seed, m.commit); break;
     case 'fx': relayFx(id, m.e); break;
     default: break;
@@ -126,7 +128,7 @@ function push() {
   render();
 }
 // How long a finished round stays on screen: the cards come out one by one, then the result is shown.
-const showMs = (hand) => (hand ? (hand.P.length + hand.B.length + 1) * STEP() + 3800 : 0);
+const showMs = () => 4500; // every card is already face up when a round is done: the result stays this long
 function hostClock() {
   const t = S.table;
   if (!t) return;
@@ -134,7 +136,8 @@ function hostClock() {
   if (S.pendingSettings && t.phase === 'betting' && !t.canDeal()) { t.updateSettings(S.pendingSettings); S.pendingSettings = null; push(); }
   if (t.phase === 'betting') {
     if (!S.paused && t.settings.betTime && t.betStart !== null && now - t.betStart >= t.settings.betTime * 1000 && t.canDeal()) { t.deal(); push(); }
-  } else if (now - (t.doneAt || 0) >= showMs(t.hand)) { t.next(); push(); }
+  } else if (t.phase === 'peel') { if (t.peelTick(now)) push(); }
+  else if (now - (t.doneAt || 0) >= showMs(t.hand)) { t.next(); push(); }
 }
 
 // ---------- Guest ----------
@@ -151,6 +154,7 @@ function startGuest(code, again) {
       }
       else if (m.t === 'err') toast(m.msg);
       else if (m.t === 'fx') showFx(m.from, m.e);
+      else if (m.t === 'peelfx') setPeel(String(m.key), Number(m.f) || 0);
       else if (m.t === 'kicked') { S.net.close(); showLanding('The host removed you from the table.'); }
     },
     status: (text, ok) => { S.conn = [text, ok]; drawConn(); },
@@ -257,17 +261,23 @@ function seatAt(seat) {
 }
 // Where the round is in its show: how many cards are out, and whether the result is known yet.
 function stage(st) {
-  if (st.phase !== 'done' || !st.hand) return null;
-  const total = st.hand.P.length + st.hand.B.length;
-  if (S.show?.round !== st.round) {
-    S.show = { round: st.round, t0: Date.now() - Math.max(0, 0) };
-    for (let k = 1; k <= total + 1; k++) setTimeout(render, k * STEP() + 30);
-  }
-  const k = Math.min(total + 1, Math.floor((Date.now() - S.show.t0) / STEP()) + 1);
-  // Order the cards come out: Player, Banker, Player, Banker, then Player's third, then Banker's third.
-  const order = ['P0', 'B0', 'P1', 'B1']; if (st.hand.P[2]) order.push('P2'); if (st.hand.B[2]) order.push('B2');
-  const out = new Set(order.slice(0, k));
-  return { out, final: k > total };
+  if (st.phase === 'betting' || !st.hand) return null;
+  if (st.phase === 'peel') return { out: new Set(Object.keys(st.peel.open).filter((k) => st.peel.open[k])), final: false };
+  const out = new Set(['P0', 'B0', 'P1', 'B1']); if (st.hand.P[2]) out.add('P2'); if (st.hand.B[2]) out.add('B2');
+  return { out, final: true };
+}
+// A card being peeled: how far its corner is lifted (0 to 1), by card. The peeler's browser sets it while dragging,
+// the others are told through the host. The face of the card is only in the peeler's browser until it is turned.
+function relayPeel(id, key, f) {
+  const t = S.table;
+  if (!t || t.phase !== 'peel' || t.peel.who[key[0]] !== id || !(f >= 0 && f <= 1)) return;
+  for (const pid of S.net.ids()) if (pid !== id) S.net.send(pid, { t: 'peelfx', key, f });
+  if (id !== S.myId) setPeel(key, f);
+}
+function setPeel(key, f) {
+  (S.peelF ||= {})[key] = f;
+  const el = document.querySelector(`.bc-peel[data-key="${key}"]`);
+  if (el) el.style.setProperty('--f', Math.min(0.6, f));
 }
 const spotName = (k) => BAC_SPOTS[k].name;
 // While the cards come out, a player's chips are shown as they were before the payout, so the result is not given away early.
@@ -282,14 +292,16 @@ function render() {
     return;
   }
   const me = st.players.find((p) => p.id === S.myId);
-  const sg = stage(st), done = st.phase === 'done', final = done && sg?.final;
+  const sg = stage(st), done = st.phase !== 'betting', final = st.phase === 'done';
+  if (S.peelRound !== st.round) { S.peelRound = st.round; S.peelF = {}; }
+  const pl = st.peel;
   const hand = st.hand;
   const side = (key, label, cards) => {
     const shown = cards.map((c, i) => (sg.out.has(key + i) ? c : null));
     const seen = shown.filter(Boolean);
     const total = seen.reduce((a, c) => a + (c.r === 'A' ? 1 : ['10', 'J', 'Q', 'K'].includes(c.r) ? 0 : Number(c.r)), 0) % 10;
     const won = final && hand.winner === (key === 'P' ? 'player' : 'banker');
-    return `<div class="bc-side ${key === 'P' ? 'p' : 'b'}${won ? ' won' : ''}"><b>${label}</b><div class="bc-cards">${shown.map((c, i) => (c ? cardHTML(c, 'bcard' + (i === 2 ? ' third' : '')) : sg.out.size >= 0 && i < 2 ? cardHTML(null, 'bcard') : '')).join('')}</div><span class="bc-total">${seen.length ? total : ''}</span></div>`;
+    return `<div class="bc-side ${key === 'P' ? 'p' : 'b'}${won ? ' won' : ''}"><b>${label}</b><div class="bc-cards">${shown.map((c, i) => { if (c) return cardHTML(c, 'bcard' + (i === 2 ? ' third' : '')); const k = key + i, mine = pl?.mine?.[k]; return `<div class="bc-peel${mine ? ' mine' : ' watch'}${i === 2 ? ' third' : ''}" data-key="${k}"${mine ? ' data-act="peel"' : ''} style="--f:${Math.min(0.6, S.peelF?.[k] || 0)}">${mine ? cardHTML(mine, 'bcard face') : '<div class="card bcard blank"></div>'}${cardHTML(null, 'bcard cover')}</div>`; }).join('')}</div><span class="bc-total">${seen.length ? total : ''}</span></div>`;
   };
   let h = '';
   // The cards: Player on the left, Banker on the right.
@@ -348,14 +360,18 @@ function roadHTML(st) {
 }
 function drawHud(st, me, sg) {
   const tray = $('#tray'), top = $('#hud-top');
-  const isHost = S.role === 'host', done = st.phase === 'done';
+  const isHost = S.role === 'host', done = st.phase !== 'betting';
   const staked = st.bets[S.myId] ? BAC_KEYS.reduce((a, k) => a + (st.bets[S.myId][k] || 0), 0) : 0;
   let status;
-  if (done && !sg?.final) status = 'No more bets. The cards are coming out…';
-  else if (done) { const pay = st.pays[S.myId]; status = pay ? (pay.net > 0 ? `${st.roundFrozen ? 'Practice: you' : 'You'} won ${money(pay.net)}` : pay.net < 0 ? `${st.roundFrozen ? 'Practice: you' : 'You'} lost ${money(-pay.net)}` : 'Push: your bet comes back') : 'Round over'; }
+  if (st.phase === 'peel') {
+    const pl = st.peel, mine = Object.keys(pl.mine || {}).length, nm = (id) => esc(st.players.find((p) => p.id === id)?.name || '');
+    const who = ['P', 'B'].filter((k) => pl.who[k] && Object.keys(pl.open).some((x) => x[0] === k && !pl.open[x])).map((k) => `${nm(pl.who[k])} (${k === 'P' ? 'Player' : 'Banker'})`);
+    status = mine ? 'Your cards: drag a corner to peel, or tap to turn it over' : who.length ? `${who.join(' and ')} ${who.length > 1 ? 'are' : 'is'} peeling…` : 'No more bets. The cards are coming out…';
+  }
+  else if (st.phase === 'done') { const pay = st.pays[S.myId]; status = pay ? (pay.net > 0 ? `${st.roundFrozen ? 'Practice: you' : 'You'} won ${money(pay.net)}` : pay.net < 0 ? `${st.roundFrozen ? 'Practice: you' : 'You'} lost ${money(-pay.net)}` : 'Push: your bet comes back') : 'Round over'; }
   else if (st.betLeft !== null) status = `Place your bets · <b id="bc-left">${Math.max(0, Math.ceil((st.betLeft - (Date.now() - S.at)) / 1000))}</b> s`;
   else status = st.canDeal ? (isHost ? 'Bets are down. Press Deal.' : 'Waiting for the host to deal.') : me && me.seat < 0 ? 'The table is full. You are watching.' : 'Pick a chip, then tap Player, Banker or Tie.';
-  if (st.bankId === S.myId && !done) status = st.betLeft !== null ? `You are the dealer · <b id="bc-left">${Math.max(0, Math.ceil((st.betLeft - (Date.now() - S.at)) / 1000))}</b> s` : 'You are the dealer. You pay the winners and take the losing bets.';
+  if (st.bankId === S.myId && st.phase === 'betting') status = st.betLeft !== null ? `You are the dealer · <b id="bc-left">${Math.max(0, Math.ceil((st.betLeft - (Date.now() - S.at)) / 1000))}</b> s` : 'You are the dealer. You pay the winners and take the losing bets.';
   top.innerHTML = `${bankBarHTML(st, S.myId, isHost)}<div class="status">${status}</div>`;
   let h = roadHTML(st);
   h += `<div class="bc-chips">${CHIPS.map((v) => `<button class="bc-chip c${v}${S.chip === v ? ' on' : ''}" data-act="chip" data-v="${v}">${v}</button>`).join('')}</div>`;
@@ -426,6 +442,28 @@ function fairHTML(st) {
 function copyLink() {
   const link = shareLink();
   (navigator.clipboard?.writeText(link) || Promise.reject()).then(() => toast('Invite link copied.')).catch(() => { modal(`<h3>Invite link</h3><input readonly value="${esc(link)}" style="width:100%" />`); });
+}
+// Peeling a card: press it and drag. The corner lifts as far as you drag; let go past half way, or just tap, and it turns over.
+{
+  let pd = null, lastSent = 0;
+  const tell = (key, f, force) => { const now = Date.now(); if (!force && now - lastSent < 90) return; lastSent = now; if (S.role === 'host') relayPeel(S.myId, key, f); else S.net?.send({ t: 'peelmove', key, f }); };
+  document.addEventListener('pointerdown', (e) => { const el = e.target.closest?.('.bc-peel.mine'); if (!el) return; pd = { key: el.dataset.key, x: e.clientX, y: e.clientY, w: el.getBoundingClientRect().width || 60, f: 0, moved: false }; e.preventDefault(); }, true);
+  document.addEventListener('pointermove', (e) => {
+    if (!pd) return;
+    const d = Math.hypot(e.clientX - pd.x, e.clientY - pd.y);
+    if (d > 4) pd.moved = true;
+    pd.f = Math.max(0, Math.min(1, d / (pd.w * 1.6)));
+    (S.peelF ||= {})[pd.key] = pd.f;
+    const el = document.querySelector(`.bc-peel[data-key="${pd.key}"]`); if (el) el.style.setProperty('--f', Math.min(0.6, pd.f));
+    tell(pd.key, pd.f);
+  }, true);
+  const up = () => {
+    if (!pd) return;
+    const { key, f, moved } = pd; pd = null;
+    if (!moved || f >= 0.5) send({ t: 'peel', key });
+    else { (S.peelF ||= {})[key] = 0; const el = document.querySelector(`.bc-peel[data-key="${key}"]`); if (el) el.style.setProperty('--f', 0); tell(key, 0, true); }
+  };
+  document.addEventListener('pointerup', up, true); document.addEventListener('pointercancel', up, true);
 }
 document.addEventListener('click', (e) => {
   const el = e.target.closest('[data-act]');

@@ -539,3 +539,13 @@ body.game-pk.room3d .html-top .felt.pfelt::after { display: none; }
 body.room-fp.room3d .pfelt:not(.tall) .pk-seat { scale: var(--ds, 1); }
 body.room-fp.room3d .pfelt:not(.tall) .pk-bubble { margin-bottom: calc(2px * var(--k)); }
 body.room-fp.room3d .felt.pfelt:not(.tall) { --k: 1.5; }
+
+/* Baccarat: a face down card that is peeled. The cover (card back) is cut away from the top left corner as it lifts. */
+.bc-peel { position: relative; width: var(--cw); height: calc(var(--cw) * 1.4); flex: none; touch-action: none; pointer-events: auto; }
+.bc-peel > .card { position: absolute; inset: 0; margin: 0; }
+.bc-peel .card.blank { background: #f3f1ea; border-radius: calc(var(--cw) * .09); }
+.bc-peel .card.cover { clip-path: polygon(calc(var(--f, 0) * 165%) 0, 100% 0, 100% 100%, 0 100%, 0 calc(var(--f, 0) * 120%)); filter: drop-shadow(-2px -2px 3px rgba(0,0,0,.5)); }
+.bc-peel.mine { cursor: grab; box-shadow: 0 0 0 calc(2px * var(--k, 1)) #ffe08a, 0 0 calc(14px * var(--k, 1)) rgba(255,224,138,.8); border-radius: calc(var(--cw) * .09); animation: bcPeelMe 1.1s ease-in-out infinite; }
+.bc-peel.mine:active { cursor: grabbing; animation: none; }
+@keyframes bcPeelMe { 50% { box-shadow: 0 0 0 calc(3px * var(--k, 1)) #fff3c4, 0 0 calc(24px * var(--k, 1)) rgba(255,224,138,1); } }
+.bc-peel.third { transform: rotate(90deg); margin: 0 calc(var(--cw) * .2); }
