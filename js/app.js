@@ -1,14 +1,14 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261121za';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261121za';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261121za';
-import { tickSound, winSound } from './fx.js?v=20261121za';
-import * as HX from './history.js?v=20261121za';
-import { webglOK, initRoom } from './room3d.js?v=20261121za';
-import { watchOffice } from './common.js?v=20261121za';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261121za';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261121zb';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261121zb';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261121zb';
+import { tickSound, winSound } from './fx.js?v=20261121zb';
+import * as HX from './history.js?v=20261121zb';
+import { webglOK, initRoom } from './room3d.js?v=20261121zb';
+import { watchOffice } from './common.js?v=20261121zb';
+import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261121zb';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -2886,7 +2886,7 @@ function rulesHTML() {
       return `<div><h4>${sb.icon || ''} ${sb.name}</h4><p>${esc(sb.about)}</p><table>${sb.table.map(([l, m]) => `<tr><td>${esc(l)}</td><td>${m} to 1</td></tr>`).join('')}</table></div>`;
     }).join('')}
     <div><h4>Insurance</h4><p>Offered when the dealer shows an ace. Costs half your main bet.</p><table><tr><td>Dealer has blackjack</td><td>2 to 1</td></tr></table></div>
-    <div><h4>Main game</h4><p>Blackjack pays 3 to 2. Double on any first two cards, also after a split. Split every pair, with no limit on the number of hands; split aces get one card each. Surrender gives back half your bet when the host allows it.</p><p>Chips are whole. With an odd bet, a win or a refund is rounded down and insurance is rounded up. A blackjack on 25 pays 37, and insurance on 25 costs 13.</p></div>
+    <div><h4>Main game</h4><p>Blackjack pays 3 to 2. Double on any first two cards, also after a split. Split every pair, with no limit on the number of hands; split aces get one card each, and an ace that gets another ace can be split again. Surrender gives back half your bet when the host allows it.</p><p>Chips are whole. With an odd bet, a win or a refund is rounded down and insurance is rounded up. A blackjack on 25 pays 37, and insurance on 25 costs 13.</p></div>
   </div>`;
 }
 

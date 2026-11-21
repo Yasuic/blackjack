@@ -516,3 +516,29 @@ console.log('ok two seats');
   if (t.settings.maxBet !== 100 || t.settings.maxSideBet !== 20 || t.seats[0].bet.sides.hot3 !== 20) throw new Error('dealer side max not applied');
   console.log('ok dealer max');
 }
+
+// Split aces: one card each, no hit and no double; an ace that gets another ace can be split again.
+{
+  const t = new G.Table({ startChips: 1000 });
+  t.hostId = 'a'; t.frozen = true;
+  t.join('a', 'Ann', 1000); t.sit('a', 0);
+  t.setBet('a', { main: 100, sides: {}, ready: true });
+  t.deal();
+  let g = 0; while (t.phase === 'insurance' && g++ < 5) t.forceInsurance();
+  if (t.phase === 'playing') {
+    const seat = t.seats[0];
+    seat.hands[0].cards = cs('A♠ A♦'); seat.hands[0].done = false; t.turn = { seat: 0, hand: 0 };
+    const next = cs('A♣ 9♥ K♠ 5♦'); t.draw = () => next.shift();
+    assert.ok(t.allowedActions('a').includes('split'));
+    t.action('a', 'split'); // hands: A A (may split again), A 9 (done)
+    assert.equal(seat.hands.length, 2); assert.deepEqual(t.turn, { seat: 0, hand: 0 });
+    assert.deepEqual(t.allowedActions('a').sort(), ['split', 'stand']);
+    assert.throws(() => t.action('a', 'hit')); assert.throws(() => t.action('a', 'double'));
+    t.action('a', 'split'); // hands: A K, A 5, A 9, all done with one card each
+    assert.equal(seat.hands.length, 3);
+    assert.ok(seat.hands.every((h) => h.cards.length === 2 && h.done && h.splitAces));
+    assert.equal(t.players.a.chips, 700);
+    assert.notEqual(t.phase, 'playing');
+  }
+  console.log('ok resplit aces');
+}

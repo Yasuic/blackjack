@@ -1144,10 +1144,12 @@ export class Table {
     if (!p || this.seats[this.turn.seat]?.playerId !== clientId) return [];
     const seat = this.seats[this.turn.seat];
     const h = seat.hands[this.turn.hand];
-    const acts = ['hit', 'stand'];
     const two = h.cards.length === 2;
-    if (two && !h.splitAces && p.chips >= h.bet) acts.push('double');
-    if (two && cardValue(h.cards[0]) === cardValue(h.cards[1]) && p.chips >= h.bet && !h.splitAces) acts.push('split');
+    // A split ace got its one card. It is only still in play when that card is another ace: split again or stand.
+    if (h.splitAces) return two && h.cards[0].r === 'A' && h.cards[1].r === 'A' && p.chips >= h.bet ? ['stand', 'split'] : ['stand'];
+    const acts = ['hit', 'stand'];
+    if (two && p.chips >= h.bet) acts.push('double');
+    if (two && cardValue(h.cards[0]) === cardValue(h.cards[1]) && p.chips >= h.bet) acts.push('split');
     if (two && seat.hands.length === 1 && this.settings.allowSurrender) acts.push('surrender');
     return acts;
   }
@@ -1189,8 +1191,9 @@ export class Table {
       h.cards.push(this.draw());
       second.cards.push(this.draw());
       if (aces) {
+        // Split aces get one card each. An ace that gets another ace may be split again, if the chips are there.
         h.splitAces = second.splitAces = true;
-        h.done = second.done = true;
+        for (const x of [h, second]) x.done = !(x.cards[1].r === 'A' && p.chips >= x.bet);
       } else {
         if (handTotal(h.cards).total === 21) h.done = true;
         if (handTotal(second.cards).total === 21) second.done = true;

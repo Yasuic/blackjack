@@ -1,11 +1,11 @@
 // The poker page: a Texas Hold'em table for up to 9 in the big meeting room. The host's browser runs
 // the table (js/poker.js); every other browser sends its moves there and is told only what it may see.
-import { PokerTable, POKER_SEATS, pokerDeck, cardText } from './poker.js?v=20261121za';
-import { sha256 } from './game.js?v=20261121za';
-import { botMove, isBot, BOT_NAMES } from './pokerbot.js?v=20261121za';
-import { chipSound, cardSound, hitSound, standSound, potSound, tickSound, turnSound } from './fx.js?v=20261121za';
-import { webglOK, initRoom } from './room3d.js?v=20261121za';
-import { params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame } from './common.js?v=20261121za';
+import { PokerTable, POKER_SEATS, pokerDeck, cardText } from './poker.js?v=20261121zb';
+import { sha256 } from './game.js?v=20261121zb';
+import { botMove, isBot, BOT_NAMES } from './pokerbot.js?v=20261121zb';
+import { chipSound, cardSound, hitSound, standSound, potSound, tickSound, turnSound } from './fx.js?v=20261121zb';
+import { webglOK, initRoom } from './room3d.js?v=20261121zb';
+import { params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame } from './common.js?v=20261121zb';
 
 const PREFIX = 'bjt-pk-';
 const app = $('#app');
