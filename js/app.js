@@ -1,13 +1,13 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261121b';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261121b';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261121b';
-import { tickSound, winSound } from './fx.js?v=20261121b';
-import * as HX from './history.js?v=20261121b';
-import { webglOK, initRoom } from './room3d.js?v=20261121b';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261121b';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261121c';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261121c';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261121c';
+import { tickSound, winSound } from './fx.js?v=20261121c';
+import * as HX from './history.js?v=20261121c';
+import { webglOK, initRoom } from './room3d.js?v=20261121c';
+import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261121c';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -243,7 +243,7 @@ function wireHostPeer(peer, attempt) {
     conn.on('data', (msg) => onHostMessage(conn, msg));
     conn.on('close', () => connLost(conn));
   });
-  peer.on('disconnected', () => { S.online = !!S.relay?.open; render(); setTimeout(keepAlive, 1500); });
+  peer.on('disconnected', () => { if (S.role !== 'host' || S.peer !== peer) return; /* an old host link that was closed on purpose */ S.online = !!S.relay?.open; render(); setTimeout(keepAlive, 1500); });
   peer.on('error', (e) => {
     if (e.type === 'unavailable-id' && S.role === 'host' && (attempt >= 6 || attempt === 99)) {
       // The table's name is held by someone else for good: while this browser was away, another
@@ -1818,6 +1818,22 @@ function seatLayout(n, c, { W, H, phone, flip, round, noFocus, in3d }) {
 function phoneLayout(n, c, { W, H, flip, noFocus, pct, in3d }) {
   const B = SEAT_BOX.phone;
   const out = new Array(n);
+  // The dealer in the 3D room on a phone: the seats follow the rounded far end of the table, one after
+  // another along its edge, so every seat is in front of the player who holds it and none is cut off.
+  if (noFocus && flip && in3d) {
+    const base = H * 0.8, lim = (n > 5 ? 82 : n > 3 ? 70 : 50) * Math.PI / 180;
+    const at = (pos, s) => {
+      const ax = W / 2 - 8 - (B.mw * s) / 2, by = base - 12 - (B.mh * s) / 2;
+      const th = n === 1 ? 0 : -lim + (2 * lim * pos) / (n - 1);
+      return { x: W / 2 + ax * Math.sin(th), y: base - by * Math.cos(th) };
+    };
+    // The largest tile size at which no two neighbours touch.
+    let s = 1;
+    const fits = (k) => { for (let pos = 1; pos < n; pos++) { const p = at(pos - 1, k), q = at(pos, k); if (Math.abs(q.x - p.x) < B.mw * k + 3 && Math.abs(q.y - p.y) < B.mh * k + 3) return false; } return true; };
+    while (s > 0.5 && !fits(s)) s -= 0.04;
+    for (let pos = 0; pos < n; pos++) { const p = at(pos, s); out[pos] = { x: pct(p.x, W), y: pct(p.y + (B.mh * s) / 2, H), s: Math.round(s * 1000) / 1000, r: 0, mode: 'mini', hw: B.mw - 4, hh: 66 }; }
+    return out;
+  }
   if (noFocus) {
     const per = Math.max(1, Math.min(n, Math.floor((W - 2 * B.side) / (B.mw + 4))));
     const rows = Math.ceil(n / per);

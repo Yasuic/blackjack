@@ -1642,3 +1642,19 @@ body.view-hidden .zoom-ctl { display: none !important; }
 .float-insure { border-color: rgba(122,180,255,.75); color: #b9d6ff; }
 .hurry-pop.insure { border-color: #7ab4ff; background: rgba(4,12,28,.95); color: #dbe9ff; font-size: 24px; letter-spacing: 1.5px; }
 @media (max-width: 700px) { .hurry-pop.insure { font-size: 17px; } }
+
+/* Phone: the dealer's own panel (text, maximum bets, leave button) stays inside the screen width. */
+@media (max-width: 700px) {
+  #tray .tray-msg { width: auto !important; max-width: 100%; min-width: 0; box-sizing: border-box; white-space: normal; }
+  #tray .actions.dealer-max { flex-wrap: wrap !important; justify-content: center; gap: 5px 6px; max-width: 100%; min-width: 0; }
+  #tray .dealer-max input { width: 62px; padding: 5px 6px; }
+  #tray .dealer-max label { font-size: 11.5px; }
+  #tray .dealer-max .btn { padding: 5px 9px; font-size: 12px; white-space: nowrap; }
+}
+/* Phone top row: seven buttons must fit on every phone width, so the text stops growing and the row may squeeze. */
+@media (max-width: 700px) {
+  body.in-room .hud-bar { font-size: clamp(10px, 2.7vw, 11.5px); gap: 2px; padding-left: 4px; padding-right: 4px; }
+  body.in-room .hud-bar > .float-hurry { padding: 0 2px; }
+  body.in-room .hud-bar > button, body.in-room .hud-bar > .sb-guide > summary { padding-left: 6px; padding-right: 6px; }
+  body.in-room .hud-bar > .float-throw, body.in-room .hud-bar > .sb-guide, body.in-room .hud-bar > .ledger { flex: 0 1 auto; min-width: 0; overflow: hidden; }
+}
