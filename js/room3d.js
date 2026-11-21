@@ -151,7 +151,7 @@ function buildOffice(signText, midShift = 0, midScale = 1) {
     chrome: mk({ color: '#b9bec4', roughness: 0.25, metalness: 0.9 }),
     screen: mk({ color: '#0d0f12', roughness: 0.25, metalness: 0.2 }),
     // What the office screens show: the ARC Group logo, from the photo of it, lit like a screen that is on.
-    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261121c'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
+    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261121d'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
     dark: mk({ color: '#30353c', roughness: 0.6 }),
   };
   const group = new THREE.Group();
@@ -309,12 +309,44 @@ function buildOffice(signText, midShift = 0, midScale = 1) {
         g.strokeStyle = '#2bd66b'; g.lineWidth = 4; g.beginPath(); let y = 220; for (let x = 20; x < 400; x += 12) { y += Math.sin(x * 0.7) * 14 - 2.2; g.lineTo(x, y); } g.stroke();
         [['HSI', '+1.2%', 1], ['SPX', '-0.4%', 0], ['NKY', '+0.8%', 1], ['USDHKD', '7.78', 1], ['GOLD', '-0.3%', 0]].forEach(([n2, v, upq], q) => { g.fillStyle = '#fff'; g.font = `700 22px ${FONT}`; g.fillText(n2, 430, 80 + q * 44); g.fillStyle = upq ? '#2bd66b' : '#ff4d4d'; g.fillText(v, 540, 80 + q * 44); });
         g.fillStyle = '#ff9b1a'; g.fillRect(0, ch - 46, cw, 46); g.fillStyle = '#111'; g.font = `700 22px ${FONT}`; g.fillText('BREAKING: ANALYSTS STILL IN THE OFFICE AT 3AM', 14, ch - 22);
+      }) })) : f.id === 'tv1' ? (M.pokerTv ||= new THREE.MeshBasicMaterial({ map: canvasTexture(640, 360, (g, cw, ch) => { // the poker room's tournament screen
+        g.fillStyle = '#07130d'; g.fillRect(0, 0, cw, ch); g.fillStyle = '#0f6b3f'; g.fillRect(0, 0, cw, 64); g.textBaseline = 'middle'; g.textAlign = 'center';
+        g.fillStyle = '#f1c76a'; g.font = `700 36px ${FONT}`; g.fillText('ARC POKER ROOM', cw / 2, 34);
+        g.fillStyle = '#fff'; g.font = `700 26px ${FONT}`; g.fillText("NO LIMIT HOLD'EM", cw / 2, 104);
+        g.fillStyle = '#f1c76a'; g.font = `700 64px ${FONT}`; g.fillText('12:34', cw / 2, 178);
+        g.fillStyle = '#9fb3a7'; g.font = `700 20px ${FONT}`; g.fillText('NEXT LEVEL', cw / 2, 226);
+        g.fillStyle = '#fff'; g.font = `700 28px ${FONT}`; g.fillText('BLINDS 100 / 200', cw / 2, 270);
+        g.fillStyle = '#9fb3a7'; g.font = `700 20px ${FONT}`; g.fillText('7 PLAYERS  ·  AVG STACK 14,300', cw / 2, 320);
       }) })) : M.logo, X, 1.45, zc + 0.026 * face, false); return;
     }
     if (f.id === 'sv') { box(f.w, 0.95, f.d, M.dark, X, 0.475, Z); return; }
     surfaces.push(f);
     if (f.kind === 'marble') { box(f.w, 0.035, f.d, M.marble, X, Hh.desk - 0.0175, Z); cyl(0.035, 0.035, Hh.desk - 0.035, 10, M.chrome, X, (Hh.desk - 0.035) / 2, Z); box(0.42, 0.02, 0.42, M.leg, X, 0.01, Z); return; }
     if (f.kind === 'round') { cyl(f.w / 2, f.w / 2, 0.035, 32, M.wood, X, Hh.desk - 0.0175, Z); cyl(0.04, 0.04, Hh.desk - 0.05, 10, M.leg, X, (Hh.desk - 0.05) / 2, Z); cyl(0.28, 0.3, 0.03, 20, M.leg, X, 0.015, Z, false); return; }
+    if (f.id === 't1') { // the big meeting room is a poker room: a padded oval table with a green cloth, chips and cards
+      const P = (M.poker ||= { rail: mk({ color: '#2a1810', roughness: 0.75 }), felt: mk({ color: '#0f6b3f', roughness: 0.95 }), line: mk({ color: '#d9c27a', roughness: 0.6 }), back: mk({ color: '#b3202a', roughness: 0.5 }), card: mk({ color: '#fbfaf6', roughness: 0.5 }),
+        chips: ['#f4f4f0', '#c62828', '#1f8a4c', '#16181c', '#6a3fc4'].map((c) => mk({ color: c, roughness: 0.5 })) });
+      const top = Hh.desk, rad = Math.min(f.w, f.d) * 0.5;
+      const ring = roundRect(f.w + 0.2, f.d + 0.2, rad + 0.1); ring.holes.push(roundRect(f.w - 0.04, f.d - 0.04, rad - 0.02));
+      const rg = new THREE.ExtrudeGeometry(ring, { depth: 0.07, bevelEnabled: false, curveSegments: 14 }); rg.rotateX(-Math.PI / 2); emit(rg, P.rail, at(X, top - 0.045, Z), true);
+      const fg = new THREE.ExtrudeGeometry(roundRect(f.w, f.d, rad), { depth: 0.04, bevelEnabled: false, curveSegments: 14 }); fg.rotateX(-Math.PI / 2); emit(fg, P.felt, at(X, top - 0.04, Z), true);
+      [-1, 1].forEach((s) => { cyl(0.09, 0.12, top - 0.04, 14, P.rail, X, (top - 0.04) / 2, Z + s * f.d * 0.27); cyl(0.3, 0.32, 0.03, 18, M.leg, X, 0.015, Z + s * f.d * 0.27, false); });
+      // Five shared cards face up in the middle, the deck and the dealer button beside them.
+      const cw = 0.064, chh = 0.089, y = top + 0.0015;
+      for (let i = 0; i < 5; i++) box(chh, 0.002, cw, P.card, X, y, Z + (i - 2) * (cw + 0.012), false);
+      for (let i = 0; i < 5; i++) box(chh * 0.5, 0.0005, cw * 0.5, i % 2 ? P.back : P.rail, X + 0.012, y + 0.0013, Z + (i - 2) * (cw + 0.012), false); // the pips, as a small mark
+      box(chh, 0.012, cw, P.back, X - 0.2, top + 0.006, Z - 0.02, false, 0.3);
+      cyl(0.026, 0.026, 0.008, 16, P.card, X + 0.22, top + 0.004, Z + 0.3, false);
+      // A pot of chips in the middle and a stack row with two face down cards at every chair.
+      const stack = (x, z, n, m) => cyl(0.02, 0.02, 0.0034 * n, 12, P.chips[m % 5], x, top + 0.0017 * n, z, false);
+      [[0.16, 0.2, 9, 1], [0.2, 0.25, 6, 2], [0.13, 0.26, 4, 0], [0.18, 0.31, 7, 3], [0.23, 0.2, 3, 4]].forEach(([dx, dz, n, m]) => stack(X - dx, Z - dz, n, m));
+      D.chairs.filter((c) => c.room === 'bigBoard').forEach((c, k) => {
+        const side = Math.sign(-c.cx - X) || 1, ex = X + side * (f.w / 2 - 0.16), cz = -c.cy;
+        for (let j = 0; j < 4; j++) stack(ex, cz - 0.09 + j * 0.045, 4 + ((k * 3 + j * 5) % 9), k + j);
+        box(chh, 0.002, cw, P.back, ex - side * 0.11, y, cz + 0.02, false, 0.18); box(chh, 0.002, cw, P.back, ex - side * 0.11, y + 0.002, cz + 0.06, false, -0.12);
+      });
+      return;
+    }
     if (f.kind === 'rrect') {
       const g = new THREE.ExtrudeGeometry(roundRect(f.w, f.d, Math.min(f.w, f.d) * 0.45), { depth: 0.04, bevelEnabled: false, curveSegments: 12 });
       g.rotateX(-Math.PI / 2);
@@ -831,7 +863,7 @@ function buildStorefront() {
     lamp: lam('#c8161d', 0.6), bulb: lit('#ffe9a8'), red: lit('#c8161d'), gold: lit('#f4c542'), wood: lam('#7a5234', 0.35),
     glass: new THREE.MeshBasicMaterial({ color: '#dff3f7', transparent: true, opacity: 0.13, depthWrite: false }),
     awning: new THREE.MeshBasicMaterial({ map: canvasTexture(512, 64, (g, w, h) => { for (let i = 0; i < 16; i++) { g.fillStyle = i % 2 ? '#fff6e6' : '#f08a1c'; g.fillRect((i * w) / 16, 0, w / 16 + 1, h); } }), side: THREE.DoubleSide }),
-    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261121c') }),
+    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261121d') }),
     menu: new THREE.MeshBasicMaterial({ map: canvasTexture(256, 384, (g, w, h) => {
       g.fillStyle = '#c8161d'; g.fillRect(0, 0, w, h); g.fillStyle = '#f4c542'; g.fillRect(14, 14, w - 28, 44);
       const r = rng(11); g.fillStyle = '#fff3d6';
