@@ -1,10 +1,11 @@
 // The poker page: a Texas Hold'em table for up to 9 in the big meeting room. The host's browser runs
 // the table (js/poker.js); every other browser sends its moves there and is told only what it may see.
-import { PokerTable, POKER_SEATS, pokerDeck, cardText } from './poker.js?v=20261121w';
-import { sha256 } from './game.js?v=20261121w';
-import { chipSound, cardSound, hitSound, standSound, potSound, tickSound, turnSound } from './fx.js?v=20261121w';
-import { webglOK, initRoom } from './room3d.js?v=20261121w';
-import { params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame } from './common.js?v=20261121w';
+import { PokerTable, POKER_SEATS, pokerDeck, cardText } from './poker.js?v=20261121x';
+import { sha256 } from './game.js?v=20261121x';
+import { botMove, isBot, BOT_NAMES } from './pokerbot.js?v=20261121x';
+import { chipSound, cardSound, hitSound, standSound, potSound, tickSound, turnSound } from './fx.js?v=20261121x';
+import { webglOK, initRoom } from './room3d.js?v=20261121x';
+import { params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame } from './common.js?v=20261121x';
 
 const PREFIX = 'bjt-pk-';
 const app = $('#app');
@@ -104,6 +105,9 @@ function takeOver() {
   for (const p of Object.values(t.players)) if (p.id !== S.myId) S.goneAt[p.id] = now;
   S.role = 'host'; S.table = t; S.started = st.handNo > 0; S.paused = false; S.doneAt = 0;
   // Players still in the hand get a few seconds to hand in their cards before anyone can act.
+  // Computer players move with the table: their old cards stayed in the old host's browser, so they get two unseen cards.
+  for (const p of Object.values(t.players)) if (isBot(p.id)) { p.connected = true; delete S.goneAt[p.id]; }
+  for (const i of t.missingCards()) if (isBot(t.seats[i].id)) { try { t.redraw(i); } catch {} }
   S.waitFor = t.missingCards().map((i) => t.seats[i].id).filter((id) => id !== oldHost);
   S.waitUntil = now + 12000;
   t.waitCards = S.waitFor.length > 0;
@@ -196,7 +200,29 @@ function hostClock() {
   if (t.inHand()) {
     S.doneAt = 0;
     // The run it question waits 20 seconds for each step, then the board is dealt once.
-    if (t.runAsk && !t.runAsk.done) { if (now - t.runAsk.at > 20000) { t.runTimeout(); push(); } return; }
+    if (t.runAsk && !t.runAsk.done) {
+      // Computer players answer the run it question after a second: they deal once, and say yes to what a person asks.
+      const a = t.runAsk;
+      if (now - a.at > 1000) {
+        try {
+          if (!a.n && isBot(t.seats[a.by]?.id)) { t.runPick(t.seats[a.by].id, 1); push(); return; }
+          const b = a.n ? a.need.find((q) => !a.yes.includes(q) && isBot(t.seats[q]?.id)) : undefined;
+          if (b !== undefined) { t.runAnswer(t.seats[b].id, true); push(); return; }
+        } catch { /* the question was settled meanwhile */ }
+      }
+      if (now - a.at > 20000) { t.runTimeout(); push(); }
+      return;
+    }
+    if (t.turn !== null && isBot(t.seats[t.turn].id)) {
+      // A computer player's turn: it "thinks" for 0.6 to 1.4 seconds, then plays from its own cards and the board.
+      const id = t.seats[t.turn].id, think = 600 + ((t.handNo * 7 + t.turn * 13 + t.board.length * 5 + Math.round(t.currentBet)) % 9) * 100;
+      if (now - (t.turnStarted || now) > think) {
+        try { const m = botMove(t, id); if (m) t.act(id, m.a, m.amount); }
+        catch { try { const o = t.options(id); t.act(id, o.canCheck ? 'check' : 'fold'); } catch { /* not its turn any more */ } }
+        push();
+      }
+      return;
+    }
     if (t.turn !== null) {
       const id = t.seats[t.turn].id, away = t.players[id]?.connected === false;
       let limit = t.settings.turnTimer;
@@ -218,6 +244,8 @@ function hostClock() {
   S.brokeT ||= {};
   for (const x of t.seats) {
     if (!x) continue;
+    // A computer player with no chips buys in again at once (it is in the ledger like any buy in).
+    if (isBot(x.id) && x.stack <= 0) { try { t.addChips(x.id, t.settings.startStack); push(); } catch {} continue; }
     if (x.stack > 0 || x.out) { delete S.brokeT[x.id]; continue; }
     S.brokeT[x.id] ||= now;
     if (now - S.brokeT[x.id] > 20000) { delete S.brokeT[x.id]; t.sitOut(x.id, true); t.addLog(`${t.players[x.id]?.name || 'A player'} has no chips and sits out.`); push(); }
@@ -788,6 +816,7 @@ function drawMenu(st) {
     <button class="menu-item" data-act="bbview">👁 Amounts shown in: ${bbOn() ? 'big blinds' : 'chips'}</button>
     ${isHost ? `<button class="menu-item" data-act="settings">⚙️ Table settings</button>
     <button class="menu-item" data-act="players">👥 Players</button>
+    ${st.seats.some((x) => !x) ? '<button class="menu-item" data-act="bot-add">🤖 Add a computer player</button>' : ''}${st.seats.some((x) => x && String(x.id).startsWith('bot-')) ? '<button class="menu-item" data-act="bot-clear">🤖 Remove computer players</button>' : ''}
     <button class="menu-item" data-act="bomb">💣 Bomb pot next hand: ${st.bombNext ? 'on' : 'off'}</button>
     <button class="menu-item" data-act="pause">${S.paused ? '▶️ Resume dealing' : '⏸️ Pause after this hand'}</button>` : ''}
     <button class="menu-item" data-act="view3d">🧊 3D room: ${use3D() ? 'on' : 'off'}</button>
@@ -897,6 +926,14 @@ document.addEventListener('click', (e) => {
     case 'fold': send({ t: 'act', a: 'fold' }); break;
     case 'check': send({ t: 'act', a: 'check' }); break;
     case 'call': send({ t: 'act', a: 'call' }); break;
+    case 'bot-add': if (t) { try {
+        const free = t.seats.findIndex((x) => !x), used = new Set(Object.values(t.players).map((p) => p.name));
+        const nm = BOT_NAMES.find((n) => !used.has('🤖 ' + n)) || 'Bot';
+        let k = 1; while (t.players['bot-' + k] && t.seatOf('bot-' + k) >= 0) k++;
+        t.join('bot-' + k, '🤖 ' + nm, { skin: k % 5, hair: k % 4 }); t.players['bot-' + k].kicked = false; t.players['bot-' + k].connected = true;
+        t.sit('bot-' + k, free, t.settings.startStack);
+      } catch (er) { toast(er.message); } push(); } break;
+    case 'bot-clear': if (t) { for (const x of t.seats) if (x && isBot(x.id)) { try { t.standUp(x.id); } catch {} } closeMenu(); push(); } break;
     case 'raise-back': S.raiseOpen = null; render(); break;
     case 'pre': { const a = el.dataset.a; S.pre = S.pre && S.pre.a === a && S.pre.hand === st.handNo ? null : { a, hand: st.handNo }; render(); break; }
     case 'raise': { if (Date.now() - (S.dragEnd || 0) < 350) break; const o = st.options; if (!o?.canRaise) break;

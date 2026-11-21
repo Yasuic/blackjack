@@ -259,8 +259,10 @@ for (let g = 0; g < 300; g++) {
   const liveBefore = m.liveSeats();
   ok(m.giveCards('p0', [{ r: 'A', s: '♠' }, { r: 'A', s: '♥' }], hole.p0.salt) === (cardText(hole.p0.cards[0]) + cardText(hole.p0.cards[1]) === 'A♠A♥' && m.seats[0].inHand), 'made up cards are refused');
   const absent = g % 7 === 3 ? liveBefore.find((i) => 'p' + i !== nh) : -1; // one live player never comes back
+  // The absent player's cards can be known already: face up in an all in hand, or the made up pair above was the true one.
+  const absentKnown = absent >= 0 && m.seats[absent].cards.length > 0;
   for (let i = 0; i < nP; i++) if ('p' + i !== nh && i !== absent && m.seats[i].inHand && !m.seats[i].cards.length) ok(m.giveCards('p' + i, hole['p' + i].cards, hole['p' + i].salt), 'true cards are taken');
-  ok(m.missingCards().length === (absent >= 0 ? 1 : 0), 'cards missing only for the absent player');
+  ok(m.missingCards().length === (absent >= 0 && !absentKnown ? 1 : 0), 'cards missing only for the absent player');
   for (const i of m.missingCards()) m.redraw(i);
   while (m.inHand()) step(m);
   ok(m.chipsTotal() === chips, 'chips kept after the move: ' + m.chipsTotal() + ' / ' + chips);
