@@ -1,13 +1,13 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120zzr';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261120zzr';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120zzr';
-import { tickSound, winSound } from './fx.js?v=20261120zzr';
-import * as HX from './history.js?v=20261120zzr';
-import { webglOK, initRoom } from './room3d.js?v=20261120zzr';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120zzr';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120zzs';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261120zzs';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120zzs';
+import { tickSound, winSound } from './fx.js?v=20261120zzs';
+import * as HX from './history.js?v=20261120zzs';
+import { webglOK, initRoom } from './room3d.js?v=20261120zzs';
+import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120zzs';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -1534,6 +1534,8 @@ function animateChanges(prev, st) {
   if (!prev) return;
   if (st.phase === 'settled' && prev.phase !== 'settled') {
     showResult(st);
+    // Dealer blackjack ends the round at once, so say it in large letters (the insurance check below already does when it ran).
+    if (dealerBJ(st) && prev.phase !== 'insurance') banner('Dealer has blackjack', 'The round is over.', 'bad', 3200);
     badBeat(st);
     // Dumb luck: you went against basic strategy this round and still won.
     const mine = myInfo(st).seat;
@@ -1583,6 +1585,7 @@ function animateChanges(prev, st) {
   });
 }
 
+function dealerBJ(st) { const c = st.dealer?.cards || []; return c.length === 2 && !c.some((x) => x.hidden) && handTotal(c).total === 21; }
 // Big "You win / You lose" message over the table that fades away.
 function showResult(st) {
   const { seat, isBanker } = myInfo(st);
@@ -1605,6 +1608,7 @@ function showResult(st) {
   el.id = 'result-pop';
   el.className = 'result-pop ' + (net > 0 ? 'win' : net < 0 ? 'lose' : 'push');
   el.innerHTML = (net > 0 ? `<small>Net profit</small><b>${money(net)}</b>` : net < 0 ? `<small>Net loss</small><b>${money(-net)}</b>` : '<small>Net</small><b>Even</b>') +
+    (dealerBJ(st) ? '<em class="warn">Dealer has blackjack</em>' : '') +
     (S.timedOutRound === st.round ? '<em class="warn">Time ran out. Your hand was stood.</em>' : '') +
     (st.frozen ? '<em>House dealer: not counted in the ledger</em>' : '');
   const felt = document.body;
@@ -3131,6 +3135,19 @@ function playMove(a) {
   const st = S.state;
   const short = shortFor(a);
   if (short) { openBuyIn(false, a, short); return; }
+  // A hit on a hard 18 or more is almost always a slip, so it needs a second press within 4 seconds.
+  if (a === 'hit' && st?.turn) {
+    const hh = st.seats[st.turn.seat]?.hands[st.turn.hand], v = hh && handTotal(hh.cards);
+    if (v && !v.soft && v.total >= 18) {
+      const key = [st.round, st.turn.seat, st.turn.hand, hh.cards.length].join('-');
+      if (!(S.hitSure && S.hitSure.key === key && Date.now() - S.hitSure.at < 4000)) {
+        S.hitSure = { key, at: Date.now() };
+        toast(`Hard ${v.total}. Press Hit again to confirm.`);
+        return;
+      }
+      S.hitSure = null;
+    }
+  }
   if (trainingOn() && st?.turn) {
     const hand = st.seats[st.turn.seat].hands[st.turn.hand];
     const up = st.dealer.cards[0];
