@@ -1,13 +1,13 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120zzu';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261120zzu';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120zzu';
-import { tickSound, winSound } from './fx.js?v=20261120zzu';
-import * as HX from './history.js?v=20261120zzu';
-import { webglOK, initRoom } from './room3d.js?v=20261120zzu';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120zzu';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120zzv';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261120zzv';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120zzv';
+import { tickSound, winSound } from './fx.js?v=20261120zzv';
+import * as HX from './history.js?v=20261120zzv';
+import { webglOK, initRoom } from './room3d.js?v=20261120zzv';
+import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120zzv';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -2655,6 +2655,7 @@ function renderHostPanel(st) {
       <div class="tools">
         <button class="btn small" data-act="h-give" data-id="${p.id}" data-sign="1">Give</button>
         <button class="btn small" data-act="h-give" data-id="${p.id}" data-sign="-1">Take</button>
+        ${t.seats.map((x, i) => (x && x.playerId === p.id ? `<button class="btn small" data-act="h-sitout" data-id="${p.id}" data-seat="${i}" data-on="${x.out ? 0 : 1}" title="${x.out ? 'Deal this seat in again from the next round' : 'This seat gets no cards from the next round. The player keeps the seat.'}">${x.out ? 'Sit in' : 'Sit out'} seat ${i + 1}</button>` : '')).join('')}
         ${p.id === S.myId ? '' : `<button class="btn small danger" data-act="h-kick" data-id="${p.id}">Kick</button>`}
       </div>
     </div>`).join('') || '<div class="hint">Nobody yet. Send the invite link.</div>';
@@ -3127,6 +3128,11 @@ function runAct(el) {
     case 'h-give': {
       const amt = Math.abs(Number($('#give-amt').value) || 0) * Number(el.dataset.sign);
       hostDo((t) => t.giveChips(el.dataset.id, amt));
+      break;
+    }
+    case 'h-sitout': {
+      const id = el.dataset.id, seat = Number(el.dataset.seat), on = el.dataset.on === '1';
+      hostDo((t) => { t.sitOut(id, seat, on); t.addLog(`The host ${on ? 'sat' : 'put'} ${t.players[id]?.name || 'a player'} ${on ? 'out on' : 'back in on'} seat ${seat + 1}.`); });
       break;
     }
     case 'h-kick': {
