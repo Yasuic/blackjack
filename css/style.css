@@ -1614,3 +1614,16 @@ body.view-hidden .zoom-ctl { display: none !important; }
 .round-result .rr-name { font-size: 12px; font-weight: 700; opacity: .9; }
 .round-result .rr-name b.up { color: #7ef0b6; } .round-result .rr-name b.down { color: #ff9b9b; }
 #hist-panel .hp-seat i { font-style: normal; } #hist-panel .hp-seat i.up { color: #7ef0b6; } #hist-panel .hp-seat i.down { color: #ff9b9b; }
+
+/* A side bet that won: its gain floats over the chips on that slice. */
+.side-float { position: absolute; z-index: 7; transform: translate(-50%, -135%); background: rgba(8,10,14,.94); border: 1.5px solid #7ef0b6; color: #7ef0b6; font-family: 'Space Grotesk', system-ui, sans-serif; font-weight: 800; font-size: 13px; line-height: 1.25; padding: 0 6px; border-radius: 8px; white-space: nowrap; pointer-events: none; box-shadow: 0 2px 6px rgba(0,0,0,.55); animation: side-float-in .25s ease-out both; }
+@keyframes side-float-in { from { opacity: 0; } to { opacity: 1; } }
+.felt.in3d .side-float { font-size: 17px; transform-origin: 50% 100%; transform: translate(-50%, -100%) rotate(calc(-1 * var(--r, 0deg))) var(--bb, none) translateY(-30px); }
+
+/* Hurry up: a button beside Reactions, and a short shout that pops up on every screen. */
+.float-hurry { position: fixed; z-index: 40; background: rgba(12,15,20,.92); border: 1px solid rgba(255,138,84,.7); color: #ffb48a; border-radius: 12px; padding: 0 10px; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap; touch-action: manipulation; user-select: none; }
+.float-hurry:hover { border-color: #ff8a54; }
+.float-hurry:active { transform: scale(.94); }
+.hurry-pop { position: fixed; z-index: 75; transform: translate(-50%, -50%) rotate(var(--tilt, 0deg)); background: rgba(20,8,4,.94); border: 2px solid #ff8a54; color: #ffd9c2; font-family: 'Space Grotesk', system-ui, sans-serif; font-weight: 800; font-size: 20px; letter-spacing: 1px; padding: 6px 14px; border-radius: 12px; white-space: nowrap; pointer-events: none; box-shadow: 0 10px 26px rgba(0,0,0,.6); animation: hurry-pop 1.5s ease-out both; }
+@keyframes hurry-pop { 0% { opacity: 0; scale: .5; } 12% { opacity: 1; scale: 1.15; } 22% { scale: 1; } 75% { opacity: 1; } 100% { opacity: 0; translate: 0 -26px; } }
+@media (max-width: 700px) { .hurry-pop { font-size: 15px; } .float-hurry { font-size: 11px; padding: 0 8px; } }

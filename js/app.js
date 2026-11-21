@@ -1,13 +1,13 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120zzw';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261120zzw';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120zzw';
-import { tickSound, winSound } from './fx.js?v=20261120zzw';
-import * as HX from './history.js?v=20261120zzw';
-import { webglOK, initRoom } from './room3d.js?v=20261120zzw';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120zzw';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120zzy';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261120zzy';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120zzy';
+import { tickSound, winSound } from './fx.js?v=20261120zzy';
+import * as HX from './history.js?v=20261120zzy';
+import { webglOK, initRoom } from './room3d.js?v=20261120zzy';
+import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120zzy';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -387,6 +387,7 @@ function onHostMessage(conn, msg) {
   }
   if (!conn.clientId) return;
   if (msg.t === 'throw') { relayThrow(conn.clientId, msg); return; }
+  if (msg.t === 'hurry') { relayHurry(conn.clientId); return; }
   if (msg.t === 'chat') { relayChat(conn.clientId, msg); return; }
   if (msg.t === 'voice') { voiceSet(conn.clientId, conn.peer, !!msg.on, !!msg.mic); return; }
   if (msg.t === 'keys') { gotNonce(msg, conn.clientId); return; }
@@ -838,6 +839,7 @@ function wireGuestConn(conn) {
     else if (msg.t === 'chat-log') { if (Array.isArray(msg.list) && !S.chat?.length) { S.chat = []; msg.list.slice(-40).forEach((m) => gotChat(m, true)); } }
     else if (msg.t === 'ask-out') showAsk(msg);
     else if (msg.t === 'note') showNote(msg);
+    else if (msg.t === 'fx' && msg.kind === 'hurry') showHurry(msg);
     else if (msg.t === 'fx') showThrow(msg);
     else if (msg.t === 'peek') showPeek(msg.card, msg.by);
     else if (msg.t === 'key-req') conn.send({ t: 'keys', rid: msg.rid, keys: serveKeys(msg) });
@@ -868,6 +870,7 @@ function wireGuestConn(conn) {
 function send(msg) {
   if (S.role === 'host' && msg.t === 'chat') { relayChat(S.myId, msg); return; }
   if (S.role === 'host' && msg.t === 'voice') { voiceSet(S.myId, S.peer?.id, !!msg.on, !!msg.mic); return; }
+  if (S.role === 'host' && msg.t === 'hurry') { relayHurry(S.myId); return; }
   if (S.role === 'host' && msg.t === 'throw') relayThrow(S.myId, msg);
   else if (S.role === 'host') fresh(moveCount(msg), () => runAction(S.myId, msg, (err) => { toast(err); if (msg.t === 'bet') dropPend(); }));
   else if (S.conn?.open) S.conn.send(msg);
@@ -1073,6 +1076,7 @@ function buildLayout() {
     <div class="hud-bar" id="hud-bar">
     <details class="sb-guide" id="sb-guide"><summary>🎲 Side bets <span>▾</span></summary><div id="sb-guide-body"></div></details>
     <button class="float-throw" data-act="throw-open" title="Pick a reaction, then tap a player or the dealer">😀 Reactions</button>
+    <button class="float-hurry" data-act="hurry" title="Tell the others to hurry up. Press as often as you like.">⏰ Hurry up</button>
     <div class="ledger ${safeGet('bj-ledger') !== '1' ? 'closed' : ''}" id="ledger"></div>
     <div class="zoom-ctl">${use3D() ? '<button class="view-btn" data-act="turn" data-d="1" title="Turn to the players on your left" aria-label="Look left">◀ Look left</button><button class="view-btn" data-act="turn" data-d="-1" title="Turn to the players on your right" aria-label="Look right">Look right ▶</button><button class="view-btn view-reset" data-act="view-reset" title="Back to your own seat">Reset view</button><button class="view-btn view-walk" data-act="walk" title="Leave your chair and move through the whole office" aria-label="Walk around">🚶 Walk around</button>' : ''}<label class="tilt-ctl" title="Camera angle: drag to tilt the table"><span>Angle</span><input type="range" id="tilt" min="0" max="50" step="1" /></label><button data-act="zoom" data-d="-1" aria-label="Zoom out">−</button><span id="zoom-val"></span><button data-act="zoom" data-d="1" aria-label="Zoom in">+</button></div>
     </div>
@@ -2160,6 +2164,7 @@ function spotAreaHTML(st, s, i, isMe, mainAmt) {
   // Side bets are slices of one ring around the main bet.
   const R1 = 47, R2 = 79, GAP = 1.6;
   const pt = (r, deg) => { const a = (deg * Math.PI) / 180; return `${(r * Math.cos(a)).toFixed(2)} ${(r * Math.sin(a)).toFixed(2)}`; };
+  const floats = []; // a side bet that won shows its gain on a tag standing over the chips, which cover the ring
   const slices = keys.map((k, idx) => {
     const amt = s?.bet.sides[k] || 0;
     const res = S.dealing ? null : s?.sideResults.find((r) => r.key === k);
@@ -2167,6 +2172,7 @@ function spotAreaHTML(st, s, i, isMe, mainAmt) {
     const d = `M ${pt(R2, a0)} A ${R2} ${R2} 0 0 1 ${pt(R2, a1)} L ${pt(R1, a1)} A ${R1} ${R1} 0 0 0 ${pt(R1, a0)} Z`;
     const [lx, ly] = pt((R1 + R2) / 2, mid).split(' ');
     const sb = SIDE_BETS[k];
+    if (res?.win) floats.push(`<span class="side-float" style="left:${(((Number(lx) + 82) / 164) * 100).toFixed(1)}%;top:${(((Number(ly) + 82) / 164) * 100).toFixed(1)}%">${sb.icon || ''} +${money(res.pay - res.stake)}</span>`);
     const friend = k === 'friendBust' && amt && s?.bet.target != null ? st.seats[s.bet.target]?.name : null;
     const big = n <= 5;
     const label = amt || res
@@ -2177,7 +2183,7 @@ function spotAreaHTML(st, s, i, isMe, mainAmt) {
   const sides = `<svg class="bet-ring" viewBox="-82 -82 164 164">${slices}</svg>`;
   const ins = s?.insurance ? `<span class="ins-tag">Insurance ${money(s.insurance)}</span>` : '';
   return `<div class="spot-area ${canBet ? 'live' : ''}">
-    ${sides}
+    ${sides}${floats.join('')}
     <div class="spot" id="spot-${i}" ${canBet ? `data-act="main-spot" title="${S.chip ? `Tap to add a ${money(S.chip)} chip` : 'Tap to take your last chip off. Pick a chip below to add instead.'}"` : ''}>${stackHTML(mainAmt)}${settledNet !== null ? `<span class="spot-amt spot-net ${settledNet > 0 ? 'up' : settledNet < 0 ? 'down' : ''}" title="This seat's result for the round, side bets included">${settledNet > 0 ? 'Won +' + money(settledNet) : settledNet < 0 ? 'Lost ' + money(-settledNet) : 'Even'}</span>` : `<span class="spot-amt">${mainAmt ? money(mainAmt) : ''}</span>`}</div>
     ${ins}
     ${pvpTagsHTML(st, i)}
@@ -3037,6 +3043,7 @@ function runAct(el) {
     case 'ledger-toggle': { const l = $('#ledger'); l.classList.toggle('closed'); safeSet('bj-ledger', l.classList.contains('closed') ? '0' : '1'); renderLedger(S.state); break; }
     case 'buyin-answer': hostDo((t) => t.answerBuyIn(Number(el.dataset.id), el.dataset.yes === '1')); break;
     case 'throw-open': openThrowPanel(el); break;
+    case 'hurry': send({ t: 'hurry' }); break;
     case 'poop-dealer': send({ t: 'throw', item: 'poop', to: st.banker ? st.banker.id : 'house' }); el.closest('.badbeat')?.remove(); break;
     case 'view-reset': S.room?.home(); $('.view-walk')?.classList.remove('on'); break;
     case 'turn': S.room?.look(Number(el.dataset.d)); break;
@@ -3327,6 +3334,41 @@ function relayThrow(from, msg) {
   for (const conn of Object.values(S.conns)) if (conn.open) conn.send(fx);
   showThrow(fx);
 }
+
+// "Hurry up": the host passes it to everyone. It may be pressed again and again (at most 8 a second per person).
+const lastHurry = {};
+function relayHurry(from) {
+  const p = S.table.players[from];
+  if (!p) return;
+  const now = Date.now();
+  if (now - (lastHurry[from] || 0) < 120) return;
+  lastHurry[from] = now;
+  const fx = { t: 'fx', kind: 'hurry', from, name: p.name };
+  for (const conn of Object.values(S.conns)) if (conn.open) conn.send(fx);
+  showHurry(fx);
+}
+function showHurry({ from, name }) {
+  const el = document.createElement('div');
+  el.className = 'hurry-pop';
+  el.textContent = `⏰ ${from === S.myId ? 'You' : String(name || 'Someone').slice(0, 16)}: HURRY UP!`;
+  el.style.left = 50 + (Math.random() * 44 - 22) + '%';
+  el.style.top = 24 + Math.random() * 30 + '%';
+  el.style.setProperty('--tilt', (Math.random() * 16 - 8).toFixed(1) + 'deg');
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 1500);
+  hitSound();
+}
+// The Hurry up button stays right beside the Reactions button, wherever that is on this screen.
+function placeHurry() {
+  const a = $('.float-throw'), b = $('.float-hurry');
+  if (!a || !b) return;
+  const r = a.getBoundingClientRect();
+  b.hidden = !r.width;
+  b.style.left = Math.round(r.right + 6) + 'px';
+  b.style.top = Math.round(r.top) + 'px';
+  b.style.height = Math.round(r.height) + 'px';
+}
+setInterval(placeHurry, 500);
 
 // Where a player is on my screen: their seat, the dealer seat, or the bottom middle if they are just watching.
 function placeOf(id, at) {
