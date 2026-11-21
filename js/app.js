@@ -1,13 +1,13 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120zzs';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261120zzs';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120zzs';
-import { tickSound, winSound } from './fx.js?v=20261120zzs';
-import * as HX from './history.js?v=20261120zzs';
-import { webglOK, initRoom } from './room3d.js?v=20261120zzs';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120zzs';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120zzt';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261120zzt';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120zzt';
+import { tickSound, winSound } from './fx.js?v=20261120zzt';
+import * as HX from './history.js?v=20261120zzt';
+import { webglOK, initRoom } from './room3d.js?v=20261120zzt';
+import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120zzt';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -2575,8 +2575,10 @@ function trayInner(st) {
       <div class="actions">
         ${pvpBtnHTML(st, seat)}
         
-        ${rebet || `<button class="btn" data-act="clear" ${betTotal(b) ? '' : 'disabled'}>Clear all</button>`}
+        ${sideKeys(st).length ? '<button class="btn" data-act="sides-plus" title="Adds 1 to every side bet on all your hands">+1 all side bets</button>' : ''}
+        ${rebet || `<button class="btn" data-act="clear" ${(myInfo(st).me?.seats || []).some((i) => betTotal(st.seats[i]?.bet)) || betTotal(b) ? '' : 'disabled'}>Clear all</button>`}
         <button class="btn danger" data-act="stand-up">${(myInfo(st).me?.seats || []).length > 1 ? `Leave seat ${myInfo(st).me.seat + 1}` : 'Leave seat'}</button>
+        ${(myInfo(st).me?.seats || []).length > 1 ? '<button class="btn danger" data-act="stand-up-all">Leave all seats</button>' : ''}
       </div>`;
   }
   if (ph === 'insurance') {
@@ -2837,8 +2839,8 @@ function rulesHTML() {
 // release never gets its click, so waiting for the click loses taps at a busy table. The click that
 // follows a press is then ignored. A click with no press before it (Enter or Space on a focused
 // button, or a screen reader) still works as before.
-const FAST_ACTS = new Set(['chip', 'main-spot', 'side-spot', 'take-chip', 'undo', 'double-bet', 'clear', 'rebet', 'ready', 'ins', 'play', 'pvp-clear']);
-const BET_ACTS = new Set(['chip', 'main-spot', 'side-spot', 'take-chip', 'undo', 'double-bet', 'clear', 'ready', 'side-clear', 'pvp', 'pvp-clear']);
+const FAST_ACTS = new Set(['chip', 'main-spot', 'side-spot', 'take-chip', 'undo', 'double-bet', 'clear', 'sides-plus', 'rebet', 'ready', 'ins', 'play', 'pvp-clear']);
+const BET_ACTS = new Set(['chip', 'main-spot', 'side-spot', 'take-chip', 'undo', 'double-bet', 'clear', 'sides-plus', 'ready', 'side-clear', 'pvp', 'pvp-clear']);
 let pressHandled = false;
 // The middle mouse button puts last hand's bet back while betting is open.
 document.addEventListener('auxclick', (e) => {
@@ -2905,6 +2907,7 @@ function runAct(el) {
     case 'four': document.body.classList.toggle('four-colour'); safeSet('bj-four', document.body.classList.contains('four-colour') ? '1' : '0'); break;
     case 'sit': send({ t: 'sit', seat: Number(el.dataset.seat), add: el.dataset.add === '1' }); if (el.dataset.add === '1') S.seatAim = Number(el.dataset.seat); break;
     case 'stand-up': send({ t: 'stand-up', seat: myInfo(S.state).me?.seat }); break;
+    case 'stand-up-all': send({ t: 'stand-up' }); break;
     case 'sit-out': send({ t: 'sit-out', seat: Number(el.dataset.seat), on: el.dataset.on === '1' }); break;
     case 'pick-seat': pickSeat(Number(el.dataset.seat)); break;
     case 'ask-out': send({ t: 'ask-out', to: el.dataset.id }); break;
@@ -3052,7 +3055,35 @@ function runAct(el) {
       break;
     }
     case 'side-clear': delete bet.sides[el.dataset.k]; sendBet(); break;
-    case 'clear': S.mainChips = []; S.undo.push(structuredClone(seat.bet)); bet.main = 0; bet.sides = {}; sendBet(); chipSound(2); break;
+    case 'clear': {
+      // Clear all: the main bet and every side bet, on each of my seats that is still open for betting.
+      const mine = myInfo(st).me;
+      for (const i of mine?.seats || []) {
+        const o = st.seats[i];
+        if (i === mine.seat || !o || o.ready || o.hands?.length || !betTotal(o.bet)) continue;
+        send({ t: 'bet', main: 0, sides: {}, ready: false, seq: ++S.betSeq, seat: i, auto: !!S.auto?.on });
+        if (S.role !== 'host') o.bet = { main: 0, sides: {} };
+      }
+      S.mainChips = []; S.undo.push(structuredClone(seat.bet)); bet.main = 0; bet.sides = {}; sendBet(); chipSound(2); break;
+    }
+    case 'sides-plus': {
+      // One more chip on every side bet the table offers, on each of my seats that holds a main bet.
+      const mine = myInfo(st).me, keys = sideKeys(st).filter((k) => k !== 'friendBust'), cap = st.settings.maxSideBet ?? Infinity;
+      const own = (mine?.seats?.length ? mine.seats : [mine.seat]).filter((i) => { const o = st.seats[i]; return o && !o.out && !o.ready && !o.hands?.length && o.bet.main > 0; });
+      if (!own.length) { toast('Place a main bet first. Side bets go with a main bet.'); break; }
+      let left = mine.chips - (mine?.seats?.length ? mine.seats : [mine.seat]).reduce((x, i) => x + betTotal(st.seats[i]?.bet), 0), added = 0;
+      for (const i of own) {
+        const o = st.seats[i], cur = i === mine.seat ? bet : o.bet, sides = { ...cur.sides };
+        let n = 0;
+        for (const k of keys) { if ((sides[k] || 0) + 1 > cap || left < 1) continue; sides[k] = (sides[k] || 0) + 1; left -= 1; n++; }
+        if (!n) continue;
+        added += n;
+        if (i === mine.seat) { S.undo.push(structuredClone(seat.bet)); bet.sides = sides; sendBet(); }
+        else { send({ t: 'bet', main: o.bet.main, sides, target: o.bet.target, ready: false, seq: ++S.betSeq, seat: i, auto: !!S.auto?.on }); if (S.role !== 'host') o.bet = { ...o.bet, sides }; }
+      }
+      if (added) chipSound(); else toast(left < 1 ? 'All your chips are already bet.' : 'The side bets are at the table maximum.');
+      break;
+    }
     case 'pvp': {
       if (!bet.main) { toast('Place your own bet first.'); break; }
       const amount = fitBet(S.chip || CHIPS[1], 'friendBust');
