@@ -1,13 +1,13 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261121d';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261121d';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261121d';
-import { tickSound, winSound } from './fx.js?v=20261121d';
-import * as HX from './history.js?v=20261121d';
-import { webglOK, initRoom } from './room3d.js?v=20261121d';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261121d';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261121e';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261121e';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261121e';
+import { tickSound, winSound } from './fx.js?v=20261121e';
+import * as HX from './history.js?v=20261121e';
+import { webglOK, initRoom } from './room3d.js?v=20261121e';
+import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261121e';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -129,6 +129,7 @@ function showLanding() {
   app.innerHTML = `
     <div class="landing">
       <div class="hero-cards">${cardHTML({ r: 'A', s: '♠' }, true)}${cardHTML({ r: 'K', s: '♥' }, true)}</div>
+      <div class="game-switch-row"><select class="game-switch" id="game-switch" title="Switch game" aria-label="Game"><option value="blackjack" selected>🃏 Blackjack</option><option value="poker">♠️ Poker</option><option disabled>🎴 Baccarat (soon)</option><option disabled>🎡 Roulette (soon)</option></select></div>
       <h1>Blackjack Table</h1>
       <p>${room ? `You were invited to table <b>${esc(room)}</b>. Pick a name and join.` : 'Host a table, send the link to your friends, and play live. Play money only.'}</p>
       <div class="box">
@@ -1026,7 +1027,7 @@ function buildLayout() {
   document.body.classList.add('in-room');
   app.innerHTML = `
     <div class="topbar">
-      <span class="title">Blackjack</span>
+      <select class="game-switch" id="game-switch" title="Switch game" aria-label="Game"><option value="blackjack" selected>🃏 Blackjack</option><option value="poker">♠️ Poker</option><option disabled>🎴 Baccarat (soon)</option><option disabled>🎡 Roulette (soon)</option></select>
       <span id="conn-pill" class="pill">Connecting</span>
       <span class="spacer"></span>
       <button id="fair-pill" class="pill fair-pill" data-act="fair" title="How the shuffle is kept fair">🔐<span class="fp-t"> Provably fair</span></button>
@@ -1099,10 +1100,13 @@ function buildLayout() {
 
 // The 3D room is on unless the browser cannot draw it or the person turned it off.
 // The 3D room is the usual view on every device that can draw it. The menu switch turns it off and is remembered.
+const PHONE_FLAT = false; // switched on once the flat phone tables are checked
 function use3D() {
   if (params.get('flat') === '1' || !webglOK()) return false;
   if (params.get('room') === '3d' || params.get('3d') === '1') return true;
-  return safeGet('bj-3d') !== '0';
+  // A phone opens the flat table unless the 3D room was switched on in the menu (the person asked for 2D on phones).
+  const v = safeGet('bj-3d');
+  return PHONE_FLAT && innerWidth < 700 ? v === '1' : v !== '0';
 }
 
 // Zoom the table a little in or out. Saved for next time on this device.
@@ -3666,4 +3670,13 @@ document.addEventListener('change', (e) => {
   const boxes = [...document.querySelectorAll('[data-sidebet]')];
   if (e.target.id === 'sb-all') for (const b of boxes) b.checked = e.target.checked;
   else if (e.target.dataset?.sidebet && $('#sb-all')) $('#sb-all').checked = boxes.every((b) => b.checked);
+});
+
+// The game switch at the top left: the poker table of the same room code. The host of this table opens it.
+document.addEventListener('change', (e) => {
+  if (e.target.id !== 'game-switch' || e.target.value !== 'poker') return;
+  const q = new URLSearchParams();
+  if (S.code) { q.set('room', S.code); q.set('go', '1'); if (S.role === 'host') q.set('open', '1'); sessSet('games-from-bj', S.code); }
+  for (const k of ['peerhost', 'peerport', 'peerpath', 'peersecure', '3d', 'flat', 'roomdebug']) if (params.get(k)) q.set(k, params.get(k));
+  location.href = 'poker.html' + (q.toString() ? '?' + q : '');
 });
