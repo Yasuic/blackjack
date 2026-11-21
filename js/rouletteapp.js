@@ -1,15 +1,15 @@
 // The roulette page: a European roulette table for up to 9 in Nigel's room. The host's browser runs
 // the table (js/roulette.js); every other browser sends its bets there and is told only what it may see.
-import { RouTable, ROU_SEATS, WHEEL, colorOf, betNumbers, betName, betPays, verifySpin } from './roulette.js?v=20261121ze';
-import { showSpin } from './wheel.js?v=20261121ze';
-import { webglOK, initRoom } from './room3d.js?v=20261121ze';
-import { params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML } from './common.js?v=20261121ze';
+import { RouTable, ROU_SEATS, WHEEL, colorOf, betNumbers, betName, betPays, verifySpin } from './roulette.js?v=20261121zf';
+import { showSpin } from './wheel.js?v=20261121zf';
+import { webglOK, initRoom } from './room3d.js?v=20261121zf';
+import { params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML } from './common.js?v=20261121zf';
 
 const PREFIX = 'bjt-ro-';
 const app = $('#app');
 const S = { name: safeGet('bj-name') || '', myId: getClientId(), code: null, role: null, table: null, st: null, net: null, room: null,
   conn: ['Connecting', false], chip: Number(safeGet('ro-chip')) || 5, seedFor: '', at: 0, paused: false, show: null };
-if (params.has('roomdebug')) window.__R = S;
+if (params.has('roomdebug')) { window.__R = S; window.__ro = { push: () => push(), render: () => render() }; }
 const phone = () => innerWidth < 700;
 const PHONE_FLAT = true;
 const use3D = () => { if (params.get('flat') === '1' || !webglOK()) return false; if (params.get('3d') === '1') return true; const v = safeGet('bj-3d'); return PHONE_FLAT && phone() ? v === '1' : v !== '0'; };
@@ -202,7 +202,7 @@ function shareLink() {
 const FELT = () => {
   if (!phone()) return { W: 1240, H: 640 };
   const W = Math.max(300, Math.min(440, innerWidth - 20));
-  return { W, H: use3D() ? 640 : Math.max(430, Math.min(600, innerHeight - 56 - 235)) };
+  return { W, H: use3D() ? 640 : Math.max(380, Math.min(600, innerHeight - 56 - (S.hudH ? S.hudH + 16 : 235))) };
 };
 function showTable() {
   document.body.classList.add('in-room');
@@ -250,7 +250,7 @@ function seatAt(seat) {
   const st = S.st, me = st?.players.find((p) => p.id === S.myId);
   const mine = me && me.seat >= 0 ? me.seat : 4;
   const rel = ((seat - mine + 4 + ROU_SEATS * 2) % ROU_SEATS) - 4;
-  return { x: 50 + rel * 10.5, y: 99, rel, plate: { x: 50 + rel * 10.5, y: S.room ? 92 : 96 } };
+  return { x: 50 + rel * 10.5, y: 99, rel, plate: { x: 50 + rel * 10.5, y: S.room ? 92 : 76.5 } };
 }
 // Whether the wheel is still turning for the spin on screen.
 function turning(st) {
@@ -305,7 +305,7 @@ function render() {
   const hit = (key) => final && betNumbers(key).includes(win);
   const cellBtn = (key, label, cls = '') => {
     const m = mine[key] || 0, all = !done && st.totals[key] ? st.totals[key] : 0;
-    return `<button class="ro-cell ${cls}${hit(key) ? ' won' : ''}${final && !hit(key) ? ' lost' : ''}" data-act="bet" data-spot="${key}">${label}${m ? `<span class="ro-mine">${money(m)}</span>` : all ? '<span class="ro-dot"></span>' : ''}</button>`;
+    return `<button class="ro-cell ${cls}${m || all ? ' has' : ''}${hit(key) ? ' won' : ''}${final && !hit(key) ? ' lost' : ''}" data-act="bet" data-spot="${key}">${label}${m ? `<span class="ro-mine">${money(m)}</span>` : all ? `<span class="ro-all">${money(all)}</span>` : ''}</button>`;
   };
   const num = (n) => cellBtn(numCell(n), n, colorOf(n));
   let grid;
@@ -336,12 +336,12 @@ function render() {
     const staked = st.bets[p.id] ? Object.values(st.bets[p.id]).reduce((a, x) => a + x, 0) : 0;
     const pay = final ? st.pays[p.id] : null;
     let bubble = '', bcls = '';
-    if (pay) { bubble = pay.net > 0 ? `+${money(pay.net)}` : pay.net < 0 ? `−${money(-pay.net)}` : 'Even'; bcls = pay.net > 0 ? 'win' : pay.net < 0 ? 'fold' : 'in'; }
-    else if (!p.connected) { bubble = 'Offline'; bcls = 'fold'; }
-    else if (staked) { bubble = `Bet ${money(staked)}`; bcls = 'in'; }
+    if (!p.connected) { bubble = 'Offline'; bcls = 'fold'; }
+    // The bet, and then the result, is a line inside the name plate, so it never covers a neighbour.
+    const tag = pay ? `<u class="${pay.net > 0 ? 'up' : pay.net < 0 ? 'down' : 'push'}">${pay.net > 0 ? '+' + money(pay.net) : pay.net < 0 ? '−' + money(-pay.net) : 'Even'}</u>` : staked ? `<u>Bet ${money(staked)}</u>` : '';
     if (!flatPhone) h += `<div class="pk-seat pk-stand ro-seat${isMe ? ' me' : ' far'}${pay && pay.net > 0 ? ' won' : ''}" style="left:${P.plate.x}%;top:${P.plate.y}%">
       ${bubble ? `<div class="pk-bubble ${bcls}">${bubble}</div>` : ''}
-      <div class="pk-plate"><b>${esc(p.name)}${isMe ? ' <em>YOU</em>' : ''}${p.id === st.bankId ? ' <em class="dl">DEALER</em>' : ''}</b><span>${money(shownChips(st, p, turn))}</span></div>
+      <div class="pk-plate"><b>${esc(p.name)}</b>${isMe ? '<em>YOU</em>' : ''}${p.id === st.bankId ? '<em class="dl">DEALER</em>' : ''}<span>${money(shownChips(st, p, turn))}</span>${tag ? `<i class="bc-tag ro-tag">${tag}</i>` : ''}</div>
     </div>`;
     h += `<div class="pk-spot" id="spot-${p.seat}" style="left:${P.x}%;top:86%"></div>`;
     stools.push({ seat: p.seat, x: P.x, y: P.y });
@@ -374,17 +374,24 @@ function drawHud(st, me, turn, flatPhone) {
   let h = '';
   if (flatPhone) h += `<div class="ro-people">${st.players.filter((p) => p.seat >= 0).map((p) => { const pay = done && !turn ? st.pays[p.id] : null; return `<span class="${p.id === S.myId ? 'me' : ''}${p.connected ? '' : ' off'}">${esc(p.name)} <b>${money(shownChips(st, p, turn))}</b>${pay ? `<em class="${pay.net > 0 ? 'up' : pay.net < 0 ? 'down' : ''}">${pay.net > 0 ? '+' : pay.net < 0 ? '−' : ''}${money(Math.abs(pay.net))}</em>` : ''}</span>`; }).join('')}</div>`;
   h += lastHTML(st, turn);
-  if (isHost) h += `<button class="btn primary ro-spin" data-act="deal"${st.canSpin && !done ? '' : ' disabled'}>Spin now</button>`;
+  if (isHost && S.room) h += `<button class="btn primary ro-spin" data-act="deal"${st.canSpin && !done ? '' : ' disabled'}>Spin now</button>`;
   h += `<div class="bc-chips">${CHIPS.map((v) => `<button class="bc-chip c${v}${S.chip === v ? ' on' : ''}" data-act="chip" data-v="${v}">${v}</button>`).join('')}</div>`;
-  h += `<div class="pk-mine bc-acts">
-    <span class="bc-bal">Chips <b>${money(me ? shownChips(st, me, turn) : 0)}</b>${staked ? ` · bet <b>${money(staked)}</b>` : ''}</span>
+  h += `<div class="pk-mine bc-acts ro-acts">
+    <span class="bc-bal">Chips <b>${money(me ? shownChips(st, me, turn) : 0)}</b>${staked ? `<i> · bet <b>${money(staked)}</b></i>` : ''}</span>
     <button class="btn small" data-act="undo"${done || !staked ? ' disabled' : ''}>Undo</button>
     <button class="btn small" data-act="clear"${done || !staked ? ' disabled' : ''}>Clear</button>
     <button class="btn small" data-act="rebet"${done || staked || !st.lastBets[S.myId] ? ' disabled' : ''}>Rebet</button>
+    ${isHost && !S.room ? `<button class="btn small primary" data-act="deal"${st.canSpin && !done ? '' : ' disabled'}>Spin</button>` : ''}
     <button class="btn small" data-act="add">🪙<span> Chips</span></button>
     <button class="btn small" data-act="react">😀</button>
+    <button class="btn small danger" data-act="leave">🚪<span> Leave</span></button>
   </div>`;
   tray.innerHTML = h;
+  // A flat phone table is as tall as the room left above the buttons, so the buttons never cover it.
+  if (flatPhone) {
+    const hh = document.querySelector('.pk-flat-hud')?.offsetHeight || 0;
+    if (hh && Math.abs(hh - (S.hudH || 0)) > 6) { S.hudH = hh; const felt = $('#felt'), F = FELT(); if (felt && F.H > F.W) felt.style.height = F.H + 'px'; }
+  }
 }
 
 // ---------- Menu and dialogs ----------

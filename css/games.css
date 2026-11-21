@@ -630,3 +630,127 @@ body.room3d .pfelt.ring:not(.tall) .pk-mid.many .pk-board .pk-pot { position: st
 
 /* In the 3D room the cloth itself carries these lines, so the HTML layer does not draw them twice. */
 body.game-pk.room3d .html-top .felt.pfelt::before, body.game-pk.room3d .html-top .felt.pfelt > .pk-body::before { display: none; }
+
+/* ---------- Baccarat, third pass: the same standards as the blackjack table ---------- */
+.bc-tag { display: flex; gap: calc(3px * var(--k)); justify-content: center; flex-wrap: wrap; font-style: normal; margin-top: calc(2px * var(--k)); }
+.bc-tag u { text-decoration: none; font: 800 calc(10.5px * var(--k)) Inter, system-ui, sans-serif; border-radius: 999px; padding: 0 calc(6px * var(--k)); color: #06121c; background: #ffe08a; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.bc-tag u.player { background: #8ccbff; } .bc-tag u.banker { background: #ff9c9c; } .bc-tag u.tie { background: #8be5a4; }
+.bc-seat .pk-plate b, .bc-seat .pk-plate span { font-family: Inter, system-ui, sans-serif; }
+.bc-spot { background: rgba(0,0,0,.42); color: #fff; }
+.bc-spot b { font-weight: 800; text-shadow: 0 1px 2px rgba(0,0,0,.7); }
+.bc-spot small { opacity: .95; font-weight: 700; }
+.bc-spot i { opacity: .95; font-weight: 700; color: #ffe08a; }
+.bc-side b, .bc-total, .bc-result, .bc-mine { font-family: Inter, system-ui, sans-serif; }
+body.room3d .pfelt:not(.tall) .bc-deal { top: 30%; --cw: calc(50px * var(--k)); }
+body.room3d .pfelt:not(.tall) .bc-result { top: 38%; }
+body.room3d .pfelt:not(.tall) .bc-spots { top: 43%; left: 13%; right: 13%; gap: calc(8px * var(--k)); }
+body.room3d .pfelt:not(.tall) .bc-spot { min-height: calc(92px * var(--k)); }
+body.room3d .pfelt:not(.tall) .bc-spot b { font-size: calc(22px * var(--k)); }
+body.room3d .pfelt:not(.tall) .bc-spot small { font-size: calc(13px * var(--k)); }
+body.room3d .pfelt:not(.tall) .bc-spot i { font-size: calc(13px * var(--k)); }
+body.room3d .pfelt:not(.tall) .bc-spots { top: 40%; left: 23%; right: 23%; }
+body.room3d .pfelt:not(.tall) .bc-spot { min-height: calc(68px * var(--k)); }
+body.room3d .pfelt:not(.tall) .bc-seat .pk-plate { font-size: calc(12px * var(--k)); padding: calc(2px * var(--k)) calc(8px * var(--k)) calc(3px * var(--k)); min-width: 0; }
+body.room3d .pfelt:not(.tall) .bc-seat .pk-plate b { font-size: calc(13px * var(--k)); }
+body.room3d .pfelt:not(.tall) .bc-seat .pk-plate span { font-size: calc(14px * var(--k)); }
+body.room3d .pfelt:not(.tall) .bc-deal { top: 37%; }
+body.room3d .pfelt:not(.tall) .bc-result { top: 42%; }
+body.room3d .pfelt:not(.tall) .bc-spots { top: 45%; left: 19%; right: 19%; grid-template-columns: 1.2fr 1.5fr 1.1fr 1.5fr 1.2fr; }
+body.room3d .pfelt:not(.tall) .bc-spot.ppair b, body.room3d .pfelt:not(.tall) .bc-spot.bpair b { font-size: calc(16px * var(--k)); white-space: nowrap; letter-spacing: 0; }
+body.room3d .pfelt:not(.tall) .bc-seat .pk-plate b { max-width: calc(96px * var(--k)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; vertical-align: bottom; }
+body.room3d .pfelt:not(.tall) .bc-seat .pk-plate b { max-width: 7.2em; }
+body.room3d .pfelt:not(.tall) .bc-seat .pk-plate span { margin-left: .35em; }
+body.room3d .pfelt:not(.tall) .bc-seat .pk-plate b { max-width: 6em; }
+body.room3d .pfelt:not(.tall) .bc-spots { left: 21%; right: 21%; }
+/* Printed felt for baccarat: a fine weave, a soft light in the middle and the house emblem on both sides of the cards. */
+.felt.pfelt.bfelt { background:
+  url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20width%3D%27220%27%20height%3D%27120%27%20viewBox%3D%270%200%20220%20120%27%3E%3Cg%20fill%3D%27none%27%20stroke%3D%27%23ffe9b0%27%20stroke-opacity%3D%27.34%27%20stroke-width%3D%272%27%3E%3Cellipse%20cx%3D%27110%27%20cy%3D%2760%27%20rx%3D%27104%27%20ry%3D%2754%27/%3E%3Cellipse%20cx%3D%27110%27%20cy%3D%2760%27%20rx%3D%2794%27%20ry%3D%2745%27%20stroke-width%3D%271%27/%3E%3C/g%3E%3Cg%20fill%3D%27%23ffe9b0%27%20fill-opacity%3D%27.42%27%20font-family%3D%27Georgia%2Cserif%27%20text-anchor%3D%27middle%27%3E%3Ctext%20x%3D%27110%27%20y%3D%2756%27%20font-size%3D%2730%27%20font-weight%3D%27700%27%20letter-spacing%3D%276%27%3EARC%3C/text%3E%3Ctext%20x%3D%27110%27%20y%3D%2780%27%20font-size%3D%2713%27%20letter-spacing%3D%275%27%3EBACCARAT%3C/text%3E%3C/g%3E%3C/svg%3E") 14% 17% / 17% auto no-repeat, url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20width%3D%27220%27%20height%3D%27120%27%20viewBox%3D%270%200%20220%20120%27%3E%3Cg%20fill%3D%27none%27%20stroke%3D%27%23ffe9b0%27%20stroke-opacity%3D%27.34%27%20stroke-width%3D%272%27%3E%3Cellipse%20cx%3D%27110%27%20cy%3D%2760%27%20rx%3D%27104%27%20ry%3D%2754%27/%3E%3Cellipse%20cx%3D%27110%27%20cy%3D%2760%27%20rx%3D%2794%27%20ry%3D%2745%27%20stroke-width%3D%271%27/%3E%3C/g%3E%3Cg%20fill%3D%27%23ffe9b0%27%20fill-opacity%3D%27.42%27%20font-family%3D%27Georgia%2Cserif%27%20text-anchor%3D%27middle%27%3E%3Ctext%20x%3D%27110%27%20y%3D%2756%27%20font-size%3D%2730%27%20font-weight%3D%27700%27%20letter-spacing%3D%276%27%3EARC%3C/text%3E%3Ctext%20x%3D%27110%27%20y%3D%2780%27%20font-size%3D%2713%27%20letter-spacing%3D%275%27%3EBACCARAT%3C/text%3E%3C/g%3E%3C/svg%3E") 86% 17% / 17% auto no-repeat,
+  repeating-linear-gradient(45deg, rgba(255,255,255,.028) 0 2px, transparent 2px 5px),
+  repeating-linear-gradient(-45deg, rgba(0,0,0,.05) 0 2px, transparent 2px 5px),
+  radial-gradient(ellipse at 50% 42%, #2187a1 0%, #136077 48%, #093645 100%); }
+.felt.pfelt.bfelt.tall { background:
+  repeating-linear-gradient(45deg, rgba(255,255,255,.028) 0 2px, transparent 2px 5px),
+  repeating-linear-gradient(-45deg, rgba(0,0,0,.05) 0 2px, transparent 2px 5px),
+  radial-gradient(ellipse at 50% 40%, #2187a1 0%, #136077 48%, #093645 100%); }
+.bc-tag u.up { background: #7ef0b6; } .bc-tag u.down { background: #ff8a8a; } .bc-tag u.push { background: #dfe6ee; }
+.bc-tag u.up, .bc-tag u.down, .bc-tag u.push { font-size: calc(13px * var(--k)); padding: 0 calc(9px * var(--k)); }
+body.room3d .pfelt:not(.tall) .bc-seat.r4 .pk-plate b { display: block; max-width: 6.4em; margin: 0 auto; }
+body.room3d .pfelt:not(.tall) .bc-seat.r4 .pk-plate span { margin-left: 0; }
+body.room3d .pfelt:not(.tall) .bc-deal { top: 40%; }
+body.room3d .pfelt:not(.tall) .bc-spots { top: 47%; }
+body.room3d .pfelt:not(.tall) .bc-result { top: 66%; }
+body.room3d .pfelt:not(.tall) .bc-deal { top: 42%; }
+body.room3d .pfelt:not(.tall) .bc-spots { top: 48.5%; }
+body.room3d .pfelt:not(.tall) .bc-result { top: 82%; }
+body.room3d .pfelt:not(.tall) .bc-deal { --cw: calc(41px * var(--k)); }
+body.room3d .pfelt:not(.tall) .bc-result { top: 77%; }
+body.room3d .pfelt:not(.tall) .bc-mine { top: auto; bottom: calc(3px * var(--k)); right: 50%; transform: translateX(50%); }
+body.room3d .pfelt:not(.tall) .bc-spot { justify-content: flex-start; padding-top: calc(6px * var(--k)); }
+body.room3d .pfelt:not(.tall) .bc-mine { position: static; transform: none; margin-top: calc(2px * var(--k)); }
+/* The flat computer table: cards at the top, betting boxes under them, name plates round the curved edge. */
+body:not(.room3d) .pfelt:not(.tall) .bc-deal { top: 17%; }
+body:not(.room3d) .pfelt:not(.tall) .bc-result { top: 32.5%; }
+body:not(.room3d) .pfelt:not(.tall) .bc-spots { top: 36.5%; left: 25%; right: 25%; grid-template-columns: 1.2fr 1.5fr 1.1fr 1.5fr 1.2fr; }
+body:not(.room3d) .pfelt:not(.tall) .bc-spot.ppair b, body:not(.room3d) .pfelt:not(.tall) .bc-spot.bpair b { font-size: calc(14px * var(--k)); white-space: nowrap; letter-spacing: 0; }
+body:not(.room3d) .pfelt:not(.tall) .bc-spot small { font-size: calc(12px * var(--k)); }
+body:not(.room3d) .pfelt:not(.tall) .bc-spot i { font-size: calc(11px * var(--k)); }
+body:not(.room3d) .pfelt:not(.tall) .bc-seat .pk-plate { min-width: 0; padding: calc(2px * var(--k)) calc(8px * var(--k)) calc(3px * var(--k)); }
+body:not(.room3d) .pfelt:not(.tall) .bc-seat .pk-plate b { max-width: 6em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; vertical-align: bottom; }
+body:not(.room3d) .pfelt:not(.tall) .bc-seat .pk-plate span { margin-left: .35em; }
+body:not(.room3d) .pfelt:not(.tall) .bc-result { top: 65%; }
+body:not(.room3d) .pfelt:not(.tall) .bc-spots { left: 22%; right: 22%; }
+/* Bottom buttons: the Deal button is always readable, and the row fits a phone. */
+.bc-acts .btn.primary { background: #3fbf86 !important; border-color: #3fbf86 !important; color: #07140e !important; font-weight: 800; }
+.bc-acts .btn.primary[disabled] { background: rgba(63,191,134,.16) !important; color: #bfeedd !important; opacity: .75; }
+.bc-acts .btn.danger { border-color: #ff8a8a; color: #ffb3b3; }
+@media (max-width: 560px) {
+  .bc-acts { gap: 4px !important; flex-wrap: nowrap; justify-content: center; padding-left: 4px; padding-right: 4px; }
+  .bc-acts .btn { padding: 6px 8px; font-size: 13px; min-width: 0; }
+  .bc-acts .btn span { display: none; }
+  .bc-bal { font-size: 12px; padding: 5px 7px; }
+}
+/* The flat phone table: smaller cards so three a side fit, and short name plates. */
+body:not(.room3d) .pfelt.tall .bc-deal { --cw: 37px; gap: 8px; }
+body:not(.room3d) .pfelt.tall .bc-side { min-width: 0; padding: 4px 5px 5px; }
+body:not(.room3d) .pfelt.tall .bc-seat .pk-plate b { max-width: 4.6em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; vertical-align: bottom; }
+body:not(.room3d) .pfelt.tall .bc-seat .pk-plate span { margin-left: .3em; }
+body:not(.room3d) .pfelt.tall .bc-tag u { font-size: 10px; padding: 0 5px; }
+.bc-bal i { font-style: normal; }
+.bc-acts .btn { white-space: nowrap; }
+@media (max-width: 560px) { .bc-bal i { display: none; } }
+body.room3d .pfelt:not(.tall) .bc-spot { min-height: calc(82px * var(--k)); padding-top: calc(4px * var(--k)); gap: 0; }
+body.room3d .pfelt:not(.tall) .bc-spots { top: 47.5%; }
+/* ---------- Roulette, third pass: the same standards as the blackjack table ---------- */
+.felt.pfelt.rfelt { background:
+  url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20width%3D%27220%27%20height%3D%27120%27%20viewBox%3D%270%200%20220%20120%27%3E%3Cg%20fill%3D%27none%27%20stroke%3D%27%23ffe9b0%27%20stroke-opacity%3D%27.34%27%20stroke-width%3D%272%27%3E%3Cellipse%20cx%3D%27110%27%20cy%3D%2760%27%20rx%3D%27104%27%20ry%3D%2754%27/%3E%3Cellipse%20cx%3D%27110%27%20cy%3D%2760%27%20rx%3D%2794%27%20ry%3D%2745%27%20stroke-width%3D%271%27/%3E%3C/g%3E%3Cg%20fill%3D%27%23ffe9b0%27%20fill-opacity%3D%27.42%27%20font-family%3D%27Georgia%2Cserif%27%20text-anchor%3D%27middle%27%3E%3Ctext%20x%3D%27110%27%20y%3D%2756%27%20font-size%3D%2730%27%20font-weight%3D%27700%27%20letter-spacing%3D%276%27%3EARC%3C/text%3E%3Ctext%20x%3D%27110%27%20y%3D%2780%27%20font-size%3D%2713%27%20letter-spacing%3D%275%27%3EROULETTE%3C/text%3E%3C/g%3E%3C/svg%3E") 9% 9% / 13% auto no-repeat, url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20width%3D%27220%27%20height%3D%27120%27%20viewBox%3D%270%200%20220%20120%27%3E%3Cg%20fill%3D%27none%27%20stroke%3D%27%23ffe9b0%27%20stroke-opacity%3D%27.34%27%20stroke-width%3D%272%27%3E%3Cellipse%20cx%3D%27110%27%20cy%3D%2760%27%20rx%3D%27104%27%20ry%3D%2754%27/%3E%3Cellipse%20cx%3D%27110%27%20cy%3D%2760%27%20rx%3D%2794%27%20ry%3D%2745%27%20stroke-width%3D%271%27/%3E%3C/g%3E%3Cg%20fill%3D%27%23ffe9b0%27%20fill-opacity%3D%27.42%27%20font-family%3D%27Georgia%2Cserif%27%20text-anchor%3D%27middle%27%3E%3Ctext%20x%3D%27110%27%20y%3D%2756%27%20font-size%3D%2730%27%20font-weight%3D%27700%27%20letter-spacing%3D%276%27%3EARC%3C/text%3E%3Ctext%20x%3D%27110%27%20y%3D%2780%27%20font-size%3D%2713%27%20letter-spacing%3D%275%27%3EROULETTE%3C/text%3E%3C/g%3E%3C/svg%3E") 91% 9% / 13% auto no-repeat,
+  repeating-linear-gradient(45deg, rgba(255,255,255,.028) 0 2px, transparent 2px 5px),
+  repeating-linear-gradient(-45deg, rgba(0,0,0,.05) 0 2px, transparent 2px 5px),
+  radial-gradient(ellipse at 50% 42%, #23905a 0%, #116238 55%, #093c23 100%); }
+.felt.pfelt.rfelt.tall { background:
+  repeating-linear-gradient(45deg, rgba(255,255,255,.028) 0 2px, transparent 2px 5px),
+  repeating-linear-gradient(-45deg, rgba(0,0,0,.05) 0 2px, transparent 2px 5px),
+  radial-gradient(ellipse at 50% 42%, #23905a 0%, #116238 55%, #093c23 100%); }
+.ro-cell { font-family: Inter, system-ui, sans-serif; }
+.ro-cell.out { font-size: calc(14px * var(--k)); font-weight: 800; background: rgba(0,0,0,.44); color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.7); }
+.ro-cell.out.red span, .ro-cell.out.black span { display: inline; margin-left: calc(6px * var(--k)); }
+.pfelt.tall .ro-cell.out { font-size: 12px; }
+.ro-all { position: absolute; right: calc(2px * var(--k)); top: calc(2px * var(--k)); min-width: calc(15px * var(--k)); height: calc(15px * var(--k)); padding: 0 calc(3px * var(--k)); border-radius: 999px; background: #9fe8ff; color: #06121c; font: 800 calc(10px * var(--k)) Inter, system-ui, sans-serif; display: flex; align-items: center; justify-content: center; box-shadow: 0 1px 3px rgba(0,0,0,.7); font-variant-numeric: tabular-nums; text-shadow: none; }
+.pfelt.tall .ro-all { min-width: 14px; height: 14px; font-size: 9px; right: 2px; top: 2px; padding: 0 3px; }
+.ro-grid.tallg .dz .ro-all { transform: rotate(180deg); writing-mode: horizontal-tb; }
+.ro-seat .pk-plate { min-width: 0; padding: calc(2px * var(--k)) calc(7px * var(--k)) calc(3px * var(--k)); }
+.ro-seat .pk-plate b, .ro-seat .pk-plate span { font-family: Inter, system-ui, sans-serif; }
+.ro-seat .pk-plate b { max-width: 4.6em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; margin: 0 auto; }
+.ro-seat .pk-plate em { display: none; }
+.ro-seat.me .pk-plate { border-color: var(--gold); box-shadow: 0 0 0 2px rgba(232,196,106,.5); }
+/* A box with chips on it: its words move to the left and the amount is at the right, so neither covers the other. */
+.ro-cell.has:not(.dz) { justify-content: flex-start; padding-left: calc(4px * var(--k)); }
+.ro-cell.has .ro-mine, .ro-grid.wide .ro-cell.out.has .ro-mine { left: auto; right: calc(2px * var(--k)); top: 50%; bottom: auto; transform: translateY(-50%) scale(.82); transform-origin: 100% 50%; }
+.ro-cell.has .ro-all { top: 50%; transform: translateY(-50%); }
+.ro-cell.out.red .ro-dia, .ro-cell.out.black .ro-dia { display: none; }
+.ro-cell.out.red span:not(.ro-mine):not(.ro-all), .ro-cell.out.black span:not(.ro-mine):not(.ro-all) { margin-left: 0; }
+.ro-grid.tallg .dz .ro-all { transform: rotate(180deg); top: 3px; }
+.ro-grid.wide .ro-cell.has:not(.out) { font-size: calc(14px * var(--k)); padding-left: calc(2px * var(--k)); }
+/* Flat computer roulette table: the grid higher and the name plates in one row above the buttons. */
+body:not(.room3d) .pfelt:not(.tall) .ro-grid.wide { top: 21%; grid-auto-rows: calc(38px * var(--k)); }
+@media (max-width: 560px) { .bc-acts.ro-acts { flex-wrap: wrap; row-gap: 4px; } }
+body:not(.room3d) .pfelt:not(.tall) .ro-result { display: none; }

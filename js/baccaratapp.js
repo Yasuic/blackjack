@@ -1,14 +1,14 @@
 // The baccarat page: a punto banco table for up to 9 in the small meeting room. The host's browser runs
 // the table (js/baccarat.js); every other browser sends its bets there and is told only what it may see.
-import { BacTable, BAC_SEATS, BAC_SPOTS, BAC_KEYS, verifyShoe, cardText } from './baccarat.js?v=20261121ze';
-import { webglOK, initRoom } from './room3d.js?v=20261121ze';
-import { params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML } from './common.js?v=20261121ze';
+import { BacTable, BAC_SEATS, BAC_SPOTS, BAC_KEYS, verifyShoe, cardText } from './baccarat.js?v=20261121zf';
+import { webglOK, initRoom } from './room3d.js?v=20261121zf';
+import { params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML } from './common.js?v=20261121zf';
 
 const PREFIX = 'bjt-bc-';
 const app = $('#app');
 const S = { name: safeGet('bj-name') || '', myId: getClientId(), code: null, role: null, table: null, st: null, net: null, room: null,
   conn: ['Connecting', false], chip: Number(safeGet('bc-chip')) || 5, seedFor: '', at: 0, paused: false, show: null };
-if (params.has('roomdebug')) window.__B = S;
+if (params.has('roomdebug')) { window.__B = S; window.__bc = { push: () => push(), render: () => render() }; }
 const phone = () => innerWidth < 700;
 const PHONE_FLAT = true;
 const use3D = () => { if (params.get('flat') === '1' || !webglOK()) return false; if (params.get('3d') === '1') return true; const v = safeGet('bj-3d'); return PHONE_FLAT && phone() ? v === '1' : v !== '0'; };
@@ -256,7 +256,8 @@ function seatAt(seat) {
   const a = (rel / 4) * (tall ? 1.32 : 1.2);
   const P = { x: 50 + (tall ? 45 : 46) * Math.sin(a), y: (tall ? 52 : 34) + (tall ? 43 : 60) * Math.cos(a), rel };
   const far = Math.abs(rel) >= 3;
-  P.plate = { x: 50 + (P.x - 50) * (S.room ? (far ? 0.95 : 0.8) : 0.86), y: 50 + (P.y - 50) * (S.room ? (far ? 0.6 : 0.84) : 0.9) };
+  // In the 3D room every name plate stands at the rim in front of its own chair, clear of the betting boxes.
+  P.plate = S.room ? { x: 50 + Math.sign(rel) * [0, 13.6, 28.6, 37.5, 40][Math.abs(rel)], y: [94, 91.3, 83.5, 69, 55][Math.abs(rel)] } : { x: 50 + Math.sign(rel) * [0, 13.5, 27.5, 37, 40.5][Math.abs(rel)], y: [80.5, 79, 71.5, 60, 47][Math.abs(rel)] };
   return P;
 }
 // Where the round is in its show: how many cards are out, and whether the result is known yet.
@@ -332,14 +333,15 @@ function render() {
     const pay = final ? st.pays[p.id] : null;
     const A = P.plate;
     let bubble = '', bcls = '';
-    if (pay) { bubble = pay.net > 0 ? `+${money(pay.net)}` : pay.net < 0 ? `−${money(-pay.net)}` : 'Push'; bcls = pay.net > 0 ? 'win' : pay.net < 0 ? 'fold' : 'in'; }
-    else if (!p.connected) { bubble = 'Offline'; bcls = 'fold'; }
-    else if (staked) { bubble = BAC_KEYS.filter((k) => b[k]).map((k) => `${{ player: 'P', banker: 'B', tie: 'T', ppair: 'PP', bpair: 'BP' }[k]} ${money(b[k])}`).join(' · '); bcls = 'in'; }
-    h += `<div class="pk-seat pk-stand bc-seat${isMe ? ' me' : ' far'}${pay && pay.net > 0 ? ' won' : ''}" style="left:${A.x}%;top:${A.y}%">
+    if (!p.connected) { bubble = 'Offline'; bcls = 'fold'; }
+    // What the player has down is a line inside the name plate, so it can never cover a neighbour or a betting box.
+    const tag = !pay && staked ? BAC_KEYS.filter((k) => b[k]).map((k) => `<u class="${k}">${{ player: 'P', banker: 'B', tie: 'T', ppair: 'PP', bpair: 'BP' }[k]} ${money(b[k])}</u>`).join('') : pay ? `<u class="${pay.net > 0 ? 'up' : pay.net < 0 ? 'down' : 'push'}">${pay.net > 0 ? '+' + money(pay.net) : pay.net < 0 ? '−' + money(-pay.net) : 'Push'}</u>` : '';
+    h += `<div class="pk-seat pk-stand bc-seat r${Math.abs(P.rel)}${isMe ? ' me' : ' far'}${pay && pay.net > 0 ? ' won' : ''}" style="left:${A.x}%;top:${A.y}%">
       ${bubble ? `<div class="pk-bubble ${bcls}">${bubble}</div>` : ''}
-      <div class="pk-plate"><b>${esc(p.name)}${isMe ? ' <em>YOU</em>' : ''}${p.id === st.bankId ? ' <em class="dl">DEALER</em>' : ''}</b><span>${money(shownChips(st, p, final))}</span></div>
+      <div class="pk-plate"><b>${esc(p.name)}</b>${isMe ? '<em>YOU</em>' : ''}${p.id === st.bankId ? '<em class="dl">DEALER</em>' : ''}<span>${money(shownChips(st, p, final))}</span>${tag ? `<i class="bc-tag">${tag}</i>` : ''}</div>
     </div>`;
-    const B = { x: 50 + (P.x - 50) * 0.6, y: 50 + (P.y - 50) * 0.62 };
+    // Bet chips lie in one row in front of the betting boxes, in seat order, never on a box's words or a name.
+    const ar = Math.abs(P.rel), B = FELT().W < FELT().H ? { x: 50 + (P.x - 50) * 0.6, y: 50 + (P.y - 50) * 0.62 } : S.room ? { x: 50 + P.rel * 4.6, y: 76 - ar * 0.4 } : { x: 50 + P.rel * 4.6, y: 58 - ar * 0.2 };
     h += `<div class="pk-spot" id="spot-${p.seat}" style="left:${B.x}%;top:${B.y}%"></div>`;
     stools.push({ seat: p.seat, x: P.x, y: P.y });
     people.push({ id: p.id, name: p.name, look: p.look || { skin: 2, hair: 0 }, seat: p.seat, seats: BAC_SEATS, isMe, isDealer: false, bank: p.id === st.bankId, x: P.x, y: P.y, bet: staked });
@@ -376,12 +378,13 @@ function drawHud(st, me, sg) {
   let h = roadHTML(st);
   h += `<div class="bc-chips">${CHIPS.map((v) => `<button class="bc-chip c${v}${S.chip === v ? ' on' : ''}" data-act="chip" data-v="${v}">${v}</button>`).join('')}</div>`;
   h += `<div class="pk-mine bc-acts">
-    <span class="bc-bal">Chips <b>${money(me ? shownChips(st, me, sg?.final) : 0)}</b>${staked ? ` · bet <b>${money(staked)}</b>` : ''}</span>
+    <span class="bc-bal">Chips <b>${money(me ? shownChips(st, me, sg?.final) : 0)}</b>${staked ? `<i> · bet <b>${money(staked)}</b></i>` : ''}</span>
     <button class="btn small" data-act="clear"${done || !staked ? ' disabled' : ''}>Clear</button>
     <button class="btn small" data-act="rebet"${done || staked || !st.lastBets[S.myId] ? ' disabled' : ''}>Rebet</button>
-    ${isHost ? `<button class="btn small primary" data-act="deal"${st.canDeal && !done ? '' : ' disabled'}>Deal now</button>` : ''}
+    ${isHost ? `<button class="btn small primary" data-act="deal"${st.canDeal && !done ? '' : ' disabled'}>Deal<span> now</span></button>` : ''}
     <button class="btn small" data-act="add">🪙<span> Chips</span></button>
     <button class="btn small" data-act="react">😀</button>
+    <button class="btn small danger" data-act="leave">🚪<span> Leave</span></button>
   </div>`;
   tray.innerHTML = h;
 }
