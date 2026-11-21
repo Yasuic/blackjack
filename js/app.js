@@ -1,13 +1,13 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261121a';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261121a';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261121a';
-import { tickSound, winSound } from './fx.js?v=20261121a';
-import * as HX from './history.js?v=20261121a';
-import { webglOK, initRoom } from './room3d.js?v=20261121a';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261121a';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261121b';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261121b';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261121b';
+import { tickSound, winSound } from './fx.js?v=20261121b';
+import * as HX from './history.js?v=20261121b';
+import { webglOK, initRoom } from './room3d.js?v=20261121b';
+import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261121b';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -320,11 +320,11 @@ function maybeTakeOver() {
     const oldHost = table.hostId;
     for (const p of Object.values(table.players)) { p.connected = false; p.gone = false; }
     table.join(S.myId, S.name, S.buyIn, S.look);
-    if (table.banker && table.banker === oldHost) { table.banker = null; table.pendingBanker = null; }
+    // The old host stays the dealer when they were the dealer: the dealer makes no choices, so the others can keep playing.
     table.phase = 'settled'; table.startBetting(); // bets from a round that never finished go back
     table.vote = null; table.hist = []; table.evts = []; table.created = null;
     table.newShoe();
-    table.addLog(fresh ? `${S.name} opened the table.` : `The host left. ${S.name} is the host now. The shoe was shuffled again.`);
+    table.addLog(fresh ? `${S.name} opened the table.` : `The host left. ${S.name} is the host now. The shoe was shuffled again.${table.banker && table.banker === oldHost && table.players[oldHost] ? ` ${table.players[oldHost].name} is still the dealer.` : ''}`);
     table.ev(fresh ? 'table opened with no host present' : 'host handoff: new host, new shuffle', S.myId);
     try { S.conn?.close(); } catch {}
     try { S.peer?.destroy(); } catch {}
