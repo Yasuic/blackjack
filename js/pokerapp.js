@@ -1,9 +1,9 @@
 // The poker page: a Texas Hold'em table for up to 9 in the big meeting room. The host's browser runs
 // the table (js/poker.js); every other browser sends its moves there and is told only what it may see.
-import { PokerTable, POKER_SEATS, pokerDeck, cardText } from './poker.js?v=20261121f';
-import { sha256 } from './game.js?v=20261121f';
-import { webglOK, initRoom } from './room3d.js?v=20261121f';
-import { params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest } from './common.js?v=20261121f';
+import { PokerTable, POKER_SEATS, pokerDeck, cardText } from './poker.js?v=20261121g';
+import { sha256 } from './game.js?v=20261121g';
+import { webglOK, initRoom } from './room3d.js?v=20261121g';
+import { params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest } from './common.js?v=20261121g';
 
 const PREFIX = 'bjt-pk-';
 const app = $('#app');
@@ -60,24 +60,68 @@ function startHost(code, resume) {
   for (const p of Object.values(t.players)) p.connected = false;
   t.hostId = S.myId;
   t.join(S.myId, S.name, getLook());
-  S.net = createHost(PREFIX + code, {
-    msg: hostMsg,
-    gone: (id) => { t.disconnect(id); S.goneAt[id] = Date.now(); push(); },
-    status: (text, ok) => { S.conn = [text, ok]; drawConn(); },
-    taken: () => { // someone already runs this table (often your own other tab): join it instead
-      S.net.close(); clearInterval(S.clock); S.table = null; startGuest(code);
-    },
-  });
+  openHost(code);
   history.replaceState(null, '', shareLink());
   showTable();
-  S.clock = setInterval(hostClock, 400);
   push();
+}
+function openHost(code) {
+  S.net = createHost(PREFIX + code, {
+    msg: hostMsg,
+    gone: (id) => { S.table?.disconnect(id); S.goneAt[id] = Date.now(); push(); },
+    status: (text, ok) => { S.conn = [text, ok]; drawConn(); },
+    taken: () => { // someone already runs this table (your own other tab, or a player who took the table over): join it instead
+      S.net.close(); clearInterval(S.clock); S.table = null; startGuest(code, true);
+    },
+  });
+  clearInterval(S.clock);
+  S.clock = setInterval(hostClock, 400);
+}
+// The cards and the secret word of this browser's own hand, kept so they survive a reload and a move of the table.
+function keepMine(st) {
+  const x = st.seats.find((q) => q && q.id === S.myId);
+  if (!x || !x.inHand || !x.cards[0] || !x.cards[1] || !st.mySalt) return;
+  const k = S.code + '#' + st.handNo;
+  if (S.mineKey === k + st.mySalt) return;
+  S.mineKey = k + st.mySalt;
+  safeSet('pk-mine', JSON.stringify({ k, cards: x.cards, salt: st.mySalt }));
+}
+function myKept(st) {
+  try { const m = JSON.parse(safeGet('pk-mine') || 'null'); return m && m.k === S.code + '#' + st.handNo ? m : null; } catch { return null; }
+}
+// The host's browser is gone: this browser takes the table over from what it was last told, and the hand goes on.
+function takeOver() {
+  const st = S.st;
+  if (!st || S.role !== 'guest') return;
+  try { S.net.close(); } catch {}
+  const t = PokerTable.fromPublic(st, S.myId, myKept(st));
+  const oldHost = st.hostId, oldName = st.players.find((p) => p.id === oldHost)?.name || 'The host';
+  t.join(S.myId, S.name, getLook());
+  t.addLog(`${oldName}'s browser left. The table now runs in ${S.name}'s browser${t.inHand() ? ' and the hand goes on' : ''}.`);
+  const now = Date.now();
+  for (const p of Object.values(t.players)) if (p.id !== S.myId) S.goneAt[p.id] = now;
+  S.role = 'host'; S.table = t; S.started = st.handNo > 0; S.paused = false; S.doneAt = 0;
+  // Players still in the hand get a few seconds to hand in their cards before anyone can act.
+  S.waitFor = t.missingCards().map((i) => t.seats[i].id).filter((id) => id !== oldHost);
+  S.waitUntil = now + 12000;
+  t.waitCards = S.waitFor.length > 0;
+  openHost(S.code);
+  toast('The host left. The table now runs in your browser.');
+  push();
+}
+function watchHost() {
+  const st = S.st;
+  if (!st || S.role !== 'guest' || S.takeT || params.get('takeover') === '0') return;
+  const list = st.players.filter((p) => p.connected && p.id !== st.hostId).sort((a, b) => (a.seat < 0 ? 99 : a.seat) - (b.seat < 0 ? 99 : b.seat) || (a.id < b.id ? -1 : 1));
+  let rank = list.findIndex((p) => p.id === S.myId);
+  if (rank < 0) rank = list.length;
+  S.takeT = setTimeout(() => { S.takeT = null; if (S.role === 'guest' && S.nohost) takeOver(); }, 1500 + rank * 4000);
 }
 function hostMsg(id, m) {
   const t = S.table;
   if (!t) return;
   try {
-    if (m.t === 'hello') { if (t.players[id]?.kicked) { S.net.send(id, { t: 'kicked' }); return; } t.join(id, m.name, m.look); delete S.goneAt[id]; if (S.autoAway[id]) { delete S.autoAway[id]; t.sitOut(id, false); } }
+    if (m.t === 'hello') { if (t.players[id]?.kicked) { S.net.send(id, { t: 'kicked' }); return; } t.join(id, m.name, m.look); if (m.mine) t.giveCards(id, m.mine.cards, m.mine.salt); delete S.goneAt[id]; if (S.autoAway[id]) { delete S.autoAway[id]; t.sitOut(id, false); } }
     else if (!t.players[id] || t.players[id].kicked) return;
     else doMove(id, m);
   } catch (e) { S.net.send(id, { t: 'err', msg: e.message }); }
@@ -89,13 +133,14 @@ function doMove(id, m) {
   switch (m.t) {
     case 'sit': t.sit(id, Number(m.seat), m.buyIn); break;
     case 'stand': t.standUp(id); break;
-    case 'act': t.act(id, m.a, m.amount); break;
+    case 'act': if (t.waitCards) throw new Error('One moment: the table just moved to a new host.'); t.act(id, m.a, m.amount); break;
+    case 'cards': t.giveCards(id, m.cards, m.salt); break;
     case 'away': t.sitOut(id, !!m.on); break;
     case 'add': t.addChips(id, m.amount); break;
     case 'take': t.takeChips(id, m.amount); break;
     case 'vaway': t.voteAway(id, String(m.id), !!m.on); break;
     case 'fx': relayFx(id, m.e); break;
-    case 'show': t.showCards(id); break;
+    case 'show': t.showCards(id, m.which); break;
     case 'rabbit': t.rabbitHunt(id); break;
     case 'straddle': t.setStraddle(id, !!m.on); break;
     case 'runs': t.setRuns(id, m.n); break;
@@ -129,6 +174,7 @@ function push() {
   if (!t) return;
   for (const id of S.net.ids()) S.net.send(id, { t: 'state', st: t.publicState(id) });
   S.st = t.publicState(S.myId);
+  keepMine(S.st);
   S.at = Date.now();
   try { safeSet('pk-host', JSON.stringify({ code: S.code, table: { ...t, log: t.log.slice(-60), hist: t.hist.slice(-40) } })); } catch {}
   render();
@@ -137,14 +183,20 @@ function hostClock() {
   const t = S.table;
   if (!t) return;
   const now = Date.now();
+  if (t.waitCards) {
+    const miss = t.missingCards().map((i) => t.seats[i].id);
+    if (!t.inHand() || now > S.waitUntil || !(S.waitFor || []).some((id) => miss.includes(id))) { t.waitCards = false; t.turnStarted = now; push(); }
+    return;
+  }
   if (t.inHand()) {
     S.doneAt = 0;
     if (t.turn !== null) {
       const id = t.seats[t.turn].id, away = t.players[id]?.connected === false;
       let limit = t.settings.turnTimer;
       // A player whose connection dropped gets 45 more seconds to come back before the table acts for them.
-      if (away) limit = (limit || 30) + 45;
-      if (limit) limit += t.seats[t.turn].bank || 0; // then the player's own time bank
+      // Once the table has acted for them in this way, their later turns take 3 seconds until they are back.
+      if (away) limit = S.autoAway[id] ? 3 : (limit || 30) + 45;
+      else if (limit) limit += t.seats[t.turn].bank || 0; // a player who is here also has their own time bank
       if (limit && now - (t.turnStarted || now) > limit * 1000) {
         t.timeout(id);
         t.sitOut(id, true); // away until they come back, so the next hands do not wait for them
@@ -170,19 +222,28 @@ function hostClock() {
 }
 
 // ---------- Guest ----------
-function startGuest(code) {
-  S.role = 'guest'; S.code = code; S.st = null;
+function startGuest(code, again) {
+  S.role = 'guest'; S.code = code; S.st = null; S.nohost = false;
   history.replaceState(null, '', shareLink());
-  showTable();
-  S.net = createGuest(PREFIX + code, () => ({ t: 'hello', id: S.myId, name: S.name, look: getLook() }), {
+  if (!again || !$('#pk-body')) showTable(); else render();
+  const mineNow = () => { try { const m = JSON.parse(safeGet('pk-mine') || 'null'); return m && String(m.k).startsWith(code + '#') ? { cards: m.cards, salt: m.salt } : undefined; } catch { return undefined; } };
+  S.net = createGuest(PREFIX + code, () => ({ t: 'hello', id: S.myId, name: S.name, look: getLook(), mine: mineNow() }), {
     msg: (m) => {
-      if (m.t === 'state') { S.st = m.st; S.at = Date.now(); S.nohost = false; render(); sendSeed(); }
+      if (m.t === 'state') {
+        const st = m.st;
+        clearTimeout(S.takeT); S.takeT = null;
+        // After a move of the table the new host does not know this browser's cards until they are handed in.
+        const x = st.seats.find((q) => q && q.id === S.myId);
+        if (x && x.inHand && x.cards.length === 2 && !x.cards[0]) { const k = myKept(st); if (k) { x.cards = k.cards; S.net.send({ t: 'cards', cards: k.cards, salt: k.salt }); } }
+        if (S.st && st.hostId !== S.st.hostId) toast(`The table now runs in ${st.players.find((p) => p.id === st.hostId)?.name || 'another player'}'s browser.`);
+        S.st = st; keepMine(st); S.at = Date.now(); S.nohost = false; render(); sendSeed();
+      }
       else if (m.t === 'err') toast(m.msg);
       else if (m.t === 'fx') showFx(m.from, m.e);
       else if (m.t === 'kicked') { S.net.close(); showLanding('The host removed you from the table.'); }
     },
     status: (text, ok) => { S.conn = [text, ok]; drawConn(); },
-    nohost: () => { S.nohost = true; if (!S.st) render(); },
+    nohost: () => { S.nohost = true; if (!S.st) render(); else watchHost(); },
   });
 }
 // A fresh seed of this browser for every hand, sent once the host's promise for that hand is seen.
@@ -301,6 +362,17 @@ function runStage(st) {
   const k = Math.min(last, Math.floor((Date.now() - S.run.t0) / stepMs()));
   return { k, last, final: k >= last, n: k < ro.length ? ro[k].n : 5, odds: k < ro.length ? ro[k] : null, boards: k < ro.length ? 1 : Math.min(R, 1 + k - ro.length + (k >= last ? 1 : 0)) };
 }
+// The usual numbers under a name. VPIP: share of hands where the player put chips in by choice before the flop.
+// PFR: share of hands the player raised before the flop.
+const pc = (a, b) => (b ? Math.round((a / b) * 100) : 0);
+function statLine(t) {
+  if (!t || !t.hands) return '';
+  return `<small class="pk-stats" title="VPIP: hands with chips put in by choice before the flop. PFR: hands raised before the flop."><i>VPIP ${pc(t.vpip, t.pre)}</i><i>PFR ${pc(t.pfr, t.pre)}</i><i>${t.hands} hands</i></small>`;
+}
+function statsHTML(t) {
+  if (!t || !t.hands) return '<p class="hint">No hands played yet.</p>';
+  return `<table class="pk-table"><tr><td>Hands dealt</td><td>${t.hands}</td></tr><tr><td>VPIP (put chips in by choice before the flop)</td><td>${pc(t.vpip, t.pre)}%</td></tr><tr><td>PFR (raised before the flop)</td><td>${pc(t.pfr, t.pre)}%</td></tr><tr><td>Went to showdown</td><td>${pc(t.sd, t.hands)}%</td></tr><tr><td>Won at showdown</td><td>${pc(t.wsd, t.sd)}%</td></tr><tr><td>Hands won</td><td>${pc(t.won, t.hands)}%</td></tr></table>`;
+}
 function seatLayout(st) {
   const F = FELT(), spots = seatSpots(F.W, F.H);
   const mySeat = st.seats.findIndex((x) => x && x.id === S.myId);
@@ -336,7 +408,7 @@ function render() {
   const rows = boards.map((b, r) => `<div class="pk-brow">${many ? `<i>Run ${r + 1}</i>` : ''}${b.map((c, i) => cardHTML(c, 'bcard' + ((r === 0 ? i >= seen.n : r >= seen.rows) ? ' deal' : '') + (Object.keys(winBy).some((k) => inBest(Number(k), c)) ? ' hi' : ''))).join('')}${r === 0 ? rabbit : ''}</div>`).join('');
   seen.n = boards[0].length; seen.rows = boards.length;
   h += `<div class="pk-mid${many ? ' many n' + allBoards.length : ''}">
-    <div class="pk-board pk-stand"><div class="pk-pot">${st.bomb && live ? '<span class="pk-bomb">💣 Bomb pot</span>' : ''}<b>Pot ${amt(potNow)}</b>${potLine ? `<small>${potLine}</small>` : ''}</div>${rows}</div>
+    <div class="pk-board pk-stand"><div class="pk-pot">${st.bomb && live ? '<span class="pk-bomb">💣 Bomb pot</span>' : ''}<b class="pk-potnum"><i>POT</i>${amt(potNow)}</b>${potLine ? `<small>${potLine}</small>` : ''}</div>${rows}</div>
     ${rankBadge(mySeat >= 0 && !showing ? st.seats[mySeat] : null)}
     <div class="pk-spot pot" id="spot-99"></div>
   </div>`;
@@ -385,7 +457,7 @@ function render() {
     h += `<div class="pk-seat pk-stand${!me ? ' far' : ''}${me ? ' me' : ''}${turn ? ' turn' : ''}${seat.inHand && seat.folded ? ' folded' : ''}${!seat.inHand && live ? ' idle' : ''}${bcls === 'win' ? ' won' : ''}" style="left:${A.x}%;top:${A.y}%" data-seat="${i}">
       ${bubble ? `<div class="pk-bubble ${bcls}">${bubble}</div>` : ''}
       <div class="pk-cards${seat.folded ? ' dim' : ''}">${cards}</div>
-      <button class="pk-plate" data-act="seat-menu" data-seat="${i}"><b>${esc(seat.name)}${me ? ' <em>YOU</em>' : ''}</b><span>${amt(seat.stack - (showing ? seat.won || 0 : 0))}</span>${timer}</button>
+      <button class="pk-plate" data-act="seat-menu" data-seat="${i}"><b>${esc(seat.name)}${me ? ' <em>YOU</em>' : ''}</b><span>${amt(seat.stack - (showing ? seat.won || 0 : 0))}</span>${statLine(seat.stats)}${timer}</button>
     </div>`;
     h += `<div class="pk-spot${seat.bet ? ' has' : ''}" id="spot-${i}" style="left:${B.x}%;top:${B.y}%">${seat.bet ? `<span class="pk-amt pk-stand">${amt(seat.bet)}</span>` : ''}</div>`;
     if (st.button === i && st.handNo > 0) { h += `<div class="pk-dbtn" style="left:calc(${B.x}% + ${(P.y > 50 ? 1 : -1) * (phone() ? 30 : 52)}px);top:${B.y}%">D</div>`; }
@@ -447,7 +519,8 @@ function drawHud(st, mySeat, showing) {
   const o = st.options, live = st.phase !== 'done' && st.phase !== 'waiting';
   const isHost = S.role === 'host';
   let status = '';
-  if (mySeat < 0) status = 'Tap an empty seat to join the game.';
+  if (st.wait?.length) status = `The table moved to a new host. Waiting a moment for ${esc(st.wait.join(', '))}…`;
+  else if (mySeat < 0) status = 'Tap an empty seat to join the game.';
   else if (o) status = `Your turn${seat.hand ? ' · ' + esc(seat.hand) : ''}`;
   else if (live && st.turn !== null) status = `Waiting for ${esc(st.seats[st.turn]?.name || '')}`;
   else if (showing) status = 'All in. The cards are coming out…';
@@ -465,15 +538,19 @@ function drawHud(st, mySeat, showing) {
     h += `<div class="pk-acts">
       <button class="pk-act fold" data-act="fold">Fold</button>
       ${o.canCheck ? '<button class="pk-act check" data-act="check">Check</button>' : `<button class="pk-act call" data-act="call">Call ${amt(o.toCall)}${o.toCall >= seat.stack ? ' (all in)' : ''}</button>`}
-      ${o.canRaise ? `<button class="pk-act raise" data-act="raise" id="raise-btn">${to >= o.maxTo ? 'All in ' : o.isBet ? 'Bet ' : 'Raise to '}${amt(to)}</button>` : ''}
+      ${o.canRaise ? `<button class="pk-act raise" data-act="raise" id="raise-btn" title="Tap to raise. Hold and drag up to pick the amount."><i class="pk-dragtip">▲ drag</i><span id="raise-txt">${to >= o.maxTo ? 'All in ' : o.isBet ? 'Bet ' : 'Raise to '}${amt(to)}</span></button>` : ''}
     </div>`;
     if (o.canRaise) h += `<div class="pk-raise">
-      <div class="pk-presets"><button data-act="preset" data-v="${o.minTo}">Min</button><button data-act="preset" data-v="${frac(0.5)}">½ pot</button><button data-act="preset" data-v="${frac(0.75)}">¾ pot</button><button data-act="preset" data-v="${frac(1)}">Pot</button><button data-act="preset" data-v="${o.maxTo}">All in</button></div>
+      <div class="pk-presets"><button data-act="preset" data-v="${o.minTo}">Min</button><button data-act="preset" data-v="${frac(1 / 3)}">⅓ pot</button><button data-act="preset" data-v="${frac(0.5)}">½ pot</button><button data-act="preset" data-v="${frac(2 / 3)}">⅔ pot</button><button data-act="preset" data-v="${frac(1)}">Pot</button><button data-act="preset" data-v="${o.maxTo}">All in</button></div>
       <div class="pk-slide"><input type="range" id="raise-range" min="${o.minTo}" max="${o.maxTo}" step="${Math.max(1, Math.min(st.settings.bigBlind, o.maxTo - o.minTo) || 1)}" value="${to}" /><input type="number" id="raise-num" min="${o.minTo}" max="${o.maxTo}" value="${to}" inputmode="numeric" /></div>
     </div>`;
   } else if (seat) {
     const b = [];
-    if (st.phase === 'done' && seat.inHand && seat.cards[0] && !seat.shown) b.push('<button class="btn small" data-act="show">Show my cards</button>');
+    if (st.phase === 'done' && seat.inHand && seat.cards[0] && !seat.shown) {
+      const m = seat.mask || [false, false];
+      seat.cards.forEach((c, k) => { if (!m[k]) b.push(`<button class="btn small" data-act="show" data-w="${k}">Show ${esc(cardText(c))}</button>`); });
+      if (!m[0] && !m[1]) b.push('<button class="btn small" data-act="show">Show both</button>');
+    }
     if (st.phase === 'done' && st.result?.early && st.settings.rabbitHunt && !st.rabbit && seat.inHand) b.push('<button class="btn small" data-act="rabbit">🐇 Rabbit hunt</button>');
     if (!live && isHost && (!S.started || !st.settings.autoStart || S.paused) && st.canStart) b.push(`<button class="btn primary" data-act="start">${st.handNo ? 'Deal next hand' : 'Start'}</button>`);
     if (b.length) h += `<div class="pk-acts small">${b.join('')}</div>`;
@@ -503,7 +580,7 @@ function setRaise(v, from) {
   const to = Math.max(o.minTo, Math.min(o.maxTo, v));
   if (from !== 'range' && $('#raise-range')) $('#raise-range').value = to;
   if (from !== 'num' && $('#raise-num')) $('#raise-num').value = to;
-  const b = $('#raise-btn');
+  const b = $('#raise-txt');
   if (b) b.textContent = `${to >= o.maxTo ? 'All in ' : o.isBet ? 'Bet ' : 'Raise to '}${amt(to)}`;
 }
 
@@ -580,7 +657,7 @@ function fairHTML(st) {
   const rows = [...f.hands].reverse().slice(0, 25).map((hd) => {
     const c = checkHand(hd);
     const res = !c ? '<span class="muted">Seeds closed</span>' : c.ok ? `<span class="up">Checked ✓</span> <button class="btn small" data-act="fair-hand" data-h="${hd.hand}">See the deal</button>` : `<span class="down">${esc(c.why)}</span>`;
-    return `<tr><td>${hd.hand}</td><td><code>${esc(hd.commit.slice(0, 10))}…</code></td><td>${hd.board.map(cardText).join(' ') || 'no flop'}</td><td>${res}</td></tr>`;
+    return `<tr><td>${hd.hand}</td><td><code>${hd.commit ? esc(hd.commit.slice(0, 10)) + '…' : 'table moved'}</code></td><td>${hd.board.map(cardText).join(' ') || 'no flop'}</td><td>${res}</td></tr>`;
   }).join('');
   return `<h3>🔐 Fair deck</h3><div class="pk-fair">
     <p>Before each hand the host's browser locks in a hidden seed and shows its code (a fingerprint of the seed). Then each player's browser adds a seed of its own. The order of the 52 cards comes from all of these together, so nobody can choose it, the host included.</p>
@@ -624,9 +701,9 @@ document.addEventListener('click', (e) => {
     case 'fold': send({ t: 'act', a: 'fold' }); break;
     case 'check': send({ t: 'act', a: 'check' }); break;
     case 'call': send({ t: 'act', a: 'call' }); break;
-    case 'raise': { const o = st.options; if (!o?.canRaise) break; const to = Math.max(o.minTo, Math.min(o.maxTo, Math.round(Number($('#raise-num')?.value ?? S.raiseTo)))); send({ t: 'act', a: o.isBet ? 'bet' : 'raise', amount: to }); break; }
+    case 'raise': { if (Date.now() - (S.dragEnd || 0) < 350) break; const o = st.options; if (!o?.canRaise) break; const to = Math.max(o.minTo, Math.min(o.maxTo, Math.round(Number($('#raise-num')?.value ?? S.raiseTo)))); send({ t: 'act', a: o.isBet ? 'bet' : 'raise', amount: to }); break; }
     case 'preset': setRaise(el.dataset.v); break;
-    case 'show': send({ t: 'show' }); break;
+    case 'show': send({ t: 'show', which: el.dataset.w === undefined ? 'both' : Number(el.dataset.w) }); break;
     case 'rabbit': send({ t: 'rabbit' }); break;
     case 'away': { const s = st.seats.find((x) => x && x.id === S.myId); send({ t: 'away', on: !s.out }); break; }
     case 'straddle': { const s = st.seats.find((x) => x && x.id === S.myId); send({ t: 'straddle', on: !s.straddle }); break; }
@@ -642,9 +719,10 @@ document.addEventListener('click', (e) => {
     case 'dl-go': downloadHands(el.dataset.k); break;
     case 'seat-menu': {
       const i = Number(el.dataset.seat), x = st.seats[i];
-      if (!x || x.id === S.myId) break;
+      if (!x) break;
+      if (x.id === S.myId) { modal(`<h3>${esc(x.name)} (you)</h3><div class="pk-set">${statsHTML(x.stats)}</div>`); break; }
       const mine = st.seats.some((q) => q && q.id === S.myId), voted = (st.awayVotes?.[x.id] || []).includes(S.myId);
-      modal(`<h3>${esc(x.name)}</h3><div class="pk-set"><p>Seat ${i + 1} · ${money(x.stack)} chips${x.out ? ' · away' : ''}</p>${mine && !x.out ? `<button class="btn" data-act="vaway" data-id="${esc(x.id)}" data-on="${voted ? 0 : 1}">${voted ? 'Take back my away vote' : '💤 Vote to mark away'}</button><p class="hint">A player is marked away only when every other seated player votes for it. They keep their seat and chips and can come back with one press.</p>` : ''}</div>`);
+      modal(`<h3>${esc(x.name)}</h3><div class="pk-set"><p>Seat ${i + 1} · ${money(x.stack)} chips${x.out ? ' · away' : ''}</p>${statsHTML(x.stats)}${mine && !x.out ? `<button class="btn" data-act="vaway" data-id="${esc(x.id)}" data-on="${voted ? 0 : 1}">${voted ? 'Take back my away vote' : '💤 Vote to mark away'}</button><p class="hint">A player is marked away only when every other seated player votes for it. They keep their seat and chips and can come back with one press.</p>` : ''}</div>`);
       break;
     }
     case 'vaway': send({ t: 'vaway', id: el.dataset.id, on: el.dataset.on === '1' }); $('#modal').close(); break;
@@ -680,6 +758,32 @@ document.addEventListener('click', (e) => {
     default: break;
   }
 });
+// Hold the raise button and drag up: the amount grows with the finger, shown on a tall gauge. Letting go keeps
+// the amount; a tap on the button then sends it.
+document.addEventListener('pointerdown', (e) => {
+  if (!e.target.closest('#raise-btn') || !S.st?.options?.canRaise) return;
+  S.drag = { y: e.clientY, x: e.clientX, on: false, from: S.raiseTo };
+});
+document.addEventListener('pointermove', (e) => {
+  const d = S.drag, o = S.st?.options;
+  if (!d || !o?.canRaise) return;
+  const up = d.y - e.clientY;
+  if (!d.on && Math.abs(up) < 10) return;
+  d.on = true; e.preventDefault();
+  const span = Math.min(320, Math.max(160, d.y - 90));
+  const f = Math.max(0, Math.min(1, up / span));
+  // Slow at the bottom, fast at the top, so small raises are easy to hit.
+  const v = f >= 1 ? o.maxTo : Math.round(o.minTo + (o.maxTo - o.minTo) * f * f);
+  setRaise(v);
+  let g = $('#pk-gauge');
+  if (!g) { g = document.createElement('div'); g.id = 'pk-gauge'; g.className = 'pk-gauge'; document.body.append(g); }
+  const pot = o.pot + o.toCall, share = pot ? Math.round(((v - S.st.currentBet) / pot) * 100) : 0;
+  g.style.left = Math.max(60, Math.min(innerWidth - 60, d.x)) + 'px'; g.style.top = d.y - span - 64 + 'px'; g.style.height = span + 'px';
+  g.innerHTML = `<div class="pk-gnum" style="bottom:${f * 100}%"><b>${v >= o.maxTo ? 'All in ' : ''}${amt(v)}</b><small>${share}% of pot</small></div><div class="pk-gfill" style="height:${f * 100}%"></div>`;
+}, { passive: false });
+const dragStop = () => { if (S.drag?.on) S.dragEnd = Date.now(); S.drag = null; $('#pk-gauge')?.remove(); };
+document.addEventListener('pointerup', dragStop);
+document.addEventListener('pointercancel', dragStop);
 document.addEventListener('input', (e) => {
   if (e.target.id === 'raise-range') setRaise(e.target.value, 'range');
   else if (e.target.id === 'raise-num') setRaise(e.target.value, 'num');

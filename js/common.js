@@ -101,15 +101,17 @@ export function createHost(peerId, on) {
     });
   };
   open();
+  // A small sign of life every 2 seconds, so a player's browser notices quickly when the host is gone.
+  const beat = setInterval(() => { for (const c of conns.values()) if (c.open) { try { c.send({ t: 'ping' }); } catch {} } }, 2000);
   return {
     send(id, m) { const c = conns.get(id); if (c && c.open) { try { c.send(m); } catch {} } },
     ids: () => [...conns.keys()],
-    close() { dead = true; try { peer.destroy(); } catch {} },
+    close() { dead = true; clearInterval(beat); try { peer.destroy(); } catch {} },
   };
 }
 // A player's side. on: { msg(m), status(text, ok), open(), nohost() }. hello() gives the first message.
 export function createGuest(peerId, hello, on) {
-  let peer = null, conn = null, dead = false, tries = 0, timer = null;
+  let peer = null, conn = null, dead = false, tries = 0, timer = null, lastRx = 0;
   const retry = () => { if (dead) return; clearTimeout(timer); timer = setTimeout(connect, Math.min(6000, 800 + tries++ * 700)); };
   const connect = () => {
     if (dead) return;
@@ -118,8 +120,8 @@ export function createGuest(peerId, hello, on) {
     const c = peer.connect(peerId, { reliable: true });
     conn = c;
     const giveUp = setTimeout(() => { if (!c.open && conn === c) { try { c.close(); } catch {} retry(); } }, 9000);
-    c.on('open', () => { clearTimeout(giveUp); tries = 0; on.status?.('Live', true); c.send(hello()); on.open?.(); });
-    c.on('data', (m) => { if (m && typeof m === 'object') on.msg(m); });
+    c.on('open', () => { clearTimeout(giveUp); tries = 0; lastRx = Date.now(); on.status?.('Live', true); c.send(hello()); on.open?.(); });
+    c.on('data', (m) => { lastRx = Date.now(); if (m && typeof m === 'object' && m.t !== 'ping') on.msg(m); });
     c.on('close', () => { clearTimeout(giveUp); if (conn === c) { on.status?.('Reconnecting', false); retry(); } });
     c.on('error', () => { clearTimeout(giveUp); if (conn === c) retry(); });
   };
@@ -134,8 +136,16 @@ export function createGuest(peerId, hello, on) {
     });
   };
   start();
+  // Nothing heard from the host for 5.5 seconds: the link is dead even when the browser has not said so yet.
+  const watch = setInterval(() => {
+    if (dead || !conn || !conn.open || Date.now() - lastRx < 5500) return;
+    const c = conn; conn = null;
+    on.status?.('Reconnecting', false);
+    try { c.close(); } catch {}
+    retry();
+  }, 1500);
   return {
     send(m) { if (conn && conn.open) { try { conn.send(m); return true; } catch {} } return false; },
-    close() { dead = true; clearTimeout(timer); try { peer.destroy(); } catch {} },
+    close() { dead = true; clearTimeout(timer); clearInterval(watch); try { peer.destroy(); } catch {} },
   };
 }

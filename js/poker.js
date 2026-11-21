@@ -1,6 +1,6 @@
 // No-limit Texas Hold'em for up to 9 players. Pure rules: the host's browser owns one PokerTable and
 // every action goes through it. Nothing here touches the page or the network.
-import { SUITS, RANKS, sha256, fairSeed, fairShoe, MAX_CHIPS } from './game.js?v=20261121f';
+import { SUITS, RANKS, sha256, fairSeed, fairShoe, MAX_CHIPS } from './game.js?v=20261121g';
 
 export const POKER_SEATS = 9;
 export const POKER_DEFAULTS = {
@@ -269,7 +269,7 @@ export class PokerTable {
   startHand() {
     if (!this.canStart()) throw new Error('Two players with chips are needed.');
     // Leftovers of the hand before.
-    for (let i = 0; i < POKER_SEATS; i++) { const x = this.seats[i]; if (x) Object.assign(x, { bet: 0, total: 0, cards: [], folded: false, allIn: false, acted: false, inHand: false, show: false, won: 0, hand: null }); }
+    for (let i = 0; i < POKER_SEATS; i++) { const x = this.seats[i]; if (x) Object.assign(x, { bet: 0, total: 0, cards: [], folded: false, allIn: false, acted: false, inHand: false, show: false, mask: null, cc: null, salt: null, vp: false, pf: false, redrawn: false, won: 0, hand: null }); }
     const inIdx = this.eligible();
     const live = (j) => inIdx.includes(j);
     this.handNo++;
@@ -334,6 +334,9 @@ export class PokerTable {
     let j = this.button;
     for (let k = 0; k < inIdx.length; k++) { j = this.nextFrom(j, (q) => inIdx.includes(q)); order.push(j); }
     for (let r = 0; r < 2; r++) for (const i of order) this.seats[i].cards.push(this.draw());
+    // A sealed note of each player's cards, open to all. If the table moves to another browser mid hand,
+    // each player hands in their cards with the secret word and the new host checks them against the note.
+    for (const i of order) { const x = this.seats[i]; x.salt = randomSeed(); x.cc = sha256(x.cards.map(cardText).join('') + x.salt); }
   }
 
   // ---- betting ----
@@ -380,6 +383,7 @@ export class PokerTable {
       const pay = o.toCall;
       x.stack -= pay; x.bet += pay; x.total += pay; x.acted = true;
       if (x.stack === 0) x.allIn = true;
+      if (this.phase === 'preflop' && !this.bomb) x.vp = true;
       this.addLog(`${nm} calls ${pay}${x.allIn ? ' and is all in' : ''}.`);
     } else if (type === 'raise' || type === 'bet') {
       if (!o.canRaise) throw new Error('You cannot raise now.');
@@ -394,6 +398,8 @@ export class PokerTable {
         this.minRaise = by;
         for (const q of this.liveSeats()) if (q !== i) this.seats[q].acted = false;
       }
+      if (this.phase === 'preflop' && !this.bomb) { x.vp = true; x.pf = true; }
+      if (this.phase !== 'preflop') x.agg = true;
       this.addLog(`${nm} ${o.isBet ? 'bets' : 'raises to'} ${to}${x.allIn ? ' and is all in' : ''}.`);
       this.currentBet = to;
     } else throw new Error('Unknown move.');
@@ -429,6 +435,7 @@ export class PokerTable {
     this.refundUncalled();
     this.collect();
     const live = this.liveSeats();
+
     if (live.length <= 1) { this.finishHand(); return; }
     if (this.phase === 'river') { this.finishHand(); return; }
     const canBet = live.filter((i) => !this.seats[i].allIn);
@@ -436,6 +443,7 @@ export class PokerTable {
       // Nobody left to bet against: the hands turn face up and the rest of the board comes.
       // Before each new card the chances of every hand are worked out, for the display.
       if (!this.allInRun) {
+        for (const i of live) if (this.seats[i].cards.length !== 2) this.redraw(i); // only after a table move
         this.allInRun = true; this.runout = [];
         for (const i of live) this.seats[i].show = true;
         // Run it more than once: as many runs as the table asks for and the deck has cards for.
@@ -515,6 +523,7 @@ export class PokerTable {
     this.turn = null;
     const live = this.liveSeats();
     const showdown = live.length > 1;
+    if (showdown) for (const i of live) if (this.seats[i].cards.length !== 2) this.redraw(i); // only after a table move
     const early = this.board.length < 5;
     const dealtIn = this.seats.map((x, i) => (x && x.inHand ? i : -1)).filter((i) => i >= 0);
     // Seats in dealing order from the left of the button: the first of them gets an odd chip.
@@ -560,6 +569,17 @@ export class PokerTable {
         }
       }
     });
+    // Each player's numbers: hands dealt, hands with chips put in by choice before the flop (VPIP), hands raised
+    // before the flop (PFR), showdowns reached and showdowns won. Bomb pots have no betting before the flop and are left out of VPIP and PFR.
+    const wonSeats = new Set(wins.map((w) => w.seat));
+    for (const i of dealtIn) {
+      const x = this.seats[i], p = this.players[x.id];
+      if (!p) continue;
+      const t = (p.stats ||= { hands: 0, pre: 0, vpip: 0, pfr: 0, sd: 0, wsd: 0, won: 0 });
+      t.hands++; if (!this.bomb) { t.pre++; if (x.vp) t.vpip++; if (x.pf) t.pfr++; }
+      if (showdown && live.includes(i)) { t.sd++; if (wonSeats.has(i)) t.wsd++; }
+      if (wonSeats.has(i)) t.won++;
+    }
     this.pot = 0;
     // 7-2 bounty: a winner holding seven-two collects from everyone who was dealt in.
     const bounty = [];
@@ -567,7 +587,7 @@ export class PokerTable {
       const winners = [...new Set(wins.map((w) => w.seat))];
       for (const w of winners) {
         const v = this.seats[w].cards.map(rankVal).sort((a, b) => a - b);
-        if (v[0] !== 2 || v[1] !== 7) continue;
+        if (v.length !== 2 || v[0] !== 2 || v[1] !== 7) continue;
         this.seats[w].show = true;
         let got = 0;
         for (const i of dealtIn) { if (i === w) continue; const pay = Math.min(this.seats[i].stack, this.settings.sevenDeuce); this.seats[i].stack -= pay; this.seats[w].stack += pay; got += pay; }
@@ -580,7 +600,7 @@ export class PokerTable {
     this.phase = 'done';
     // The record of the hand, with the seed that anyone can check.
     const rec = { ...this.cur, dealt: [...this.dealt], board: [...this.board], boards: R > 1 ? boards : undefined, button: this.button, wins, bounty,
-      seats: dealtIn.map((i) => ({ seat: i, id: this.seats[i].id, name: this.name(i), cards: this.seats[i].show ? this.seats[i].cards : null, folded: this.seats[i].folded, total: this.seats[i].total, won: this.seats[i].won || 0, end: this.seats[i].stack })) };
+      seats: dealtIn.map((i) => ({ seat: i, id: this.seats[i].id, name: this.name(i), cards: this.shownCards(i), folded: this.seats[i].folded, total: this.seats[i].total, won: this.seats[i].won || 0, end: this.seats[i].stack })) };
     this.fair.last = { hand: rec.hand, commit: rec.commit, serverSeed: rec.serverSeed, clientSeeds: rec.clientSeeds, dealt: rec.dealt }; // host side only
     this.hist.push(rec); if (this.hist.length > 100) this.hist.shift();
     this.cur = null;
@@ -594,13 +614,88 @@ export class PokerTable {
     }
   }
   // Show your own cards after the hand (a bluff shown, or a fold you want seen).
-  showCards(id) {
+  // which: 0 or 1 for one card, anything else for both. A card once shown stays shown.
+  showCards(id, which) {
     const i = this.seatOf(id);
-    if (i < 0 || this.phase !== 'done' || !this.seats[i].inHand || this.seats[i].show) return;
-    this.seats[i].show = true;
-    const rec = this.hist[this.hist.length - 1], mine = rec && rec.hand === this.handNo && rec.seats.find((x) => x.seat === i);
-    if (mine) mine.cards = this.seats[i].cards;
-    this.addLog(`${this.name(i)} shows ${this.seats[i].cards.map(cardText).join(' ')}.`);
+    if (i < 0 || this.phase !== 'done') return;
+    const x = this.seats[i];
+    if (!x.inHand || x.show || x.cards.length !== 2) return;
+    const one = which === 0 || which === 1;
+    if (one) {
+      const m = x.mask || [false, false];
+      if (m[which]) return;
+      m[which] = true; x.mask = m;
+      if (m[0] && m[1]) x.show = true;
+      this.addLog(`${this.name(i)} shows one card: ${cardText(x.cards[which])}.`);
+    } else {
+      x.show = true;
+      this.addLog(`${this.name(i)} shows ${x.cards.map(cardText).join(' ')}.`);
+    }
+    const rec = this.hist[this.hist.length - 1], mine = rec && rec.hand === this.handNo && rec.seats.find((q) => q.seat === i);
+    if (mine) mine.cards = this.shownCards(i);
+  }
+  // The cards of a seat that everyone may see: both, one (the other is null), or none (null).
+  shownCards(i) {
+    const x = this.seats[i];
+    if (x.show && x.cards.length) return x.cards;
+    if (x.mask && x.cards.length === 2 && (x.mask[0] || x.mask[1])) return x.cards.map((c, k) => (x.mask[k] ? c : null));
+    return null;
+  }
+  // ---- the table moves to another browser ----
+  // When the host's browser is gone, a player's browser takes the table over from what every player is told
+  // anyway: seats, stacks, bets, the board. The hand in play goes on. The new host knows its own two cards;
+  // every other player hands in theirs with the secret word (giveCards). The cards still to come are drawn
+  // from a fresh shuffle of the cards nobody has been shown, which is the same chance as the old deck.
+  static fromPublic(st, myId, mine) {
+    const t = new PokerTable(st.settings);
+    Object.assign(t, { hostId: myId, button: st.button, handNo: st.handNo, phase: st.phase, board: [...st.board], pot: st.pot, currentBet: st.currentBet,
+      minRaise: st.minRaise ?? st.settings.bigBlind, turn: st.turn, bomb: !!st.bomb, bombNext: !!st.bombNext, result: st.result, rabbit: st.rabbit,
+      awayVotes: st.awayVotes || {}, pending: { ...(st.pending || {}) }, log: [...(st.log || [])], hist: st.lastHand ? [st.lastHand] : [], moved: (st.moved || 0) + 1 });
+    for (const r of st.ledger || []) t.players[r.id] = { id: r.id, name: r.name, connected: r.id === myId, totalIn: r.totalIn, look: { skin: 2, hair: 0 }, stats: r.stats || undefined };
+    st.seats.forEach((x, i) => {
+      if (!x) return;
+      if (t.players[x.id] && x.look) t.players[x.id].look = x.look;
+      t.seats[i] = { id: x.id, stack: x.stack, bet: x.bet, total: x.total, cards: [], folded: x.folded, allIn: x.allIn, acted: !!x.acted, inHand: x.inHand, out: x.out,
+        show: false, mask: null, bank: x.bank || 0, runs: x.runs || 2, straddle: !!x.straddle, leaving: !!x.leaving, cc: x.cc || null, salt: null, vp: !!x.vp, pf: !!x.pf, won: x.won || 0 };
+      const known = x.id === myId && mine ? mine.cards : x.cards && x.cards.length === 2 && x.cards[0] && x.cards[1] ? x.cards : null;
+      if (x.inHand && known) { t.seats[i].cards = known.map((c) => ({ r: c.r, s: c.s })); if (x.shown) t.seats[i].show = true; }
+      if (x.id === myId && mine) t.seats[i].salt = mine.salt;
+    });
+    if (t.inHand()) {
+      t.cur = { hand: t.handNo, commit: null, serverSeed: null, clientSeeds: {}, lines: [], bomb: t.bomb, time: Date.now(), moved: true };
+      t.turnStarted = Date.now();
+      t.reshuffleRest();
+    }
+    return t;
+  }
+  // The deck after a move: every card that is not on the board and not in a hand this browser knows, shuffled fresh.
+  reshuffleRest() {
+    const seen = new Set([...this.board, ...this.seats.flatMap((x) => (x && x.inHand ? x.cards : []))].map(cardText));
+    this.deck = pokerDeck(randomSeed(), { move: randomSeed() }).filter((c) => !seen.has(cardText(c)));
+    this.dealt = [];
+  }
+  // Seats still in the hand whose cards this browser has not been given yet.
+  missingCards() { return this.inHand() ? this.liveSeats().filter((i) => this.seats[i].cards.length !== 2) : []; }
+  // A player hands in their two cards after a move. They count only when they fit the sealed note made at the deal.
+  giveCards(id, cards, salt) {
+    const i = this.seatOf(id);
+    if (i < 0) return false;
+    const x = this.seats[i];
+    if (!x.inHand || x.cards.length === 2 || !x.cc || !Array.isArray(cards) || cards.length !== 2) return false;
+    const cs = cards.map((c) => ({ r: String(c?.r), s: String(c?.s) }));
+    if (sha256(cs.map(cardText).join('') + String(salt)) !== x.cc) return false;
+    const txt = cs.map(cardText);
+    if ([...this.board, ...(this.rabbit || []), ...(this.moved ? this.dealt : [])].some((c) => txt.includes(cardText(c)))) return false; // came out after the move while this player was folded and away
+    x.cards = cs; x.salt = String(salt);
+    this.deck = this.deck.filter((c) => !txt.includes(cardText(c)));
+    return true;
+  }
+  // A player still in the hand who never came back after a move gets two cards from the unseen cards, so the hand can end.
+  redraw(i) {
+    const x = this.seats[i];
+    if (!x || !x.inHand || x.cards.length === 2) return;
+    x.cards = [this.draw(), this.draw()]; x.redrawn = true; x.cc = null;
+    this.addLog(`${this.name(i)} did not come back after the table moved, so the seat got two cards from the cards nobody had seen.`);
   }
   // The whole table as plain data (the host's browser keeps it, so a reload carries on), and back again.
   static restore(j) { const t = new PokerTable(); Object.assign(t, j); return t; }
@@ -627,18 +722,18 @@ export class PokerTable {
     const me = this.seatOf(forId);
     return {
       game: 'poker', settings: this.settings, phase: this.phase, handNo: this.handNo, button: this.button, board: this.board, bomb: !!this.bomb,
-      pot: this.pot, potTotal: this.potTotal(), pots: this.inHand() || done ? this.potsNow() : [], currentBet: this.currentBet, turn: this.turn,
+      pot: this.pot, minRaise: this.minRaise, pending: this.pending, moved: this.moved || 0, mySalt: me >= 0 ? this.seats[me].salt || null : null, wait: this.waitCards ? this.missingCards().map((i) => this.name(i)) : undefined, potTotal: this.potTotal(), pots: this.inHand() || done ? this.potsNow() : [], currentBet: this.currentBet, turn: this.turn,
       turnLeft: this.turn !== null && this.settings.turnTimer ? Math.max(0, this.settings.turnTimer * 1000 - (Date.now() - (this.turnStarted || Date.now()))) : null,
       hostId: this.hostId, awayVotes: this.awayVotes || {}, canStart: this.canStart(), bombNext: this.bombNext, result: this.result, rabbit: this.rabbit, allInRun: !!this.allInRun && !done ? true : undefined,
       seats: this.seats.map((x, i) => x && {
         id: x.id, name: this.players[x.id]?.name, look: this.players[x.id]?.look, connected: this.players[x.id]?.connected !== false,
-        stack: x.stack, bet: x.bet, total: x.total, bank: x.bank || 0, runs: x.runs || 2, shown: !!x.show, folded: x.folded, allIn: x.allIn, inHand: x.inHand, out: x.out, won: done ? x.won || 0 : 0, straddle: !!x.straddle,
-        cards: x.inHand ? (i === me || x.show ? x.cards : x.cards.map(() => null)) : [],
-        hand: x.show && x.hand ? x.hand.name : i === me && x.inHand && !x.folded && this.board.length >= 3 ? bestHand([...x.cards, ...this.board]).name : null,
+        stack: x.stack, bet: x.bet, total: x.total, bank: x.bank || 0, runs: x.runs || 2, shown: !!x.show, mask: x.mask || null, acted: !!x.acted, leaving: !!x.leaving, cc: x.cc || null, vp: !!x.vp, pf: !!x.pf, stats: this.players[x.id]?.stats || null, folded: x.folded, allIn: x.allIn, inHand: x.inHand, out: x.out, won: done ? x.won || 0 : 0, straddle: !!x.straddle,
+        cards: x.inHand ? (x.cards.length === 2 ? x.cards : [null, null]).map((c, k) => (i === me || x.show || (x.mask && x.mask[k]) ? c : null)) : [],
+        hand: x.show && x.hand ? x.hand.name : i === me && x.inHand && !x.folded && x.cards.length === 2 && this.board.length >= 3 ? bestHand([...x.cards, ...this.board]).name : null,
         best: done && x.show && x.hand ? x.hand.cards : null,
       }),
       players: Object.values(this.players).filter((p) => !p.kicked).map((p) => ({ id: p.id, name: p.name, connected: p.connected, seat: this.seatOf(p.id) })),
-      ledger: Object.values(this.players).map((p) => { const i = this.seatOf(p.id); const stack = i >= 0 ? this.seats[i].stack + this.seats[i].bet + (this.inHand() ? this.seats[i].total - this.seats[i].bet : 0) : 0; return { id: p.id, name: p.name, totalIn: p.totalIn, stack, net: stack - p.totalIn }; }),
+      ledger: Object.values(this.players).map((p) => { const i = this.seatOf(p.id); const stack = i >= 0 ? this.seats[i].stack + this.seats[i].bet + (this.inHand() ? this.seats[i].total - this.seats[i].bet : 0) : 0; return { id: p.id, name: p.name, totalIn: p.totalIn, stack, net: stack - p.totalIn, stats: p.stats || null }; }),
       options: this.options(forId),
       fair: this.fairState(forId),
       lastHand: this.publicHand(this.hist[this.hist.length - 1]),

@@ -216,5 +216,63 @@ for (let g = 0; g < 400; g++) {
   t.takeChips('p0', 200); ok(t.seats[0].stack === 300 && t.players.p0.totalIn === 300, 'take chips');
   try { t.takeChips('p0', 301); } catch { thr++; } t.startHand(); try { t.takeChips('p0', 10); } catch { thr++; } ok(thr === 2, 'no chips off in a hand or past the stack');
 }
+
+{ // show one card
+  const t = mk(2, 500); t.startHand(); const b = t.button;
+  t.act('p' + b, 'fold');
+  t.showCards('p' + b, 1);
+  const pub = t.publicState('p' + (1 - b)).seats[b];
+  ok(pub.cards[0] === null && pub.cards[1] && cardText(pub.cards[1]) === cardText(t.seats[b].cards[1]), 'one card shown, the other hidden');
+  const rec = t.hist[t.hist.length - 1].seats.find((x) => x.seat === b);
+  ok(rec.cards[0] === null && rec.cards[1], 'record holds the one shown card');
+  t.showCards('p' + b, 0); ok(t.seats[b].show && t.publicState('zz').seats[b].cards.every(Boolean), 'second card shown too');
+}
+{ // VPIP and PFR
+  const t = mk(3, 500); t.startHand(); const b = t.button;
+  t.act(t.seats[t.turn].id, 'raise', 30); const raiser = Object.values(t.players).find((p) => t.seats[t.seatOf(p.id)].pf).id;
+  t.act(t.seats[t.turn].id, 'call'); t.act(t.seats[t.turn].id, 'fold');
+  while (t.inHand()) { const id = t.seats[t.turn].id; t.act(id, 'check'); }
+  const st = t.players[raiser].stats; ok(st.hands === 1 && st.vpip === 1 && st.pfr === 1 && st.sd === 1, 'raiser stats');
+  const all = Object.values(t.players).map((p) => p.stats); ok(all.reduce((a, x) => a + x.vpip, 0) === 2 && all.reduce((a, x) => a + x.pfr, 0) === 1, 'vpip 2, pfr 1'); void b;
+}
+// The table moves to another browser in the middle of a hand: the hand goes on and every chip is kept.
+for (let g = 0; g < 300; g++) {
+  PokerTable.noChances = true;
+  const nP = 2 + (g % 6);
+  let t = mk(nP, 300 + g);
+  if (g % 3 === 0) for (let i = 0; i < nP; i++) t.setRuns('p' + i, 3);
+  const chips = t.chipsTotal();
+  t.startHand();
+  const hole = {}; for (let i = 0; i < nP; i++) hole['p' + i] = { cards: t.seats[i].cards, salt: t.seats[i].salt };
+  const step = (tb) => { const id = tb.seats[tb.turn].id, o = tb.options(id), r = Math.random(); if (r < 0.12 && !o.canCheck) tb.act(id, 'fold'); else if (r < 0.3 && o.canRaise) tb.act(id, 'raise', r < 0.2 ? o.maxTo : o.minTo); else tb.act(id, o.canCheck ? 'check' : 'call'); };
+  let k = g % 5; while (k-- > 0 && t.inHand()) step(t);
+  if (!t.inHand()) continue;
+  const boardBefore = t.board.map(cardText).join(' ');
+  // the new host is a player who sees only what it is told
+  const nh = 'p' + (1 + (g % (nP - 1)));
+  const pub = JSON.parse(JSON.stringify(t.publicState(nh)));
+  ok(!JSON.stringify(pub).includes(t.cur.serverSeed) && !JSON.stringify(pub).includes(hole[nh === 'p0' ? 'p1' : 'p0'].salt), 'no seed and no other secret word in what a player is told');
+  const m = PokerTable.fromPublic(pub, nh, { cards: pub.seats[m0(pub, nh)].cards, salt: pub.mySalt });
+  ok(m.chipsTotal() === chips && m.turn === t.turn && m.currentBet === t.currentBet && m.minRaise === t.minRaise, 'moved table has the same chips, turn and bets');
+  // a liar is refused, the true cards are taken
+  const liveBefore = m.liveSeats();
+  ok(m.giveCards('p0', [{ r: 'A', s: '♠' }, { r: 'A', s: '♥' }], hole.p0.salt) === (cardText(hole.p0.cards[0]) + cardText(hole.p0.cards[1]) === 'A♠A♥' && m.seats[0].inHand), 'made up cards are refused');
+  const absent = g % 7 === 3 ? liveBefore.find((i) => 'p' + i !== nh) : -1; // one live player never comes back
+  for (let i = 0; i < nP; i++) if ('p' + i !== nh && i !== absent && m.seats[i].inHand) ok(m.giveCards('p' + i, hole['p' + i].cards, hole['p' + i].salt), 'true cards are taken');
+  ok(m.missingCards().length === (absent >= 0 ? 1 : 0), 'cards missing only for the absent player');
+  for (const i of m.missingCards()) m.redraw(i);
+  while (m.inHand()) step(m);
+  ok(m.chipsTotal() === chips, 'chips kept after the move: ' + m.chipsTotal() + ' / ' + chips);
+  ok(m.board.map(cardText).join(' ').startsWith(boardBefore), 'board before the move stays');
+  const seenAll = [...(m.result.boards ? m.result.boards.flat().slice(0) : m.board)].map(cardText);
+  const holes = m.seats.filter((x) => x && x.inHand && x.cards.length).flatMap((x) => x.cards.map(cardText));
+  const uniq = new Set([...new Set(seenAll), ...holes]);
+  ok(uniq.size === new Set(seenAll).size + holes.length, 'no card twice after the move');
+  if (absent < 0) for (let i = 0; i < nP; i++) if (m.seats[i] && m.seats[i].inHand && m.seats[i].cards.length) ok(m.seats[i].cards.map(cardText).join() === hole['p' + i].cards.map(cardText).join(), 'same hole cards');
+  if (m.canStart()) { m.startHand(); ok(m.inHand() && m.chipsTotal() === chips, 'next hand deals on the moved table'); }
+  t = null;
+}
+function m0(pub, id) { return pub.seats.findIndex((x) => x && x.id === id); }
+PokerTable.noChances = false;
 console.log(`${n - fails}/${n} poker checks passed`);
 process.exit(fails ? 1 : 0);
