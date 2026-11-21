@@ -162,7 +162,7 @@ function buildOffice(signText, midShift = 0, midScale = 1, skipRoom = null, live
     chrome: mk({ color: '#b9bec4', roughness: 0.25, metalness: 0.9 }),
     screen: mk({ color: '#0d0f12', roughness: 0.25, metalness: 0.2 }),
     // What the office screens show: the ARC Group logo, from the photo of it, lit like a screen that is on.
-    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261121y'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
+    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261121z'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
     dark: mk({ color: '#30353c', roughness: 0.6 }),
   };
   const group = new THREE.Group();
@@ -909,7 +909,7 @@ function buildStorefront() {
     lamp: lam('#c8161d', 0.6), bulb: lit('#ffe9a8'), red: lit('#c8161d'), gold: lit('#f4c542'), wood: lam('#7a5234', 0.35),
     glass: new THREE.MeshBasicMaterial({ color: '#dff3f7', transparent: true, opacity: 0.13, depthWrite: false }),
     awning: new THREE.MeshBasicMaterial({ map: canvasTexture(512, 64, (g, w, h) => { for (let i = 0; i < 16; i++) { g.fillStyle = i % 2 ? '#fff6e6' : '#f08a1c'; g.fillRect((i * w) / 16, 0, w / 16 + 1, h); } }), side: THREE.DoubleSide }),
-    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261121y') }),
+    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261121z') }),
     menu: new THREE.MeshBasicMaterial({ map: canvasTexture(256, 384, (g, w, h) => {
       g.fillStyle = '#c8161d'; g.fillRect(0, 0, w, h); g.fillStyle = '#f4c542'; g.fillRect(14, 14, w - 28, 44);
       const r = rng(11); g.fillStyle = '#fff3d6';
@@ -1899,7 +1899,10 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     // A neighbour whose chest would be drawn at the far left or right edge shows only as arms cut off by
     // the screen, so it is left out as well until you turn your head towards it.
     const edge = (o) => { tmp.setFromMatrixPosition(o.matrixWorld); tmp.y += 110 * U; tmp.project(camera); return Math.abs(tmp.x) > 0.72 || tmp.y < -0.6; };
-    for (const f of others) { f.updateMatrixWorld(); f.visible = !seated || !!tour || side === 'dealer' || !(low(f, 0.35) || edge(f)); }
+    // That rule is only for the resting view from your chair. Once you turn your head, lean in or look up or down,
+    // everybody is drawn, so nobody vanishes while you look at them from close by.
+    const turned = Math.abs(cur.yaw) > 0.05 || Math.abs(cur.pitch) > 0.05 || cur.r < homeFit.r * 0.97;
+    for (const f of others) { f.updateMatrixWorld(); f.visible = !seated || !!tour || turned || side === 'dealer' || !(low(f, 0.35) || edge(f)); }
     for (const r of racks) r.visible = true;
     if (myRack) myRack.visible = true;
     if (dbgCam) { camera.position.copy(office.localToWorld(dbgCam.p.clone())); camera.lookAt(office.localToWorld(dbgCam.t.clone())); }

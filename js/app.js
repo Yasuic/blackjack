@@ -1,14 +1,14 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261121y';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261121y';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261121y';
-import { tickSound, winSound } from './fx.js?v=20261121y';
-import * as HX from './history.js?v=20261121y';
-import { webglOK, initRoom } from './room3d.js?v=20261121y';
-import { watchOffice } from './common.js?v=20261121y';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261121y';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261121z';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261121z';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261121z';
+import { tickSound, winSound } from './fx.js?v=20261121z';
+import * as HX from './history.js?v=20261121z';
+import { webglOK, initRoom } from './room3d.js?v=20261121z';
+import { watchOffice } from './common.js?v=20261121z';
+import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261121z';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -942,6 +942,9 @@ function overlayBet() {
     const src = S.pend && S.pend.seat === Number(k) ? S.pend : srv;
     seat.bet = structuredClone(src.bet);
     seat.ready = src.ready;
+    // A chip copied to this seat a moment ago stays in view until the table's answer for this seat is in.
+    const more = S.pendMore?.[k];
+    if (more) { if (more.round !== st.round || Date.now() - more.at > 4000 || (srv.bet.main || 0) >= more.main || seat.ready) delete S.pendMore[k]; else seat.bet.main = more.main; }
   }
 }
 function dropPend() {
@@ -973,11 +976,21 @@ function placeBet(bet, ready = false) {
       if (add > left) continue;
       left -= add;
       copy.push({ t: 'bet', main: b.main, sides: { ...o.bet.sides }, target: o.bet.target, ready: false, seq: ++S.betSeq, seat: i, auto: !!S.auto?.on });
-      if (S.role !== 'host') o.bet = { ...o.bet, main: b.main }; // shown at once; the table's answer follows
+      if (S.role !== 'host') { o.bet = { ...o.bet, main: b.main }; (S.pendMore ||= {})[i] = { main: b.main, round: st.round, at: Date.now() }; } // shown at once; the table's answer follows
+      // The copied chip flies to its own circle too, a little after the one that was tapped.
+      const rack = $(`.chip-rack [data-v="${S.chip}"]`), to = $(`#spot-${i}`);
+      if (rack && to && S.chip) flyChip(rack, to, S.chip, copy.length * 35, false);
     }
   }
-  send({ t: 'bet', main: b.main, sides: b.sides, target: b.target, ready, seq: S.pend.seq, seat: at, auto: !!S.auto?.on });
-  for (const m of copy) send(m);
+  S.hold = true;
+  try {
+    send({ t: 'bet', main: b.main, sides: b.sides, target: b.target, ready, seq: S.pend.seq, seat: at, auto: !!S.auto?.on });
+    for (const m of copy) send(m);
+  } finally {
+    // The host's own moves run one after another in a queue: draw once, after the last of them.
+    if (S.role === 'host' && copy.length) { const done = () => { S.hold = false; render(); }; freshChain.then(done, done); }
+    else S.hold = false;
+  }
   // Ready on one seat: the next of my seats that still needs a bet comes into hand.
   if (S.pend.ready) { const nx = (me.seats || []).find((i) => i !== at && st.seats[i] && !st.seats[i].ready && !st.seats[i].out); if (nx !== undefined) { S.seatAim = nx; S.undo = []; aimSeat(st); } }
   render();
@@ -1418,6 +1431,8 @@ function setHTML(el, html) {
 }
 
 function render(note) {
+  // One tap that changes several of my seats is drawn once, after all of them changed.
+  if (S.hold) return;
   drawHistPanel();
   if (S.role && $('#modal')?.open && $('#hist-list') && S.state && S.state.histN !== S.histShown) showHistory();
   if (!S.role) return;

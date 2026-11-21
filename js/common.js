@@ -1,5 +1,6 @@
 // Shared by the poker and baccarat pages: small helpers, the playing card picture, the game switch at the
 // top left, and the link between the host's browser and the players' browsers.
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261121z';
 export const params = new URLSearchParams(location.search);
 export const $ = (sel, el = document) => el.querySelector(sel);
 export function safeGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
@@ -85,39 +86,45 @@ export function peerOptions() {
 export function createHost(peerId, on) {
   const conns = new Map(); // player id -> connection
   let peer = null, dead = false;
+  // One link to a player, direct or through the second path (relay.js): the same handling for both.
+  const wire = (conn) => {
+    conn.on('data', (m) => {
+      if (!m || typeof m !== 'object') return;
+      // Someone at another table of the office asks who sits here.
+      if (m.t === 'peek') { try { conn.send({ t: 'people', list: (on.people?.() || []).slice(0, 12) }); } catch {} return; }
+      if (m.t === 'hello') {
+        const id = String(m.id || '').slice(0, 24);
+        if (!id) return;
+        const old = conns.get(id);
+        if (old && old !== conn) { try { old.close(); } catch {} }
+        conn.pid = id; conns.set(id, conn);
+      }
+      if (conn.pid) on.msg(conn.pid, m);
+    });
+    const bye = () => { if (conn.pid && conns.get(conn.pid) === conn) { conns.delete(conn.pid); on.gone?.(conn.pid); } };
+    conn.on('close', bye); conn.on('error', bye);
+  };
   const open = () => {
     peer = new Peer(peerId, peerOptions());
     peer.on('open', () => on.status?.('Live', true));
-    peer.on('connection', (conn) => {
-      conn.on('data', (m) => {
-        if (!m || typeof m !== 'object') return;
-        // Someone at another table of the office asks who sits here.
-        if (m.t === 'peek') { try { conn.send({ t: 'people', list: (on.people?.() || []).slice(0, 12) }); } catch {} return; }
-        if (m.t === 'hello') {
-          const id = String(m.id || '').slice(0, 24);
-          if (!id) return;
-          const old = conns.get(id);
-          if (old && old !== conn) { try { old.close(); } catch {} }
-          conn.pid = id; conns.set(id, conn);
-        }
-        if (conn.pid) on.msg(conn.pid, m);
-      });
-      const bye = () => { if (conn.pid && conns.get(conn.pid) === conn) { conns.delete(conn.pid); on.gone?.(conn.pid); } };
-      conn.on('close', bye); conn.on('error', bye);
-    });
+    peer.on('connection', wire);
     peer.on('disconnected', () => { if (dead || peer.destroyed) return; on.status?.('Reconnecting', false); setTimeout(() => { try { if (!peer.destroyed) peer.reconnect(); } catch {} }, 1500); });
     peer.on('error', (e) => {
       if (e.type === 'unavailable-id') { on.taken?.(); return; }
-      if (['network', 'server-error', 'socket-error', 'socket-closed'].includes(e.type)) on.status?.('Reconnecting', false);
+      if (['network', 'server-error', 'socket-error', 'socket-closed'].includes(e.type)) on.status?.(relay?.open ? 'Live' : 'Reconnecting', !!relay?.open);
     });
   };
+  // The second path: the host listens there all the time, for players whose network blocks the direct link.
+  let relay = null;
+  if (relayWorks() && params.get('relay') !== '0') { try { relay = hostRelay(peerId, params.get('relayurl') || '', { onLink: (link) => { if (dead) { link.close(); return; } wire(link); } }); } catch {} }
   open();
   // A small sign of life every 2 seconds, so a player's browser notices quickly when the host is gone.
-  const beat = setInterval(() => { for (const c of conns.values()) if (c.open) { try { c.send({ t: 'ping' }); } catch {} } }, 2000);
+  let tick = 0;
+  const beat = setInterval(() => { tick++; for (const c of conns.values()) if (c.open && (!c.relay || tick % 2 === 0)) { try { c.send({ t: 'ping' }); } catch {} } }, 2000);
   return {
     send(id, m) { const c = conns.get(id); if (c && c.open) { try { c.send(m); } catch {} } },
     ids: () => [...conns.keys()],
-    close() { dead = true; clearInterval(beat); try { peer.destroy(); } catch {} },
+    close() { dead = true; clearInterval(beat); try { relay?.close(); } catch {} try { peer.destroy(); } catch {} },
   };
 }
 // The other tables of the same office. Every game has its own table under the same code; this asks each of the
@@ -161,34 +168,55 @@ export function watchOffice(current, getCode, onPeople) {
 }
 // A player's side. on: { msg(m), status(text, ok), open(), nohost() }. hello() gives the first message.
 export function createGuest(peerId, hello, on) {
-  let peer = null, conn = null, dead = false, tries = 0, timer = null, lastRx = 0;
+  let peer = null, conn = null, dead = false, tries = 0, timer = null, lastRx = 0, downAt = 0, relayBusy = false;
   const retry = () => { if (dead) return; clearTimeout(timer); timer = setTimeout(connect, Math.min(6000, 800 + tries++ * 700)); };
   const connect = () => {
-    if (dead) return;
+    if (dead || params.get('relay') === 'only') return;
+    if (conn && conn.relay && conn.open) return; // the second path is carrying the game: leave it alone
     if (!peer || peer.destroyed) { start(); return; }
     if (peer.disconnected) { try { peer.reconnect(); } catch {} retry(); return; }
     const c = peer.connect(peerId, { reliable: true });
     conn = c;
     const giveUp = setTimeout(() => { if (!c.open && conn === c) { try { c.close(); } catch {} retry(); } }, 9000);
-    c.on('open', () => { clearTimeout(giveUp); tries = 0; lastRx = Date.now(); on.status?.('Live', true); c.send(hello()); on.open?.(); });
+    c.on('open', () => { clearTimeout(giveUp); if (conn !== c) { const old = conn; conn = c; try { old?.close(); } catch {} } tries = 0; lastRx = Date.now(); on.status?.('Live', true); c.send(hello()); on.open?.(); });
     c.on('data', (m) => { lastRx = Date.now(); if (m && typeof m === 'object' && m.t !== 'ping') on.msg(m); });
     c.on('close', () => { clearTimeout(giveUp); if (conn === c) { on.status?.('Reconnecting', false); retry(); } });
     c.on('error', () => { clearTimeout(giveUp); if (conn === c) retry(); });
   };
   const start = () => {
+    if (params.get('relay') === 'only') return; // for testing the second path on its own
     peer = new Peer(peerOptions());
     peer.on('open', connect);
     peer.on('disconnected', () => { if (!dead) { on.status?.('Reconnecting', false); retry(); } });
     peer.on('error', (e) => {
-      if (e.type === 'peer-unavailable') { on.nohost?.(); retry(); return; }
-      on.status?.('Reconnecting', false);
+      if (e.type === 'peer-unavailable') { if (!(conn && conn.relay && conn.open)) on.nohost?.(); retry(); return; }
+      if (!(conn && conn.relay && conn.open)) on.status?.('Reconnecting', false);
       if (['network', 'server-error', 'socket-error', 'socket-closed', 'browser-incompatible'].includes(e.type)) retry();
     });
   };
+  // The direct link does not open (some networks block it): come in through the second path, where the host always listens.
+  const tryRelay = async () => {
+    if (relayBusy || dead || !relayWorks() || params.get('relay') === '0') return;
+    relayBusy = true;
+    try {
+      const link = await guestRelay(peerId, params.get('relayurl') || '', String(hello().id || '').slice(0, 24), 15000);
+      if (!link) return;
+      if (dead || (conn && conn.open)) { link.close(); return; }
+      const old = conn; conn = link;
+      try { old?.close(); } catch {}
+      link.on('data', (m) => { lastRx = Date.now(); if (m && typeof m === 'object' && m.t !== 'ping') on.msg(m); });
+      link.on('close', () => { if (conn === link) { conn = null; on.status?.('Reconnecting', false); retry(); } });
+      tries = 0; lastRx = Date.now(); downAt = 0;
+      on.status?.('Live', true); link.send(hello()); on.open?.();
+    } finally { relayBusy = false; }
+  };
   start();
-  // Nothing heard from the host for 5.5 seconds: the link is dead even when the browser has not said so yet.
+  // Nothing heard from the host for 5.5 seconds (9 on the second path): the link is dead even when the browser has not said so yet.
   const watch = setInterval(() => {
-    if (dead || !conn || !conn.open || Date.now() - lastRx < 5500) return;
+    if (dead) return;
+    if (!conn || !conn.open) { downAt ||= Date.now(); if (Date.now() - downAt > 4500 || params.get('relay') === 'only') tryRelay(); return; }
+    downAt = 0;
+    if (Date.now() - lastRx < (conn.relay ? 9000 : 5500)) return;
     const c = conn; conn = null;
     on.status?.('Reconnecting', false);
     try { c.close(); } catch {}
@@ -196,7 +224,7 @@ export function createGuest(peerId, hello, on) {
   }, 1500);
   return {
     send(m) { if (conn && conn.open) { try { conn.send(m); return true; } catch {} } return false; },
-    close() { dead = true; clearTimeout(timer); clearInterval(watch); try { peer.destroy(); } catch {} },
+    close() { dead = true; clearTimeout(timer); clearInterval(watch); try { conn?.close(); } catch {} try { peer?.destroy(); } catch {} },
   };
 }
 
