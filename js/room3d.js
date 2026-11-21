@@ -134,7 +134,7 @@ function buildOffice(signText, midShift = 0, midScale = 1, skipRoom = null) {
   // The middle desks and their chairs move along x by midShift. Where the room is too short for them (a deep phone table), the block is squeezed along x so that all eight desks stay.
   const D0 = OFFICE, mx = (x) => 4.276 + midShift + (x - 4.276) * midScale;
   // skipRoom: the meeting room whose own table and chairs are left out, because the live game table stands there.
-  const D = { ...D0, furniture: D0.furniture.filter((f) => !(skipRoom && f.room === skipRoom && f.kind === 'rrect')).map((f) => (f.mid ? { ...f, cx: mx(f.cx), w: f.w * midScale } : f)), chairs: D0.chairs.filter((c) => !(skipRoom && c.room === skipRoom)).map((c) => (c.mid ? { ...c, cx: mx(c.cx) } : c)) };
+  const D = { ...D0, furniture: D0.furniture.filter((f) => !(skipRoom && f.room === skipRoom && (f.kind === 'rrect' || f.kind === 'round'))).map((f) => (f.mid ? { ...f, cx: mx(f.cx), w: f.w * midScale } : f)), chairs: D0.chairs.filter((c) => !(skipRoom && c.room === skipRoom)).map((c) => (c.mid ? { ...c, cx: mx(c.cx) } : c)) };
   const Hh = { ceil: 2.7, door: 2.1, sill: 0.85, winTop: 2.55, cab: 2.7, desk: 0.749 };
   const TILE = { L: 1.2176, S: 0.6064 };
   const mk = (o) => new THREE.MeshStandardMaterial(o);
@@ -159,7 +159,7 @@ function buildOffice(signText, midShift = 0, midScale = 1, skipRoom = null) {
     chrome: mk({ color: '#b9bec4', roughness: 0.25, metalness: 0.9 }),
     screen: mk({ color: '#0d0f12', roughness: 0.25, metalness: 0.2 }),
     // What the office screens show: the ARC Group logo, from the photo of it, lit like a screen that is on.
-    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261121j'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
+    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261121k'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
     dark: mk({ color: '#30353c', roughness: 0.6 }),
   };
   const group = new THREE.Group();
@@ -871,7 +871,7 @@ function buildStorefront() {
     lamp: lam('#c8161d', 0.6), bulb: lit('#ffe9a8'), red: lit('#c8161d'), gold: lit('#f4c542'), wood: lam('#7a5234', 0.35),
     glass: new THREE.MeshBasicMaterial({ color: '#dff3f7', transparent: true, opacity: 0.13, depthWrite: false }),
     awning: new THREE.MeshBasicMaterial({ map: canvasTexture(512, 64, (g, w, h) => { for (let i = 0; i < 16; i++) { g.fillStyle = i % 2 ? '#fff6e6' : '#f08a1c'; g.fillRect((i * w) / 16, 0, w / 16 + 1, h); } }), side: THREE.DoubleSide }),
-    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261121j') }),
+    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261121k') }),
     menu: new THREE.MeshBasicMaterial({ map: canvasTexture(256, 384, (g, w, h) => {
       g.fillStyle = '#c8161d'; g.fillRect(0, 0, w, h); g.fillStyle = '#f4c542'; g.fillRect(14, 14, w - 28, 44);
       const r = rng(11); g.fillStyle = '#fff3d6';
@@ -950,7 +950,8 @@ function buildStorefront() {
   return group;
 }
 
-// game: 'poker' puts an oval table in the big meeting room, 'baccarat' puts the table in the small meeting room.
+// game: 'poker' puts an oval table in the big meeting room, 'baccarat' puts the table in the small meeting room,
+// 'roulette' puts it in Nigel's room.
 // metres: how wide the felt is in the room (a blackjack felt is 1.61 m).
 export function initRoom(container, feltEl, { phone, pixel = false, hud = null, size = null, game = 'blackjack', metres = 1.61 } = {}) {
   OVAL = game === 'poker';
@@ -1052,9 +1053,10 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
   // Where the table stands in the office plan. The players' stools stay just clear of the sofa behind
   // them; a deeper table (a phone's tall felt) reaches further toward the desks, which move away from it.
   const halfDepth = (H / 2 + RAIL) / S;
-  const inRoom = game === 'poker' ? 'bigBoard' : game === 'baccarat' ? 'smallBoard' : null;
+  const inRoom = game === 'poker' ? 'bigBoard' : game === 'baccarat' ? 'smallBoard' : game === 'roulette' ? 'securities' : null;
   if (game === 'poker') { OFFICE_AT.x = 0.69; OFFICE_AT.y = 2.45; }
   else if (game === 'baccarat') { OFFICE_AT.x = 12.95; OFFICE_AT.y = 2.06; }
+  else if (game === 'roulette') { OFFICE_AT.x = 13.1; OFFICE_AT.y = 5.75; } // Nigel's room, where its round table stood
   else { OFFICE_AT.x = 3.11 + 0.45 + halfDepth; OFFICE_AT.y = 4.2; }
   const dealerEnd = OFFICE_AT.x + halfDepth + 0.42;
   const midShift = inRoom ? 0 : Math.max(0, dealerEnd - 4.276), midScale = inRoom ? 1 : Math.min(1, (11.05 - 4.276 - midShift) / 5.5875);

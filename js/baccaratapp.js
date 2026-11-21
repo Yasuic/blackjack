@@ -1,8 +1,8 @@
 // The baccarat page: a punto banco table for up to 9 in the small meeting room. The host's browser runs
 // the table (js/baccarat.js); every other browser sends its bets there and is told only what it may see.
-import { BacTable, BAC_SEATS, BAC_SPOTS, BAC_KEYS, verifyShoe, cardText } from './baccarat.js?v=20261121j';
-import { webglOK, initRoom } from './room3d.js?v=20261121j';
-import { params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest } from './common.js?v=20261121j';
+import { BacTable, BAC_SEATS, BAC_SPOTS, BAC_KEYS, verifyShoe, cardText } from './baccarat.js?v=20261121k';
+import { webglOK, initRoom } from './room3d.js?v=20261121k';
+import { params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest } from './common.js?v=20261121k';
 
 const PREFIX = 'bjt-bc-';
 const app = $('#app');
@@ -267,6 +267,8 @@ function stage(st) {
   return { out, final: k > total };
 }
 const spotName = (k) => BAC_SPOTS[k].name;
+// While the cards come out, a player's chips are shown as they were before the payout, so the result is not given away early.
+const shownChips = (st, p, final) => (st.phase === 'done' && !final && st.pays[p.id] ? Math.round((p.chips - st.pays[p.id].back) * 100) / 100 : p.chips);
 function render() {
   const body = $('#pk-body');
   if (!body) return;
@@ -320,13 +322,13 @@ function render() {
     else if (staked) { bubble = BAC_KEYS.filter((k) => b[k]).map((k) => `${{ player: 'P', banker: 'B', tie: 'T', ppair: 'PP', bpair: 'BP' }[k]} ${money(b[k])}`).join(' · '); bcls = 'in'; }
     h += `<div class="pk-seat pk-stand bc-seat${isMe ? ' me' : ' far'}${pay && pay.net > 0 ? ' won' : ''}" style="left:${A.x}%;top:${A.y}%">
       ${bubble ? `<div class="pk-bubble ${bcls}">${bubble}</div>` : ''}
-      <div class="pk-plate"><b>${esc(p.name)}${isMe ? ' <em>YOU</em>' : ''}</b><span>${money(p.chips)}</span></div>
+      <div class="pk-plate"><b>${esc(p.name)}${isMe ? ' <em>YOU</em>' : ''}</b><span>${money(shownChips(st, p, final))}</span></div>
     </div>`;
     const B = { x: 50 + (P.x - 50) * 0.6, y: 50 + (P.y - 50) * 0.62 };
     h += `<div class="pk-spot" id="spot-${p.seat}" style="left:${B.x}%;top:${B.y}%"></div>`;
     stools.push({ seat: p.seat, x: P.x, y: P.y });
     people.push({ id: p.id, name: p.name, look: p.look || { skin: 2, hair: 0 }, seat: p.seat, seats: BAC_SEATS, isMe, isDealer: false, x: P.x, y: P.y, bet: staked });
-    chips.push({ seat: p.seat, main: staked, balance: p.chips, mine: isMe });
+    chips.push({ seat: p.seat, main: staked, balance: shownChips(st, p, final), mine: isMe });
   }
   body.innerHTML = h;
   if (S.room) { S.room.setPeople(people, stools); S.room.setChips(chips); }
@@ -353,7 +355,7 @@ function drawHud(st, me, sg) {
   let h = roadHTML(st);
   h += `<div class="bc-chips">${CHIPS.map((v) => `<button class="bc-chip c${v}${S.chip === v ? ' on' : ''}" data-act="chip" data-v="${v}">${v}</button>`).join('')}</div>`;
   h += `<div class="pk-mine bc-acts">
-    <span class="bc-bal">Chips <b>${money(me ? me.chips : 0)}</b>${staked ? ` · bet <b>${money(staked)}</b>` : ''}</span>
+    <span class="bc-bal">Chips <b>${money(me ? shownChips(st, me, sg?.final) : 0)}</b>${staked ? ` · bet <b>${money(staked)}</b>` : ''}</span>
     <button class="btn small" data-act="clear"${done || !staked ? ' disabled' : ''}>Clear</button>
     <button class="btn small" data-act="rebet"${done || staked || !st.lastBets[S.myId] ? ' disabled' : ''}>Rebet</button>
     ${isHost ? `<button class="btn small primary" data-act="deal"${st.canDeal && !done ? '' : ' disabled'}>Deal now</button>` : ''}

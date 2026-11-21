@@ -1,13 +1,13 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261121j';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261121j';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261121j';
-import { tickSound, winSound } from './fx.js?v=20261121j';
-import * as HX from './history.js?v=20261121j';
-import { webglOK, initRoom } from './room3d.js?v=20261121j';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261121j';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261121k';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261121k';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261121k';
+import { tickSound, winSound } from './fx.js?v=20261121k';
+import * as HX from './history.js?v=20261121k';
+import { webglOK, initRoom } from './room3d.js?v=20261121k';
+import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261121k';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -129,7 +129,7 @@ function showLanding() {
   app.innerHTML = `
     <div class="landing">
       <div class="hero-cards">${cardHTML({ r: 'A', s: '♠' }, true)}${cardHTML({ r: 'K', s: '♥' }, true)}</div>
-      <div class="game-switch-row"><select class="game-switch" id="game-switch" title="Switch game" aria-label="Game"><option value="blackjack" selected>🃏 Blackjack</option><option value="poker">♠️ Poker</option><option value="baccarat">🎴 Baccarat</option><option disabled>🎡 Roulette (soon)</option></select></div>
+      <div class="game-switch-row"><select class="game-switch" id="game-switch" title="Switch game" aria-label="Game"><option value="blackjack" selected>🃏 Blackjack</option><option value="poker">♠️ Poker</option><option value="baccarat">🎴 Baccarat</option><option value="roulette">🎡 Roulette</option></select></div>
       <h1>Blackjack Table</h1>
       <p>${room ? `You were invited to table <b>${esc(room)}</b>. Pick a name and join.` : 'Host a table, send the link to your friends, and play live. Play money only.'}</p>
       <div class="box">
@@ -1027,7 +1027,7 @@ function buildLayout() {
   document.body.classList.add('in-room');
   app.innerHTML = `
     <div class="topbar">
-      <select class="game-switch" id="game-switch" title="Switch game" aria-label="Game"><option value="blackjack" selected>🃏 Blackjack</option><option value="poker">♠️ Poker</option><option value="baccarat">🎴 Baccarat</option><option disabled>🎡 Roulette (soon)</option></select>
+      <select class="game-switch" id="game-switch" title="Switch game" aria-label="Game"><option value="blackjack" selected>🃏 Blackjack</option><option value="poker">♠️ Poker</option><option value="baccarat">🎴 Baccarat</option><option value="roulette">🎡 Roulette</option></select>
       <span id="conn-pill" class="pill">Connecting</span>
       <span class="spacer"></span>
       <button id="fair-pill" class="pill fair-pill" data-act="fair" title="How the shuffle is kept fair">🔐<span class="fp-t"> Provably fair</span></button>
@@ -3677,7 +3677,7 @@ document.addEventListener('change', (e) => {
 
 // The game switch at the top left: the poker table of the same room code. The host of this table opens it.
 document.addEventListener('change', (e) => {
-  if (e.target.id !== 'game-switch' || !['poker', 'baccarat'].includes(e.target.value)) return;
+  if (e.target.id !== 'game-switch' || !['poker', 'baccarat', 'roulette'].includes(e.target.value)) return;
   const q = new URLSearchParams();
   if (S.code) { q.set('room', S.code); q.set('go', '1'); if (S.role === 'host') q.set('open', '1'); sessSet('games-from-bj', S.code); }
   for (const k of ['peerhost', 'peerport', 'peerpath', 'peersecure', '3d', 'flat', 'roomdebug']) if (params.get(k)) q.set(k, params.get(k));
