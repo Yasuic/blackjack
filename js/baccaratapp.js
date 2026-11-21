@@ -1,8 +1,8 @@
 // The baccarat page: a punto banco table for up to 9 in the small meeting room. The host's browser runs
 // the table (js/baccarat.js); every other browser sends its bets there and is told only what it may see.
-import { BacTable, BAC_SEATS, BAC_SPOTS, BAC_KEYS, verifyShoe, cardText } from './baccarat.js?v=20261121p';
-import { webglOK, initRoom } from './room3d.js?v=20261121p';
-import { params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame } from './common.js?v=20261121p';
+import { BacTable, BAC_SEATS, BAC_SPOTS, BAC_KEYS, verifyShoe, cardText } from './baccarat.js?v=20261121q';
+import { webglOK, initRoom } from './room3d.js?v=20261121q';
+import { params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML } from './common.js?v=20261121q';
 
 const PREFIX = 'bjt-bc-';
 const app = $('#app');
@@ -90,6 +90,7 @@ function doMove(id, m) {
     case 'rebet': t.rebet(id); break;
     case 'add': t.addChips(id, m.amount); break;
     case 'take': t.takeChips(id, m.amount); break;
+    case 'bank': if (m.on) t.setBank(id); else if (id === t.bankId || id === t.hostId) t.clearBank(id); break;
     case 'seed': t.setClientSeed(id, m.seed, m.commit); break;
     case 'fx': relayFx(id, m.e); break;
     default: break;
@@ -324,12 +325,12 @@ function render() {
     else if (staked) { bubble = BAC_KEYS.filter((k) => b[k]).map((k) => `${{ player: 'P', banker: 'B', tie: 'T', ppair: 'PP', bpair: 'BP' }[k]} ${money(b[k])}`).join(' · '); bcls = 'in'; }
     h += `<div class="pk-seat pk-stand bc-seat${isMe ? ' me' : ' far'}${pay && pay.net > 0 ? ' won' : ''}" style="left:${A.x}%;top:${A.y}%">
       ${bubble ? `<div class="pk-bubble ${bcls}">${bubble}</div>` : ''}
-      <div class="pk-plate"><b>${esc(p.name)}${isMe ? ' <em>YOU</em>' : ''}</b><span>${money(shownChips(st, p, final))}</span></div>
+      <div class="pk-plate"><b>${esc(p.name)}${isMe ? ' <em>YOU</em>' : ''}${p.id === st.bankId ? ' <em class="dl">DEALER</em>' : ''}</b><span>${money(shownChips(st, p, final))}</span></div>
     </div>`;
     const B = { x: 50 + (P.x - 50) * 0.6, y: 50 + (P.y - 50) * 0.62 };
     h += `<div class="pk-spot" id="spot-${p.seat}" style="left:${B.x}%;top:${B.y}%"></div>`;
     stools.push({ seat: p.seat, x: P.x, y: P.y });
-    people.push({ id: p.id, name: p.name, look: p.look || { skin: 2, hair: 0 }, seat: p.seat, seats: BAC_SEATS, isMe, isDealer: false, x: P.x, y: P.y, bet: staked });
+    people.push({ id: p.id, name: p.name, look: p.look || { skin: 2, hair: 0 }, seat: p.seat, seats: BAC_SEATS, isMe, isDealer: false, bank: p.id === st.bankId, x: P.x, y: P.y, bet: staked });
     chips.push({ seat: p.seat, main: staked, balance: shownChips(st, p, final), mine: isMe });
   }
   body.innerHTML = h;
@@ -351,10 +352,11 @@ function drawHud(st, me, sg) {
   const staked = st.bets[S.myId] ? BAC_KEYS.reduce((a, k) => a + (st.bets[S.myId][k] || 0), 0) : 0;
   let status;
   if (done && !sg?.final) status = 'No more bets. The cards are coming out…';
-  else if (done) { const pay = st.pays[S.myId]; status = pay ? (pay.net > 0 ? `You won ${money(pay.net)}` : pay.net < 0 ? `You lost ${money(-pay.net)}` : 'Push: your bet comes back') : 'Round over'; }
+  else if (done) { const pay = st.pays[S.myId]; status = pay ? (pay.net > 0 ? `${st.roundFrozen ? 'Practice: you' : 'You'} won ${money(pay.net)}` : pay.net < 0 ? `${st.roundFrozen ? 'Practice: you' : 'You'} lost ${money(-pay.net)}` : 'Push: your bet comes back') : 'Round over'; }
   else if (st.betLeft !== null) status = `Place your bets · <b id="bc-left">${Math.max(0, Math.ceil((st.betLeft - (Date.now() - S.at)) / 1000))}</b> s`;
   else status = st.canDeal ? (isHost ? 'Bets are down. Press Deal.' : 'Waiting for the host to deal.') : me && me.seat < 0 ? 'The table is full. You are watching.' : 'Pick a chip, then tap Player, Banker or Tie.';
-  top.innerHTML = `<div class="status">${status}</div>`;
+  if (st.bankId === S.myId && !done) status = st.betLeft !== null ? `You are the dealer · <b id="bc-left">${Math.max(0, Math.ceil((st.betLeft - (Date.now() - S.at)) / 1000))}</b> s` : 'You are the dealer. You pay the winners and take the losing bets.';
+  top.innerHTML = `${bankBarHTML(st, S.myId, isHost)}<div class="status">${status}</div>`;
   let h = roadHTML(st);
   h += `<div class="bc-chips">${CHIPS.map((v) => `<button class="bc-chip c${v}${S.chip === v ? ' on' : ''}" data-act="chip" data-v="${v}">${v}</button>`).join('')}</div>`;
   h += `<div class="pk-mine bc-acts">
@@ -386,11 +388,7 @@ function drawMenu(st) {
     ${S.room ? '<button class="menu-item" data-act="walk">🚶 Walk around</button><button class="menu-item" data-act="view-reset">🪑 Back to my seat</button>' : ''}
     <button class="menu-item" data-act="leave">↩️ Leave the table</button>`;
 }
-function ledgerHTML(st) {
-  const rows = [...st.players].sort((a, b) => b.net - a.net), house = -rows.reduce((a, r) => a + r.net, 0);
-  const cell = (n) => `<td class="${n > 0 ? 'up' : n < 0 ? 'down' : ''}">${n > 0 ? '+' : ''}${money(Math.round(n * 100) / 100)}</td>`;
-  return `<h3>Ledger</h3><div class="ledger-body"><table class="pk-table"><tr><th>Player</th><th>Bought in</th><th>Chips</th><th>Net</th></tr>${rows.map((r) => `<tr class="${r.id === S.myId ? 'me' : ''}"><td>${esc(r.name)}</td><td>${money(r.totalIn)}</td><td>${money(r.chips)}</td>${cell(r.net)}</tr>`).join('')}<tr><td>House</td><td></td><td></td>${cell(house)}</tr></table><p class="hint">Net is chips now (bets on the table included) minus chips bought.</p></div>`;
-}
+function ledgerHTML(st) { return bankLedgerHTML(st, S.myId); }
 function rulesHTML(st) {
   const s = st.settings;
   return `<h3>Rules and payouts</h3><div class="pk-rules">
@@ -446,6 +444,8 @@ document.addEventListener('click', (e) => {
     case 'bet': if (st.phase !== 'betting') { toast('Bets open again after this round.'); break; } send({ t: 'bet', spot: el.dataset.spot, amount: S.chip }); break;
     case 'clear': send({ t: 'clear' }); break;
     case 'rebet': send({ t: 'rebet' }); break;
+    case 'bank-on': send({ t: 'bank', on: true }); break;
+    case 'bank-off': send({ t: 'bank', on: false }); break;
     case 'deal': if (t) { try { t.deal(); } catch (er) { toast(er.message); } push(); } break;
     case 'add': modal(`<h3>My chips</h3><div class="pk-set"><label>Amount<input type="number" id="addamt" min="1" value="${st.settings.startChips}" inputmode="numeric" /></label><div class="pk-acts small"><button class="btn primary" data-act="add-go">➕ Add chips</button><button class="btn" data-act="take-go">➖ Take chips off</button></div><p class="hint">Everyone sees each change in the round log, and the ledger counts it.</p></div>`); break;
     case 'add-go': send({ t: 'add', amount: Number($('#addamt').value) }); $('#modal').close(); break;

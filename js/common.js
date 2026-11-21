@@ -199,3 +199,18 @@ export function createGuest(peerId, hello, on) {
     close() { dead = true; clearTimeout(timer); clearInterval(watch); try { peer.destroy(); } catch {} },
   };
 }
+
+// ---------- The dealer bar and the ledger of roulette and baccarat (rule: js/bank.js) ----------
+// Shown above the status line. No dealer: frozen ledger, practice. A dealer: real chips against that player.
+export function bankBarHTML(st, myId, isHost) {
+  const me = st.players.find((p) => p.id === myId), seated = me && me.seat >= 0;
+  if (st.frozen) return `<div class="bank-bar frozen"><b>Frozen ledger</b><span>Practice against the house. Chips go back when a player is the dealer.</span>${seated ? '<button class="btn small gold" data-act="bank-on">Be the dealer</button>' : ''}</div>`;
+  const b = st.players.find((p) => p.id === st.bankId);
+  return `<div class="bank-bar"><b>Dealer: ${esc(b ? b.name : '?')}${st.bankId === myId ? ' (you)' : ''}</b><span>Real chips. The ledger adds up to zero.</span>${st.bankId === myId || isHost ? `<button class="btn small" data-act="bank-off">${st.bankId === myId ? 'Stop dealing' : 'Remove dealer'}</button>` : ''}</div>`;
+}
+export function bankLedgerHTML(st, myId) {
+  const rows = [...st.players].sort((a, b) => b.net - a.net);
+  const cell = (n) => `<td class="${n > 0 ? 'up' : n < 0 ? 'down' : ''}">${n > 0 ? '+' : ''}${money(Math.round(n * 100) / 100)}</td>`;
+  const sum = Math.round(rows.reduce((a, r) => a + r.net, 0) * 100) / 100;
+  return `<h3>Ledger${st.frozen ? ' (frozen)' : ''}</h3><div class="ledger-body"><table class="pk-table"><tr><th>Player</th><th>Bought in</th><th>Chips</th><th>+/-</th></tr>${rows.map((r) => { const b = st.frozen && r.base ? r.base : r; return `<tr class="${r.id === myId ? 'me' : ''}"><td>${esc(r.name)}${r.id === st.bankId ? ' (dealer)' : ''}</td><td>${money(b.totalIn)}</td><td>${money(b.chips)}</td>${cell(r.net)}</tr>`; }).join('')}<tr><td>Total</td><td></td><td></td>${cell(sum)}</tr></table><p class="hint">The +/- column counts only rounds played with a player as the dealer, so it always adds up to zero. Rounds against the house are practice and are left out${st.frozen ? '. The ledger is frozen now: the chips on the table are practice chips' : ''}.</p></div>`;
+}

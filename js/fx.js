@@ -31,31 +31,24 @@ function noise(ac) {
   return noiseBuf;
 }
 
-// One short "clack": filtered noise plus a tiny high ping, like two clay chips touching.
+// One clay chip landing on other chips: a hard click, two short ringing tones as a heavy clay chip makes,
+// and a soft thud from the cloth under the pile.
 function clack(ac, when, level = 1) {
-  const src = ac.createBufferSource();
-  src.buffer = noise(ac);
-  const bp = ac.createBiquadFilter();
-  bp.type = 'bandpass';
-  bp.frequency.value = 2600 + Math.random() * 1600;
-  bp.Q.value = 4;
+  const out = ac.destination, k = 0.9 + Math.random() * 0.25;
+  const src = ac.createBufferSource(); src.buffer = noise(ac);
+  const bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 3000 * k; bp.Q.value = 2.2;
   const g = ac.createGain();
-  g.gain.setValueAtTime(0.0001, when);
-  g.gain.exponentialRampToValueAtTime(0.5 * level, when + 0.002);
-  g.gain.exponentialRampToValueAtTime(0.0001, when + 0.05);
-  src.connect(bp).connect(g).connect(ac.destination);
-  src.start(when, Math.random() * 0.3, 0.06);
-
-  const osc = ac.createOscillator();
-  osc.type = 'triangle';
-  osc.frequency.value = 3800 + Math.random() * 900;
-  const og = ac.createGain();
-  og.gain.setValueAtTime(0.0001, when);
-  og.gain.exponentialRampToValueAtTime(0.08 * level, when + 0.002);
-  og.gain.exponentialRampToValueAtTime(0.0001, when + 0.03);
-  osc.connect(og).connect(ac.destination);
-  osc.start(when);
-  osc.stop(when + 0.04);
+  g.gain.setValueAtTime(0.0001, when); g.gain.exponentialRampToValueAtTime(0.5 * level, when + 0.0015); g.gain.exponentialRampToValueAtTime(0.0001, when + 0.03);
+  src.connect(bp).connect(g).connect(out); src.start(when, Math.random() * 0.3, 0.04);
+  for (const [f, lvl, dur] of [[2150 * k, 0.16, 0.075], [3380 * k, 0.09, 0.05], [5100 * k, 0.04, 0.03]]) {
+    const o = ac.createOscillator(); o.type = 'sine'; o.frequency.value = f;
+    const og = ac.createGain();
+    og.gain.setValueAtTime(0.0001, when); og.gain.exponentialRampToValueAtTime(lvl * level, when + 0.0015); og.gain.exponentialRampToValueAtTime(0.0001, when + dur);
+    o.connect(og).connect(out); o.start(when); o.stop(when + dur + 0.01);
+  }
+  const th = ac.createOscillator(); th.type = 'sine'; th.frequency.setValueAtTime(230, when); th.frequency.exponentialRampToValueAtTime(110, when + 0.04);
+  const tg = ac.createGain(); tg.gain.setValueAtTime(0.0001, when); tg.gain.exponentialRampToValueAtTime(0.12 * level, when + 0.002); tg.gain.exponentialRampToValueAtTime(0.0001, when + 0.06);
+  th.connect(tg).connect(out); th.start(when); th.stop(when + 0.07);
 }
 
 export function chipSound(count = 1) {
@@ -73,51 +66,37 @@ export function chipSound(count = 1) {
 }
 
 let lastCard = 0;
-// A dealt card: a soft paper slide across the felt, then a crisp snap as it lands and flips.
+// A dealt card: a very short paper slide, then a firm flat slap on the felt with a low thump under it.
+// (Made in the browser. Free sound files could not be fetched from the build machine.)
 export function cardSound() {
   if (muted) return;
   const ac = audio();
   if (!ac) return;
-  const t = Math.max(ac.currentTime + 0.01, lastCard + 0.11);
+  const t = Math.max(ac.currentTime + 0.01, lastCard + 0.09);
   lastCard = t;
-  // Slide: noise swept from high to mid, rising then fading.
-  const slide = ac.createBufferSource();
-  slide.buffer = noise(ac);
-  const bp = ac.createBiquadFilter();
-  bp.type = 'bandpass';
-  bp.Q.value = 0.9;
-  bp.frequency.setValueAtTime(5200, t);
-  bp.frequency.exponentialRampToValueAtTime(1700, t + 0.13);
-  const sg = ac.createGain();
-  sg.gain.setValueAtTime(0.0001, t);
-  sg.gain.exponentialRampToValueAtTime(0.16, t + 0.05);
-  sg.gain.exponentialRampToValueAtTime(0.0001, t + 0.15);
-  slide.connect(bp).connect(sg).connect(ac.destination);
-  slide.start(t, Math.random() * 0.3, 0.17);
-  // Snap: a short bright click with a little body underneath.
-  const at = t + 0.13;
-  const snap = ac.createBufferSource();
-  snap.buffer = noise(ac);
-  const hp = ac.createBiquadFilter();
-  hp.type = 'highpass';
-  hp.frequency.value = 2400;
-  const ng = ac.createGain();
-  ng.gain.setValueAtTime(0.0001, at);
-  ng.gain.exponentialRampToValueAtTime(0.42, at + 0.002);
-  ng.gain.exponentialRampToValueAtTime(0.0001, at + 0.035);
-  snap.connect(hp).connect(ng).connect(ac.destination);
-  snap.start(at, Math.random() * 0.3, 0.05);
-  const body = ac.createOscillator();
-  body.type = 'sine';
-  body.frequency.setValueAtTime(320, at);
-  body.frequency.exponentialRampToValueAtTime(140, at + 0.05);
-  const bg = ac.createGain();
-  bg.gain.setValueAtTime(0.0001, at);
-  bg.gain.exponentialRampToValueAtTime(0.14, at + 0.003);
-  bg.gain.exponentialRampToValueAtTime(0.0001, at + 0.07);
-  body.connect(bg).connect(ac.destination);
-  body.start(at);
-  body.stop(at + 0.08);
+  const out = ac.destination, vary = 0.92 + Math.random() * 0.16; // each card sounds a touch different
+  // Slide: a quick whisper of paper.
+  const slide = ac.createBufferSource(); slide.buffer = noise(ac);
+  const bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 0.8;
+  bp.frequency.setValueAtTime(6500, t); bp.frequency.exponentialRampToValueAtTime(2600, t + 0.06);
+  const sg = ac.createGain(); sg.gain.setValueAtTime(0.0001, t); sg.gain.exponentialRampToValueAtTime(0.07, t + 0.03); sg.gain.exponentialRampToValueAtTime(0.0001, t + 0.07);
+  slide.connect(bp).connect(sg).connect(out); slide.start(t, Math.random() * 0.3, 0.08);
+  // Slap: the flat of the card on the cloth. Mid noise, very fast attack, short tail.
+  const at = t + 0.06;
+  const slap = ac.createBufferSource(); slap.buffer = noise(ac);
+  const lp = ac.createBiquadFilter(); lp.type = 'bandpass'; lp.frequency.value = 1500 * vary; lp.Q.value = 0.7;
+  const ng = ac.createGain(); ng.gain.setValueAtTime(0.0001, at); ng.gain.exponentialRampToValueAtTime(0.6, at + 0.0015); ng.gain.exponentialRampToValueAtTime(0.0001, at + 0.045);
+  slap.connect(lp).connect(ng).connect(out); slap.start(at, Math.random() * 0.3, 0.06);
+  // Tick: the crisp edge of the snap.
+  const tick = ac.createBufferSource(); tick.buffer = noise(ac);
+  const hp = ac.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 4200;
+  const tg = ac.createGain(); tg.gain.setValueAtTime(0.0001, at); tg.gain.exponentialRampToValueAtTime(0.3, at + 0.001); tg.gain.exponentialRampToValueAtTime(0.0001, at + 0.014);
+  tick.connect(hp).connect(tg).connect(out); tick.start(at, Math.random() * 0.3, 0.02);
+  // Thump: the table under the cloth.
+  const body = ac.createOscillator(); body.type = 'sine';
+  body.frequency.setValueAtTime(190 * vary, at); body.frequency.exponentialRampToValueAtTime(85, at + 0.06);
+  const bg = ac.createGain(); bg.gain.setValueAtTime(0.0001, at); bg.gain.exponentialRampToValueAtTime(0.3, at + 0.003); bg.gain.exponentialRampToValueAtTime(0.0001, at + 0.09);
+  body.connect(bg).connect(out); body.start(at); body.stop(at + 0.1);
 }
 
 // Low knock on the felt.
@@ -420,4 +399,20 @@ export function spinSound() {
     drop() { if (dead) return; const t = ac.currentTime; g.gain.setTargetAtTime(0.0001, t, 0.04); lg.gain.setTargetAtTime(0, t, 0.04); if (muted) return; [0, 0.07, 0.125, 0.165].forEach((d, i) => { clack(ac, t + d, 0.7 / (i + 1)); tone(ac, 'sine', 520 - i * 40, 300, t + d, 0.06, 0.12 / (i + 1)); }); },
     stop: end,
   };
+}
+
+// Poker: you won the pot. Two bright bell notes going up, then the chips being pulled in. Our own sound.
+export function potSound() {
+  if (muted) return;
+  const ac = audio();
+  if (!ac) return;
+  const t0 = ac.currentTime + 0.02;
+  [[880, 0], [1318.5, 0.11], [1760, 0.22]].forEach(([f, d]) => {
+    for (const [mult, lvl, dur] of [[1, 0.2, 0.7], [2.0, 0.07, 0.4], [2.99, 0.035, 0.25], [4.2, 0.02, 0.15]]) {
+      const o = ac.createOscillator(); o.type = 'sine'; o.frequency.value = f * mult;
+      const g = ac.createGain(); g.gain.setValueAtTime(0.0001, t0 + d); g.gain.exponentialRampToValueAtTime(lvl, t0 + d + 0.006); g.gain.exponentialRampToValueAtTime(0.0001, t0 + d + dur);
+      o.connect(g).connect(ac.destination); o.start(t0 + d); o.stop(t0 + d + dur + 0.05);
+    }
+  });
+  for (let i = 0; i < 9; i++) clack(ac, t0 + 0.34 + i * 0.045 + Math.random() * 0.02, 0.55 - i * 0.03);
 }

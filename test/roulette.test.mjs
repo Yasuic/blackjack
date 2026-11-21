@@ -84,5 +84,6 @@ ok(spinNumber('abc', { a: '1' }) === spinNumber('abc', { a: '1' }) && [0, 1, 2, 
   const a = wheelState(17, 5, 4.2, 9), b = wheelState(17, 5, 4.2, 9); ok(a.ball === b.ball && a.wheel === b.wheel, 'the same spin looks the same on every screen');
 }
 
+{ const { bankChecks } = await import('./bank.helper.mjs'); bankChecks(ok, RouTable, ['red', 'n17', 'd2', 'c3', 'odd', 'n0'], 'canSpin', 'doSpin'); }
 console.log(`${n - fails}/${n} roulette checks passed`);
 process.exit(fails ? 1 : 0);

@@ -1,10 +1,10 @@
 // The poker page: a Texas Hold'em table for up to 9 in the big meeting room. The host's browser runs
 // the table (js/poker.js); every other browser sends its moves there and is told only what it may see.
-import { PokerTable, POKER_SEATS, pokerDeck, cardText } from './poker.js?v=20261121p';
-import { sha256 } from './game.js?v=20261121p';
-import { chipSound, cardSound, hitSound, standSound, winSound } from './fx.js?v=20261121p';
-import { webglOK, initRoom } from './room3d.js?v=20261121p';
-import { params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame } from './common.js?v=20261121p';
+import { PokerTable, POKER_SEATS, pokerDeck, cardText } from './poker.js?v=20261121q';
+import { sha256 } from './game.js?v=20261121q';
+import { chipSound, cardSound, hitSound, standSound, potSound, tickSound } from './fx.js?v=20261121q';
+import { webglOK, initRoom } from './room3d.js?v=20261121q';
+import { params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame } from './common.js?v=20261121q';
 
 const PREFIX = 'bjt-pk-';
 const app = $('#app');
@@ -298,7 +298,7 @@ function showTable() {
       ${gameSwitchHTML('poker')}
       <span id="conn-pill" class="pill">Connecting</span>
       <span class="spacer"></span>
-      <button class="btn small primary" id="host-run" data-act="hostrun" hidden></button>
+      <button class="btn small" id="away-top" data-act="away" hidden title="Away: sit out the next hands">💺</button><button class="btn small primary" id="host-run" data-act="hostrun" hidden></button>
       <button class="pill fair-pill" data-act="fair" title="How the deck is kept fair">🔐<span class="fp-t"> Fair deck</span></button>
       <button class="btn small gold" data-act="copy">🔗 Invite</button>
       <div class="menu-wrap" id="menu-wrap">
@@ -410,7 +410,7 @@ function playSounds(st) {
   try {
     if (now.hand !== was.hand && now.phase !== 'waiting' && now.phase !== 'done') { cardSound(); setTimeout(cardSound, 140); setTimeout(cardSound, 280); return; } // a new hand is dealt
     if (now.hand !== was.hand) return;
-    if (now.board > was.board) { const n = Math.min(3, now.board - was.board); for (let k = 0; k < n; k++) setTimeout(cardSound, k * 170); } // flop, turn, river
+    if (now.board > was.board) { const n = Math.min(3, now.board - was.board); for (let k = 0; k < n; k++) setTimeout(cardSound, k * 200); } // one sound a card, in step with the cards coming out // flop, turn, river
     now.seats.forEach((x, i) => {
       const o = was.seats[i];
       if (!x || !o || x.id !== o.id || !x.inHand) return;
@@ -419,7 +419,7 @@ function playSounds(st) {
       else if (x.total > o.total) chipSound(x.total - o.total > st.settings.bigBlind * 4 ? 4 : 2); // call, bet or raise
       else if (x.acted && !o.acted && now.board === was.board) hitSound();        // check: a knock on the table
     });
-    if (now.phase === 'done' && was.phase !== 'done' && st.result?.wins?.some((w) => st.seats[w.seat]?.id === S.myId)) winSound();
+    if (now.phase === 'done' && was.phase !== 'done' && st.result?.wins?.some((w) => st.seats[w.seat]?.id === S.myId)) potSound();
   } catch { /* sound is never worth an error */ }
 }
 function render() {
@@ -451,7 +451,7 @@ function render() {
   const rab = (cs) => (cs ? `<div class="pk-rabbit">🐇 ${cs.map((c) => cardHTML(c, 'ghost')).join('')}</div>` : '');
   const rabbit = rab(st.rabbit), rabbit2 = rab(st.rabbit2);
   const potNow = st.potTotal || (st.phase === 'done' ? (st.result?.wins || []).reduce((a, w) => a + w.amount, 0) : 0);
-  const rows = boards.map((b, r) => `<div class="pk-brow">${many ? `<i>${dbl ? 'Board' : 'Run'} ${r + 1}</i>` : ''}${b.map((c, i) => cardHTML(c, 'bcard' + ((r === 0 || dbl ? i >= seen.n : r >= seen.rows) ? ' deal' : '') + (Object.keys(winBy).some((k) => inBest(Number(k), c)) ? ' hi' : ''))).join('')}${r === 0 ? rabbit : dbl && r === 1 ? rabbit2 : ''}</div>`).join('');
+  const rows = boards.map((b, r) => `<div class="pk-brow">${many ? `<i>${dbl ? 'Board' : 'Run'} ${r + 1}</i>` : ''}${b.map((c, i) => cardHTML(c, 'bcard' + ((r === 0 || dbl ? i >= seen.n : r >= seen.rows) ? ' deal d' + Math.max(0, Math.min(4, r === 0 || dbl ? i - seen.n : i)) : '') + (Object.keys(winBy).some((k) => inBest(Number(k), c)) ? ' hi' : ''))).join('')}${r === 0 ? rabbit : dbl && r === 1 ? rabbit2 : ''}</div>`).join('');
   seen.n = boards[0].length; seen.rows = boards.length;
   h += `<div class="pk-mid${many ? ' many n' + allBoards.length : ''}">
     <div class="pk-board pk-stand"><div class="pk-pot">${st.bomb && live ? '<span class="pk-bomb">💣 Bomb pot</span>' : ''}${(st.plo || dbl) && st.phase !== 'waiting' ? `<span class="pk-variant">${st.plo ? 'PLO' : "Hold'em"}${dbl ? ' · 2 boards' : ''}</span>` : ''}<b class="pk-potnum"><i>POT</i>${amt(potNow)}</b>${potLine ? `<small>${potLine}</small>` : ''}</div>${rows}</div>
@@ -499,11 +499,11 @@ function render() {
     // Your own cards are in the panel at the bottom, so in the 3D room they are not stood on the felt as well.
     const hideMine = me;
     const cards = !hideMine && seat.cards.length ? seat.cards.map((c) => cardHTML(c, (me ? 'mine ' : '') + (inBest(i, c) ? 'hi' : ''))).join('') : '';
-    const timer = turn && st.turnLeft !== null ? `<i class="pk-bank" data-bank="${seat.bank}"></i><i class="pk-timer"><i style="animation-duration:${Math.max(0.1, (st.turnLeft - (Date.now() - S.at)) / 1000)}s;width:${Math.min(100, (st.turnLeft / (st.settings.turnTimer * 1000)) * 100)}%"></i></i>` : '';
+    const timer = turn && st.turnLeft !== null ? `<i class="pk-bank" data-bank="${seat.bank}"></i><i class="pk-timer"><i style="animation-duration:${Math.max(0.1, (st.turnLeft - (Date.now() - S.at)) / 1000)}s;width:${100 - Math.min(100, (Math.max(0, st.turnLeft - (Date.now() - S.at)) / (st.settings.turnTimer * 1000)) * 100)}%"></i></i>` : '';
     h += `<div class="pk-seat pk-stand${!me ? ' far' : ''}${me ? ' me' : ''}${turn ? ' turn' : ''}${seat.inHand && seat.folded ? ' folded' : ''}${!seat.inHand && live ? ' idle' : ''}${bcls === 'win' ? ' won' : ''}" style="left:${A.x}%;top:${A.y}%" data-seat="${i}">
       ${bubble ? `<div class="pk-bubble ${bcls}">${bubble}</div>` : ''}
       <div class="pk-cards${seat.folded ? ' dim' : ''}${seat.cards.length > 2 ? ' four' : ''}">${cards}</div>
-      <button class="pk-plate" data-act="seat-menu" data-seat="${i}"><b>${esc(seat.name)}${me ? ' <em>YOU</em>' : ''}</b><span>${amt(seat.stack - (showing ? seat.won || 0 : 0))}</span>${statLine(seat.stats)}${timer}</button>
+      <button class="pk-plate" data-act="seat-menu" data-seat="${i}"><b>${esc(seat.name)}${me ? ' <em>YOU</em>' : ''}</b><span>${amt(seat.stack - (showing ? seat.won || 0 : 0))}</span>${statLine(seat.stats)}${timer}</button>${me ? '<button class="pk-react" data-act="react" title="Reaction">😀</button>' : ''}
     </div>`;
     h += `<div class="pk-spot${seat.bet ? ' has' : ''}" id="spot-${i}" style="left:${B.x}%;top:${B.y}%">${seat.bet ? `<span class="pk-amt pk-stand">${amt(seat.bet)}</span>` : ''}</div>`;
     if (st.button === i && st.handNo > 0) { h += `<div class="pk-dbtn" style="left:calc(${B.x}% + ${(P.y > 50 ? 1 : -1) * (phone() ? 30 : 52)}px);top:${B.y}%">D</div>`; }
@@ -559,6 +559,7 @@ async function downloadHands(kind) {
   saveFile(`poker-hands-${day}.txt`, text);
 }
 
+const mySeatNow = (st) => st.seats.some((x) => x && x.id === S.myId);
 // ---------- The buttons under the table ----------
 function drawHud(st, mySeat, showing) {
   const tray = $('#tray'), top = $('#hud-top');
@@ -575,13 +576,14 @@ function drawHud(st, mySeat, showing) {
   else if (st.phase === 'done') status = st.result?.wins?.length ? st.result.wins.map((w) => `${esc(st.seats[w.seat]?.name || 'A player')} wins ${amt(w.amount)}${w.hand ? ' with ' + esc(shortHand(w.hand)) : ''}`).filter((x, i, a) => a.indexOf(x) === i).slice(0, 3).join(' · ') : 'Hand over';
   else status = st.canStart ? (isHost ? 'Press Start to deal the first hand.' : 'Waiting for the host to start.') : 'Two players with chips are needed to play.';
   const bounty = st.result?.bounty?.length ? ` · 7-2 bounty: ${st.result.bounty.map((b) => `${esc(st.seats[b.seat]?.name || '')} +${money(b.amount)}`).join(', ')}` : '';
-  const badge = live && !showing && seat ? rankBadge(seat) : ''; // your own hand, named once, beside the status line
-  top.innerHTML = status || bounty || badge ? `<div class="pk-statrow">${badge}${status || bounty ? `<div class="status">${status}${bounty}</div>` : ''}</div>` : '';
+  const badge = live && !showing && seat ? rankBadge(seat) : ''; // your own hand, named once, beside your own cards
+  top.innerHTML = status || bounty ? `<div class="pk-statrow"><div class="status">${status}${bounty}</div></div>` : '';
   // The host's Start and Stop button at the top right: Start deals, Stop holds the game after the hand in play.
+  { const aw = $('#away-top'); if (aw) { aw.hidden = !seat; aw.classList.toggle('gold', !!seat?.out); aw.textContent = seat?.out ? '💺 Back' : '💺'; aw.title = seat?.out ? 'You are away. Tap to play again.' : 'Away: sit out the next hands'; } }
   const hr = $('#host-run');
   if (hr) { const running = S.started && !S.paused; hr.hidden = !isHost; hr.textContent = running ? '⏸ Stop' : '▶ Start'; hr.title = running ? 'Stop dealing after this hand' : 'Deal the next hand and keep dealing'; hr.classList.toggle('primary', !running); hr.disabled = !running && !st.canStart; }
   let h = '';
-  if (seat && seat.cards.length && seat.cards[0]) h += `<div class="pk-myhand${seat.cards.length > 2 ? ' four' : ''}">${seat.cards.map((c) => cardHTML(c, 'big')).join('')}</div>`;
+  if (seat && seat.cards.length && seat.cards[0]) h += `<div class="pk-handrow"><div class="pk-myhand${seat.cards.length > 2 ? ' four' : ''}">${seat.cards.map((c) => cardHTML(c, 'big')).join('')}</div>${badge}</div>`;
   if (o) {
     const key = st.handNo + '|' + st.phase + '|' + st.currentBet + '|' + o.minTo;
     if (o.canRaise && (S.raiseFor !== key || S.raiseTo === null)) { S.raiseFor = key; S.raiseTo = o.minTo; }
@@ -618,13 +620,9 @@ function drawHud(st, mySeat, showing) {
     else { S.brokeAt = 0; h += `<div class="pk-broke"><span>You are sitting out with no chips.</span><button class="btn primary" data-act="rebuy">Buy in ${money(st.settings.startStack)}</button></div>`; }
   } else S.brokeAt = 0;
   if (seat) {
+    // Only what is used during play stays on screen (top left). Chips, the amount view and Leave seat are in the menu.
     h += `<div class="pk-mine">
-      <button class="btn small${seat.out ? ' gold' : ''}" data-act="away">${seat.out ? "✅ I'm back" : '💤<span> Away</span>'}</button>
-      <button class="btn small" data-act="add">🪙<span> Chips</span></button>
-      <button class="btn small" data-act="react">😀<span> React</span></button>
-      <button class="btn small" data-act="bbview" title="Show amounts in big blinds or in chips">${bbOn() ? 'BB' : '$'}<span> view</span></button>
       ${st.settings.straddle ? `<button class="btn small" data-act="straddle">Straddle: ${seat.straddle ? 'on' : 'off'}</button>` : ''}
-      <button class="btn small" data-act="stand">🚪<span> Leave seat</span></button>
     </div>`;
   }
   // Keep what is being typed in the amount box while the table redraws.
@@ -652,17 +650,20 @@ function drawMenu(st) {
   const isHost = S.role === 'host';
   el.innerHTML = `
     <div class="menu-invite"><div class="menu-title">🔗 Invite link</div><div class="share"><input id="share" readonly value="${esc(shareLink())}" /><button class="btn small" data-act="copy">Copy</button></div></div>
+    ${mySeatNow(st) ? '<button class="menu-item" data-act="add">🪙 My chips</button>' : ''}
     <button class="menu-item" data-act="ledger">📒 Ledger</button>
     <button class="menu-item" data-act="log">📝 Hand log</button>
     <button class="menu-item" data-act="dl-hands">⬇️ Download hand history</button>
     <button class="menu-item" data-act="fair">🔐 Fair deck</button>
     <button class="menu-item" data-act="rules">📖 Table rules</button>
+    <button class="menu-item" data-act="bbview">👁 Amounts shown in: ${bbOn() ? 'big blinds' : 'chips'}</button>
     ${isHost ? `<button class="menu-item" data-act="settings">⚙️ Table settings</button>
     <button class="menu-item" data-act="players">👥 Players</button>
     <button class="menu-item" data-act="bomb">💣 Bomb pot next hand: ${st.bombNext ? 'on' : 'off'}</button>
     <button class="menu-item" data-act="pause">${S.paused ? '▶️ Resume dealing' : '⏸️ Pause after this hand'}</button>` : ''}
     <button class="menu-item" data-act="view3d">🧊 3D room: ${use3D() ? 'on' : 'off'}</button>
     ${S.room ? '<button class="menu-item" data-act="walk">🚶 Walk around</button><button class="menu-item" data-act="view-reset">🪑 Back to my seat</button>' : ''}
+    ${mySeatNow(st) ? '<button class="menu-item" data-act="stand">🚪 Leave my seat</button>' : ''}
     <button class="menu-item" data-act="leave">↩️ Leave the table</button>`;
 }
 function ledgerHTML(st) {
@@ -880,7 +881,12 @@ setInterval(() => {
   if (!el || !st || st.turnLeft === null) return;
   const over = (Date.now() - S.at - st.turnLeft) / 1000;
   el.textContent = over > 0 ? `Time bank ${Math.max(0, Math.ceil(Number(el.dataset.bank) - over))}s` : '';
-}, 500);
+  // Your own time is nearly gone (clock and time bank together): a tick every second, sharper for the last three.
+  if (st.options && !el.closest('.pk-seat')?.classList.contains('far')) {
+    const left = Math.ceil(Number(el.dataset.bank) - over);
+    if (left <= 8 && left > 0 && S.lastTick !== st.handNo + ':' + st.phase + ':' + left) { S.lastTick = st.handNo + ':' + st.phase + ':' + left; tickSound(left <= 3); }
+  }
+}, 250);
 let resizeT;
 addEventListener('resize', () => { clearTimeout(resizeT); resizeT = setTimeout(render, 200); });
 

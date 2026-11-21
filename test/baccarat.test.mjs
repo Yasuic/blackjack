@@ -85,5 +85,6 @@ for (let bt = 0; bt <= 7; bt++) for (let v = 0; v <= 9; v++) {
   ok(m.chipsTotal() === t.chipsTotal() && m.bets.p0.player === 55 && m.hostId === 'p2', 'moved table keeps chips and bets');
   m.deal(); ok(m.phase === 'done' && m.pays.p0, 'moved table deals from a new shoe');
 }
+{ const { bankChecks } = await import('./bank.helper.mjs'); bankChecks(ok, BacTable, ['player', 'banker', 'tie', 'ppair', 'bpair'], 'canDeal', 'deal'); }
 console.log(`${n - fails}/${n} baccarat checks passed`);
 process.exit(fails ? 1 : 0);

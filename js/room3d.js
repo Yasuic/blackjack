@@ -162,7 +162,7 @@ function buildOffice(signText, midShift = 0, midScale = 1, skipRoom = null, live
     chrome: mk({ color: '#b9bec4', roughness: 0.25, metalness: 0.9 }),
     screen: mk({ color: '#0d0f12', roughness: 0.25, metalness: 0.2 }),
     // What the office screens show: the ARC Group logo, from the photo of it, lit like a screen that is on.
-    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261121p'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
+    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261121q'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
     dark: mk({ color: '#30353c', roughness: 0.6 }),
   };
   const group = new THREE.Group();
@@ -601,7 +601,7 @@ function buildOffice(signText, midShift = 0, midScale = 1, skipRoom = null, live
       return;
     }
     const far = -(gap + deskDepth - 0.15); // where the screens stand
-    if (L.postits) { // two blue post-its on the screen; they glitch
+    if (false && L.postits) { // moved: the post-its are now on the front of the wide screen (see WIDE below)
       const hold = new THREE.Group(); hold.applyMatrix4(frame); group.add(hold);
       [0.47, 0.39].forEach((x, n) => { const m = new THREE.Mesh(unitBox, new THREE.MeshBasicMaterial({ color: '#4aa3e8' })); m.scale.set(0.07, 0.07, 0.004); m.position.set(x, dy + 0.215 + n * 0.012, far + 0.03 + n * 0.004); hold.add(m); glitch.push({ m, x, y: m.position.y }); });
     }
@@ -710,7 +710,7 @@ function buildOffice(signText, midShift = 0, midScale = 1, skipRoom = null, live
     }
     for (const t of talkers) if (t.on && now > t.until) { t.on.visible = false; t.on = null; }
     for (const sp of coughs) sp.visible = now % 2600 < 900;
-    for (const q of glitch) { const on = Math.random() < 0.12; q.m.position.x = q.x + (on ? (Math.random() - 0.5) * 0.03 : 0); q.m.position.y = q.y + (on ? (Math.random() - 0.5) * 0.02 : 0); q.m.visible = Math.random() > 0.06; q.m.material.color.set(on ? (Math.random() < 0.5 ? '#ff3df2' : '#3dfff2') : '#4aa3e8'); }
+    for (const q of glitch) { const on = Math.random() < 0.3; q.m.position.x = q.x + (on ? (Math.random() - 0.5) * 0.03 : 0); q.m.position.y = q.y + (on ? (Math.random() - 0.5) * 0.02 : 0); q.m.visible = Math.random() > 0.06; q.m.material.color.set(on ? (Math.random() < 0.5 ? '#ff3df2' : '#3dfff2') : '#4aa3e8'); }
     { const dt = Math.min(0.2, (now - (snowAt || now)) / 1000); snowAt = now; for (const f of snow) { const a = f.pts.geometry.attributes.position; for (let i = 0; i < a.count; i++) { let y = a.getY(i) - (0.22 + (i % 5) * 0.05) * dt; if (y < 0) y = 2.6; a.setY(i, y); a.setX(i, a.getX(i) + Math.sin(now * 0.001 + i) * 0.03 * dt); } a.needsUpdate = true; } }
     // Now and then somebody gets up, walks out of the main door with a coffee, and comes back to their desk.
     if (dbgTrip) { const [who, kind] = dbgTrip; dbgTrip = null; const q = walkers.find((w) => w.name === who && w.state === 'sit'); if (q) { const v = VISITS[who], o = v && walkers.find((w) => w.name === v.to); q.sleep = kind === 'nap'; if (q.sleep) { q.path = q.nap.path; q.talk = null; } else if (kind === 'visit' && o) startVisit(q, v, o); else { q.path = q.route; q.talk = null; } q.state = 'go'; q.i = 0; q.d = 0; q.last = now; q.seat.visible = false; q.wg.visible = true; } }
@@ -857,11 +857,17 @@ function buildOffice(signText, midShift = 0, midScale = 1, skipRoom = null, live
       [-1, 0, 1].forEach((q) => { // three panels make the curve
         const m = pic(f.id + 'w' + q, 384, 420, (g, cw, ch) => { g.save(); g.translate(-(q + 1) * cw, 0); draw(g, cw * 3, ch); g.restore(); });
         const x = -0.1 - q * 0.272, z = q ? -0.03 : 0, ry = -q * 0.22;
-        box(0.285, 0.36, 0.025, M.screen, x, 0.36, z, true, ry); box(0.272, 0.34, 0.003, m, x, 0.36, z - 0.0128, false, ry);
+        box(0.285, 0.36, 0.025, M.screen, x, 0.36, z, true, ry); box(0.272, 0.34, 0.003, m, x - 0.0145 * Math.sin(ry), 0.36, z - 0.0145 * Math.cos(ry), false, ry); // the picture lies just in front of the panel, along the way the panel faces
       });
       box(0.05, 0.2, 0.03, M.leg, -0.1, 0.1, 0.03); box(0.3, 0.012, 0.2, M.leg, -0.1, 0, 0.03, false);
       const up = pic(f.id + 'v', 300, 512, (g, cw, ch) => { if (draw === geese) { geese(g, cw, ch); gooseDraw(g, cw / 2, ch * 0.4, 1.6); } else { g.fillStyle = '#16181c'; g.fillRect(0, 0, cw, ch); for (let n = 0; n < 9; n++) { g.fillStyle = n % 2 ? '#2b3038' : '#23272e'; g.fillRect(10, 12 + n * 55, cw - 20, 47); g.fillStyle = '#ffb35c'; g.beginPath(); g.arc(34, 35 + n * 55, 14, 0, 7); g.fill(); g.fillStyle = '#c9ced3'; g.fillRect(60, 24 + n * 55, 120 + (n * 37) % 90, 7); g.fillStyle = '#7d848c'; g.fillRect(60, 40 + n * 55, 180 - (n * 23) % 80, 5); } } });
-      box(0.36, 0.62, 0.025, M.screen, 0.52, 0.42, -0.04, true, -0.3); box(0.34, 0.6, 0.003, up, 0.52, 0.42, -0.0528, false, -0.3); box(0.04, 0.2, 0.03, M.leg, 0.52, 0.1, 0.0); box(0.2, 0.012, 0.16, M.leg, 0.52, 0, 0.0, false);
+      const ury = 0.55; // the upright screen is turned in towards the chair, like the curved one beside it
+      box(0.36, 0.62, 0.025, M.screen, 0.55, 0.42, -0.1, true, ury); box(0.34, 0.6, 0.003, up, 0.55 - 0.0145 * Math.sin(ury), 0.42, -0.1 - 0.0145 * Math.cos(ury), false, ury);
+      if (f.id === 'c4') { // Henry: two blue post-its on the front of the wide screen; they glitch
+        const hold = new THREE.Group(); hold.applyMatrix4(parent); group.add(hold);
+        [-0.19, -0.105].forEach((x, n) => { const m = new THREE.Mesh(unitBox, new THREE.MeshBasicMaterial({ color: '#4aa3e8' })); m.scale.set(0.075, 0.075, 0.004); m.position.set(x, 0.47 - n * 0.02, -0.02); hold.add(m); glitch.push({ m, x, y: m.position.y }); });
+      }
+      const _skip = 0; box(0.04, 0.2, 0.03, M.leg, 0.55, 0.1, -0.07); box(0.2, 0.012, 0.16, M.leg, 0.55, 0, -0.07, false);
       parent = null;
       return;
     }
@@ -903,7 +909,7 @@ function buildStorefront() {
     lamp: lam('#c8161d', 0.6), bulb: lit('#ffe9a8'), red: lit('#c8161d'), gold: lit('#f4c542'), wood: lam('#7a5234', 0.35),
     glass: new THREE.MeshBasicMaterial({ color: '#dff3f7', transparent: true, opacity: 0.13, depthWrite: false }),
     awning: new THREE.MeshBasicMaterial({ map: canvasTexture(512, 64, (g, w, h) => { for (let i = 0; i < 16; i++) { g.fillStyle = i % 2 ? '#fff6e6' : '#f08a1c'; g.fillRect((i * w) / 16, 0, w / 16 + 1, h); } }), side: THREE.DoubleSide }),
-    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261121p') }),
+    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261121q') }),
     menu: new THREE.MeshBasicMaterial({ map: canvasTexture(256, 384, (g, w, h) => {
       g.fillStyle = '#c8161d'; g.fillRect(0, 0, w, h); g.fillStyle = '#f4c542'; g.fillRect(14, 14, w - 28, 44);
       const r = rng(11); g.fillStyle = '#fff3d6';
@@ -1040,13 +1046,18 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
 
   // See-through hole where the HTML felt shows.
   const feltGeo = new THREE.ShapeGeometry(tableShape(W, H, 0), 96);
-  const hole = flat(new THREE.Mesh(feltGeo,
-    new THREE.MeshBasicMaterial({ color: 0x000000, opacity: 0, blending: THREE.NoBlending })), 1);
+  // Poker: the cloth is a real green surface in the 3D picture, and the HTML layer (cards, names, pot) is drawn
+  // on top of the whole 3D picture, so text and cards float above the rail, the shadows and the chips.
+  const TOP = OVAL;
+  container.classList.toggle('html-top', TOP);
+  const hole = flat(new THREE.Mesh(feltGeo, TOP ? new THREE.MeshStandardMaterial({ color: '#12684a', roughness: 0.95 })
+    : new THREE.MeshBasicMaterial({ color: 0x000000, opacity: 0, blending: THREE.NoBlending })), 1);
+  hole.receiveShadow = TOP;
   scene.add(hole);
   // Shadows and a soft dark edge on top of the felt, so the room's light seems to fall on the HTML too.
   const shade = flat(new THREE.Mesh(feltGeo, new THREE.ShadowMaterial({ opacity: 0.3, depthWrite: false })), 1.3);
   shade.receiveShadow = true; shade.renderOrder = 2;
-  scene.add(shade);
+  if (!TOP) scene.add(shade); // the green cloth takes its own shadows
   const vigTex = canvasTexture(256, 256, vignette);
   vigTex.repeat.set(1 / W, 1 / H); vigTex.offset.set(0.5, 0.5);
   const vig = flat(new THREE.Mesh(feltGeo, new THREE.MeshBasicMaterial({ map: vigTex, transparent: true, depthWrite: false })), 1.6);
@@ -1863,7 +1874,8 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     const yaw0 = Math.atan2(-tmp.x, -tmp.z), pitch0 = Math.atan2(tmp.y, Math.hypot(tmp.x, tmp.z));
     camera.rotation.set(Math.max(-1.5, Math.min(0.6, pitch0 + cur.pitch)), yaw0 + cur.yaw, 0, 'YXZ');
     // In your own chair you see your body, arms and stool when you look down, but no head in front of your eyes.
-    if (myFig) for (const part of myFig.userData.headParts) part.visible = !seated || !!tour;
+    // Your own head is never drawn while the camera is at it (within a metre across the floor): it would block the table.
+    if (myFig) { tmp.setFromMatrixPosition(myFig.matrixWorld); const close = Math.hypot(tmp.x - camera.position.x, tmp.z - camera.position.z) < 1.0 * S; for (const part of myFig.userData.headParts) part.visible = (!seated || !!tour) && !close; }
     // On an upright phone your own body would cover your cards and your name, so it is left out.
     if (myFig) myFig.visible = !(seated && container.clientWidth < 600 && container.clientHeight > container.clientWidth * 1.2);
     // From your chair, anything that would be drawn in the bottom quarter of the screen is in your way:
