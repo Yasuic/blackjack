@@ -1,13 +1,13 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120zzp';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261120zzp';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120zzp';
-import { tickSound, winSound } from './fx.js?v=20261120zzp';
-import * as HX from './history.js?v=20261120zzp';
-import { webglOK, initRoom } from './room3d.js?v=20261120zzp';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120zzp';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261120zzq';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261120zzq';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261120zzq';
+import { tickSound, winSound } from './fx.js?v=20261120zzq';
+import * as HX from './history.js?v=20261120zzq';
+import { webglOK, initRoom } from './room3d.js?v=20261120zzq';
+import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261120zzq';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -1108,6 +1108,12 @@ function roomPeople(st) {
     const isDealer = st.banker?.id === p.id, seat = isDealer ? null : p.seat;
     return { id: p.id, name: p.name, look: p.look || { skin: 2, hair: 0 }, seat, seats: st.seats.length, isMe: p.id === S.myId, isDealer,
       x: at[seat]?.x, y: at[seat]?.y, bet: seat !== null && st.seats[seat] ? betTotal(st.seats[seat].bet) : 0 };
+  });
+  // A player who holds more seats has the same character on each of them.
+  st.seats.forEach((seat, i) => {
+    const p = seat && st.players.find((x) => x.id === seat.playerId);
+    if (!p || p.seat === i || st.banker?.id === p.id || at[i] === undefined) return;
+    list.push({ id: p.id + '#' + i, name: p.name, look: p.look || { skin: 2, hair: 0 }, seat: i, seats: st.seats.length, isMe: false, isDealer: false, x: at[i].x, y: at[i].y, bet: betTotal(seat.bet) });
   });
   // The house dealer stands behind the table too, so someone is seen dealing the cards.
   if (!st.banker && st.frozen) list.push({ id: 'house-dealer', name: 'Dealer', look: { skin: 2, hair: 0 }, seat: null, seats: st.seats.length, isMe: false, isDealer: true, bet: 0 });
@@ -2660,7 +2666,7 @@ function renderHostPanel(st) {
     ${locked ? '<div class="hint" style="margin-bottom:8px">Settings unlock when the round ends.</div>' : ''}
     ${fold('set-cards', '🂠 Cards and reshuffle', `<div class="settings-grid">
       <label class="full">Cards in the shoe
-        <select id="set-decks" ${dis}>
+        <select id="set-decks">
           ${[[1, '1 deck'], [2, '2 decks'], [6, '6 decks'], [8, '8 decks'], [20, '20 decks'], ['csm', 'Randomized (full shuffle every round)']].map(([v, l]) => `<option value="${v}" ${String(s.decks) === String(v) ? 'selected' : ''}>${l}</option>`).join('')}
         </select></label>
       <label class="full">When to reshuffle
@@ -2671,7 +2677,7 @@ function renderHostPanel(st) {
       <label class="full mode-pen" ${s.shuffleMode === 'rounds' ? 'hidden' : ''}>Reshuffle when <span id="pen-val">${s.penetration}%</span> of the shoe is used
         <input id="set-pen" type="range" min="20" max="95" step="5" value="${s.penetration}" ${dis} /></label>
       <label class="full mode-rounds" ${s.shuffleMode === 'rounds' ? '' : 'hidden'}>Reshuffle every N rounds<input id="set-every" type="number" min="1" max="50" value="${s.shuffleEvery}" ${dis} /></label>
-      <button class="btn full" data-act="h-shuffle" ${dis}>Shuffle now</button>
+      <button class="btn full" data-act="h-shuffle">${locked ? 'Shuffle before next hand' : 'Shuffle now'}</button>
     </div>`, true)}
     ${fold('set-seats', '🪑 Seats', `<div class="settings-grid">
       <label class="full">Seats at the table<input id="set-seats" type="number" min="1" step="1" inputmode="numeric" value="${s.seats}" ${dis} /></label>
@@ -2703,6 +2709,12 @@ function renderHostPanel(st) {
   $('#set-mode').addEventListener('change', (e) => {
     $('.mode-pen').hidden = e.target.value === 'rounds';
     $('.mode-rounds').hidden = e.target.value !== 'rounds';
+  });
+  // The deck choice saves as soon as it is picked; during a hand it starts when the hand ends.
+  $('#set-decks').addEventListener('change', (e) => {
+    const v = e.target.value === 'csm' ? 'csm' : Number(e.target.value);
+    e.target.blur();
+    proposeSettings({ decks: v });
   });
   $('#set-pen').addEventListener('input', (e) => ($('#pen-val').textContent = e.target.value + '%'));
 }
@@ -2737,7 +2749,7 @@ function proposeSettings(patch) {
       S.voteEnds = Date.now() + VOTE_SECONDS * 1000;
       setTimeout(() => hostDo((tb) => tb.expireVote(id)), VOTE_SECONDS * 1000);
       toast('Sent to the table for a vote.');
-    } else toast('Settings saved.');
+    } else toast(t.pendingSettings ? 'Saved. It starts when this hand ends.' : 'Settings saved.');
   });
   S.settingsKey = '';
 }
@@ -3076,7 +3088,7 @@ function runAct(el) {
     }); break;
     case 'h-ins': hostDo((t) => t.forceInsurance()); break;
     case 'h-skip': fresh(() => 0, () => hostDo((t) => t.skipTurn())); break;
-    case 'h-shuffle': hostDo((t) => t.newShoe()); break;
+    case 'h-shuffle': hostDo((t) => toast(t.askShuffle() ? 'The shoe was shuffled.' : 'The shoe will be shuffled before the next hand.')); break;
     case 'h-give': {
       const amt = Math.abs(Number($('#give-amt').value) || 0) * Number(el.dataset.sign);
       hostDo((t) => t.giveChips(el.dataset.id, amt));
@@ -3144,7 +3156,7 @@ function playMove(a) {
 // Keyboard play: H hit, S stand, D double, P split, U surrender, Y and N answer insurance,
 // R type a bet (Enter confirms), B rebet, Space deal me in.
 const KEY_HELP = [['H', 'Hit'], ['S', 'Stand'], ['D', 'Double'], ['P', 'Split'], ['U', 'Surrender'], ['Y / N', 'Take insurance, or say no'],
-  ['R', 'Type your bet, then Enter'], ['B', 'Rebet: the same bet as last round'], ['Space / Enter', 'Deal me in'], ['?', 'Show this list'], ['Esc', 'Put the picked chip down'], ['W / A / S / D', 'Move freely through the office (the arrow keys work too). On your turn S and D play your hand'], ['Esc', 'After moving: back to your seat']];
+  ['R', 'Type your bet, then Enter'], ['B', 'Rebet: the same bet as last round'], ['Space / Enter', 'Deal me in'], ['L', 'Open or close the ledger'], ['?', 'Show this list'], ['Esc', 'Put the picked chip down'], ['W / A / S / D', 'Move freely through the office (the arrow keys work too). On your turn S and D play your hand'], ['Esc', 'After moving: back to your seat']];
 function keysHTML() {
   return `<h2 style="margin-top:0">Keyboard keys</h2><table class="keys-help">${KEY_HELP.map(([k, what]) => `<tr><td>${k.split(' / ').map((x) => `<kbd>${x}</kbd>`).join(' ')}</td><td>${what}</td></tr>`).join('')}</table>
     <p class="hint">Keys work when you are not typing in a box.</p>`;
@@ -3156,6 +3168,7 @@ document.addEventListener('keydown', (e) => {
   if (!st) return;
   const k = e.key.toLowerCase();
   if (e.key === '?') { $('#modal-body').innerHTML = keysHTML(); $('#modal').showModal(); return; }
+  if (k === 'l') { const l = $('#ledger'); if (l) { l.classList.toggle('closed'); safeSet('bj-ledger', l.classList.contains('closed') ? '0' : '1'); renderLedger(st); } return; }
   const map = { h: 'hit', s: 'stand', d: 'double', p: 'split', u: 'surrender' };
   // While the first cards are still being dealt there is nothing to decide yet.
   const wait = dealingNow() && S.dealMany;

@@ -349,7 +349,15 @@ export class Table {
   newShoe() {
     this.fairShuffle();
     this.roundsSinceShuffle = 0;
+    this.shuffleNext = false;
     this.addLog('The shoe was shuffled.');
+  }
+  // Shuffle now between rounds; during a round the shuffle waits for the next deal.
+  askShuffle() {
+    if (!this.inRound()) { this.newShoe(); return true; }
+    if (!this.shuffleNext) this.addLog('The host asked for a shuffle before the next hand.');
+    this.shuffleNext = true;
+    return false;
   }
   needsShuffle(players = this.seats.length) {
     const s = this.settings;
@@ -936,7 +944,7 @@ export class Table {
     // of a table also mixes in the codes of the people who are playing it.
     const f = this.fair;
     const fresh = f?.current && this.shoe.length === this.shoeSize && Object.keys(f.next.seeds).some((k) => f.current.clientSeeds[k] === undefined);
-    if (this.needsShuffle(playing) || fresh) this.newShoe();
+    if (this.needsShuffle(playing) || fresh || this.shuffleNext) this.newShoe();
     this.round++;
     this.roundsSinceShuffle++;
     const active = [];
@@ -1387,8 +1395,8 @@ export class Table {
 
   // Save and restore so the host can refresh the page without losing the table.
   toJSON() {
-    const { settings, seats, players, phase, dealer, turn, round, roundsSinceShuffle, log, shoe, shoeSize, banker, bankerNet, pendingBanker, buyIns, runCount, hostId, pendingSettings, frozen, fair, hist, evts, created, frozenSnap } = this;
-    return { settings, seats, players, phase, dealer, turn, round, roundsSinceShuffle, log, shoe, shoeSize, banker, bankerNet, pendingBanker, buyIns, runCount, hostId, pendingSettings, frozen, fair, hist, evts, created, frozenSnap };
+    const { settings, seats, players, phase, dealer, turn, round, roundsSinceShuffle, log, shoe, shoeSize, banker, bankerNet, pendingBanker, buyIns, runCount, hostId, pendingSettings, frozen, fair, hist, evts, created, frozenSnap, shuffleNext } = this;
+    return { settings, seats, players, phase, dealer, turn, round, roundsSinceShuffle, log, shoe, shoeSize, banker, bankerNet, pendingBanker, buyIns, runCount, hostId, pendingSettings, frozen, fair, hist, evts, created, frozenSnap, shuffleNext };
   }
   static fromJSON(obj) {
     const t = new Table(obj.settings);
