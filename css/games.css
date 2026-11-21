@@ -501,7 +501,7 @@ body.game-pk.room3d .html-top .felt.pfelt::after { display: none; }
 
 /* Decluttered poker screen: Away at the top left beside the seat lock, Reset view at the top right, reactions beside your own name. */
 @media (min-width: 700px) {
-  body.game-pk .pk-mine { position: fixed; left: 140px; top: 66px; z-index: 40; width: auto; }
+  body.game-pk .pk-mine { position: fixed; left: 262px; top: 66px; z-index: 40; width: auto; }
   body.game-pk .pk-mine .btn { border-radius: 999px; padding: 6px 12px; }
   body.game-pk .room-reset { bottom: auto; top: 68px; right: 12px; }
 }
@@ -534,3 +534,8 @@ body.game-pk.room3d .html-top .felt.pfelt::after { display: none; }
 .bank-bar { flex-wrap: nowrap; max-width: 760px; }
 .bank-bar span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .bank-bar .btn { flex: none; white-space: nowrap; }
+
+/* First person view: far seats are drawn larger and near seats smaller, so every name and stack is about the same size on screen. */
+body.room-fp.room3d .pfelt:not(.tall) .pk-seat { scale: var(--ds, 1); }
+body.room-fp.room3d .pfelt:not(.tall) .pk-bubble { margin-bottom: calc(2px * var(--k)); }
+body.room-fp.room3d .felt.pfelt:not(.tall) { --k: 1.5; }

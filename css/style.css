@@ -1670,3 +1670,7 @@ body.room3d .room-lock, body.room3d .room-reset { display: block; }
 .room-lock:hover, .room-reset:hover { filter: brightness(1.25); }
 body.room3d .room.seat-locked { cursor: default; }
 @media (max-width: 600px) { .room-lock { top: 62px; left: 8px; padding: 5px 9px; font-size: 11px; } .room-reset { bottom: auto; top: 62px; right: 8px; padding: 5px 9px; font-size: 11px; } }
+
+.room-pov { display: none; position: fixed; z-index: 40; top: 68px; left: 136px; font: 600 12px Inter, sans-serif; color: #e9eef5; background: rgba(10,12,16,.82); border: 1px solid rgba(255,255,255,.22); border-radius: 999px; padding: 6px 12px; cursor: pointer; white-space: nowrap; }
+.room-pov.on { border-color: var(--gold); color: #ffe7a8; }
+@media (min-width: 700px) { body.room3d .room-pov { display: block; } }

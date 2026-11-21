@@ -162,7 +162,7 @@ function buildOffice(signText, midShift = 0, midScale = 1, skipRoom = null, live
     chrome: mk({ color: '#b9bec4', roughness: 0.25, metalness: 0.9 }),
     screen: mk({ color: '#0d0f12', roughness: 0.25, metalness: 0.2 }),
     // What the office screens show: the ARC Group logo, from the photo of it, lit like a screen that is on.
-    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261121q'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
+    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261121r'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
     dark: mk({ color: '#30353c', roughness: 0.6 }),
   };
   const group = new THREE.Group();
@@ -909,7 +909,7 @@ function buildStorefront() {
     lamp: lam('#c8161d', 0.6), bulb: lit('#ffe9a8'), red: lit('#c8161d'), gold: lit('#f4c542'), wood: lam('#7a5234', 0.35),
     glass: new THREE.MeshBasicMaterial({ color: '#dff3f7', transparent: true, opacity: 0.13, depthWrite: false }),
     awning: new THREE.MeshBasicMaterial({ map: canvasTexture(512, 64, (g, w, h) => { for (let i = 0; i < 16; i++) { g.fillStyle = i % 2 ? '#fff6e6' : '#f08a1c'; g.fillRect((i * w) / 16, 0, w / 16 + 1, h); } }), side: THREE.DoubleSide }),
-    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261121q') }),
+    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261121r') }),
     menu: new THREE.MeshBasicMaterial({ map: canvasTexture(256, 384, (g, w, h) => {
       g.fillStyle = '#c8161d'; g.fillRect(0, 0, w, h); g.fillStyle = '#f4c542'; g.fillRect(14, 14, w - 28, 44);
       const r = rng(11); g.fillStyle = '#fff3d6';
@@ -1478,6 +1478,7 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
   const CENTRE = new THREE.Vector3(0, -10, 0);
   const cur = { theta: 0, phi: 0.9, r: 1400, yaw: 0, pitch: 0, t: CENTRE.clone() };
   const goal = { theta: 0, phi: 0.9, r: 1400, yaw: 0, pitch: 0, t: CENTRE.clone() };
+  let firstPerson = false; try { firstPerson = OVAL && localStorage.getItem('pk-pov') === '1'; } catch { /* no storage */ }
   let side = 'player', seated = true, rate = 14, homeFit = null, hudReserve = 0;
   const PHI_MAX = 1.36, YAW_MAX = 2.25;
   const EYE = 340 * U; // lowest the camera goes when walking around: standing eye height, above the table top
@@ -1535,6 +1536,11 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     // Poker: the view of a player in the chair, low over the near rail and looking across the table, not from above.
     // The far side and both ends of the table must be in sight; the rail right under your chin may be out of it.
     const pov = OVAL && !tall; // an upright phone keeps the higher view, so the far seats stay readable
+    if (pov && firstPerson) {
+      // True first person: the eye is where your head is in the chair, a little above the table, looking across it.
+      const eyeY = 0.5 * S, eyeZ = H / 2 + 0.34 * S, tz = -H * 0.05, dz = eyeZ - tz;
+      return { phi: Math.atan2(dz, eyeY), r: Math.hypot(dz, eyeY), tz };
+    }
     if (pov) {
       const tz = H * (tall ? 0.1 : 0.16);
       if (leanR) return { phi: homeFit.phi, r: leanR, tz };
@@ -1660,6 +1666,11 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
   try { locked = localStorage.getItem('bj-seat-lock') !== '0'; } catch { /* no storage: stay locked */ }
   document.querySelectorAll('.room-lock, .room-reset').forEach((b) => b.remove());
   const lockBtn = document.createElement('button'), resetBtn = document.createElement('button');
+  // Poker on a computer: a second view, from your own eyes in the chair. The seat view stays the default.
+  const povBtn = document.createElement('button'); povBtn.className = 'room-pov';
+  const drawPov = () => { povBtn.textContent = firstPerson ? '👁 First person' : '👁 Seat view'; povBtn.title = firstPerson ? 'You see the table from your own eyes. Tap for the higher seat view.' : 'Tap to see the table from your own eyes.'; povBtn.classList.toggle('on', firstPerson); document.body.classList.toggle('room-fp', firstPerson); };
+  povBtn.addEventListener('click', (e) => { e.stopPropagation(); firstPerson = !firstPerson; try { localStorage.setItem('pk-pov', firstPerson ? '1' : '0'); } catch { /* fine */ } drawPov(); resize(); home(true); });
+  if (OVAL) { document.body.append(povBtn); drawPov(); }
   lockBtn.className = 'room-lock'; resetBtn.className = 'room-reset'; resetBtn.textContent = '🪑 Reset view'; resetBtn.title = 'Back to your chair';
   const drawLock = () => { lockBtn.textContent = locked ? '🔒 Seat locked' : '🔓 Free view'; lockBtn.title = locked ? 'You stay in your chair. Drag to look around. Tap to unlock and walk around.' : 'Tap to lock yourself in your chair again.'; lockBtn.classList.toggle('on', locked); container.classList.toggle('seat-locked', locked); };
   const setLock = (v) => { locked = !!v; try { localStorage.setItem('bj-seat-lock', locked ? '1' : '0'); } catch { /* fine */ } if (locked) { moveKeys.clear(); home(true); } drawLock(); };
@@ -1768,7 +1779,7 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     const w = container.clientWidth, h = container.clientHeight;
     if (!w || !h) return;
     camera.aspect = w / h;
-    camera.fov = w / h < 0.8 ? 56 : OVAL ? 58 : 42; // poker looks across the table from the chair, so it sees wider
+    camera.fov = w / h < 0.8 ? 56 : OVAL ? (firstPerson ? 76 : 58) : 42; // poker looks across the table from the chair, so it sees wider
     camera.updateProjectionMatrix();
     css.setSize(w, h);
     applyPixel();

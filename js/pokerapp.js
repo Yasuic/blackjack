@@ -1,10 +1,10 @@
 // The poker page: a Texas Hold'em table for up to 9 in the big meeting room. The host's browser runs
 // the table (js/poker.js); every other browser sends its moves there and is told only what it may see.
-import { PokerTable, POKER_SEATS, pokerDeck, cardText } from './poker.js?v=20261121q';
-import { sha256 } from './game.js?v=20261121q';
-import { chipSound, cardSound, hitSound, standSound, potSound, tickSound } from './fx.js?v=20261121q';
-import { webglOK, initRoom } from './room3d.js?v=20261121q';
-import { params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame } from './common.js?v=20261121q';
+import { PokerTable, POKER_SEATS, pokerDeck, cardText } from './poker.js?v=20261121r';
+import { sha256 } from './game.js?v=20261121r';
+import { chipSound, cardSound, hitSound, standSound, potSound, tickSound } from './fx.js?v=20261121r';
+import { webglOK, initRoom } from './room3d.js?v=20261121r';
+import { params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame } from './common.js?v=20261121r';
 
 const PREFIX = 'bjt-pk-';
 const app = $('#app');
@@ -500,7 +500,7 @@ function render() {
     const hideMine = me;
     const cards = !hideMine && seat.cards.length ? seat.cards.map((c) => cardHTML(c, (me ? 'mine ' : '') + (inBest(i, c) ? 'hi' : ''))).join('') : '';
     const timer = turn && st.turnLeft !== null ? `<i class="pk-bank" data-bank="${seat.bank}"></i><i class="pk-timer"><i style="animation-duration:${Math.max(0.1, (st.turnLeft - (Date.now() - S.at)) / 1000)}s;width:${100 - Math.min(100, (Math.max(0, st.turnLeft - (Date.now() - S.at)) / (st.settings.turnTimer * 1000)) * 100)}%"></i></i>` : '';
-    h += `<div class="pk-seat pk-stand${!me ? ' far' : ''}${me ? ' me' : ''}${turn ? ' turn' : ''}${seat.inHand && seat.folded ? ' folded' : ''}${!seat.inHand && live ? ' idle' : ''}${bcls === 'win' ? ' won' : ''}" style="left:${A.x}%;top:${A.y}%" data-seat="${i}">
+    h += `<div class="pk-seat pk-stand${!me ? ' far' : ''}${me ? ' me' : ''}${turn ? ' turn' : ''}${seat.inHand && seat.folded ? ' folded' : ''}${!seat.inHand && live ? ' idle' : ''}${bcls === 'win' ? ' won' : ''}" style="left:${A.x}%;top:${A.y}%;--ds:${Math.max(0.62, Math.min(1.7, (1.35 - A.y / 100) / 0.75)).toFixed(2)}" data-seat="${i}">
       ${bubble ? `<div class="pk-bubble ${bcls}">${bubble}</div>` : ''}
       <div class="pk-cards${seat.folded ? ' dim' : ''}${seat.cards.length > 2 ? ' four' : ''}">${cards}</div>
       <button class="pk-plate" data-act="seat-menu" data-seat="${i}"><b>${esc(seat.name)}${me ? ' <em>YOU</em>' : ''}</b><span>${amt(seat.stack - (showing ? seat.won || 0 : 0))}</span>${statLine(seat.stats)}${timer}</button>${me ? '<button class="pk-react" data-act="react" title="Reaction">😀</button>' : ''}
