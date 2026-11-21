@@ -423,3 +423,33 @@ body.room3d .ro-grid.wide { top: 29%; left: 10%; right: 10%; grid-auto-rows: cal
 .ro-pop-res b { display: flex; align-items: center; justify-content: center; width: 56px; height: 56px; border-radius: 50%; color: #fff; font: 800 28px "Space Grotesk", sans-serif; }
 .ro-pop-res.red b { background: #c62f2f; } .ro-pop-res.black b { background: #17191f; border: 2px solid #777; } .ro-pop-res.green b { background: #1f9a4d; }
 .ro-pop-res span { color: #fff6dc; font: 700 18px "Space Grotesk", sans-serif; }
+
+/* ---------- Poker: a compact set of buttons. Fold, Check or Call, Raise at the bottom right; Raise opens a small panel. ---------- */
+.pk-act { min-height: 42px; max-width: 150px; font-size: 15px; border-radius: 10px; padding: 0 14px; box-shadow: 0 4px 12px rgba(0,0,0,.5); }
+.pk-acts { gap: 6px; }
+.pk-raise { padding: 6px 8px; gap: 5px; border-radius: 10px; }
+.pk-presets button { padding: 5px 2px; font-size: 12px; }
+.pk-presets button.back { flex: 0 0 auto; padding: 5px 8px; color: #b9c6d6; }
+.pk-slide input[type=number] { width: 84px; padding: 4px 6px; font-size: 14px; }
+.pk-myhand { --cw: 46px; padding: 4px 6px; }
+.pk-dragtip { display: none; }
+.pk-broke { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: center; background: rgba(8,10,14,.92); border: 2px solid var(--gold); border-radius: 12px; padding: 8px 12px; font: 600 14px Inter, sans-serif; color: #fff6dc; }
+.pk-broke b { color: var(--gold); font-family: "Space Grotesk", sans-serif; }
+/* Whose turn it is: the name plate pulses. */
+@keyframes pkTurn { 0%, 100% { box-shadow: 0 0 0 calc(2px * var(--k, 1)) rgba(126,240,182,.55), 0 0 calc(14px * var(--k, 1)) rgba(126,240,182,.6); } 50% { box-shadow: 0 0 0 calc(4px * var(--k, 1)) rgba(126,240,182,.95), 0 0 calc(30px * var(--k, 1)) rgba(126,240,182,1); } }
+.pk-seat.turn .pk-plate { border-color: #7ef0b6; animation: pkTurn 1.1s ease-in-out infinite; }
+.pk-seat.turn .pk-plate b { color: #b9ffe0; }
+@media (min-width: 700px) {
+  body.game-poker .pk-acts:not(.small):not(.pk-runask) { position: fixed; right: 14px; bottom: 46px; width: auto; z-index: 30; }
+  body.game-poker .pk-acts:not(.small):not(.pk-runask) .pk-act { flex: 0 0 auto; min-width: 108px; }
+  body.game-poker .pk-raise { position: fixed; right: 14px; bottom: 96px; width: 372px; z-index: 30; }
+}
+@media (max-width: 699px) { .pk-act { min-height: 44px; max-width: none; } }
+
+/* Your own hand name: a small badge beside the status line, not on the felt. */
+.pk-statrow { display: flex; align-items: center; justify-content: center; gap: 6px; }
+.pk-rank.flat { position: static; translate: none; transform: none; padding: 2px 10px; border-width: 1.5px; border-radius: 9px; animation: none; }
+.pk-rank.flat b { font-size: 12px; letter-spacing: .8px; }
+.pk-rank.flat.two { display: flex; gap: 8px; }
+/* Move to an empty seat: a small plain tag. */
+.pk-sit.pk-move { font-size: calc(9px * var(--k)); padding: calc(2px * var(--k)) calc(7px * var(--k)); opacity: .55; border-width: 1px; white-space: nowrap; }

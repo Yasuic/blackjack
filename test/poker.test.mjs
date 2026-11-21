@@ -371,6 +371,21 @@ PokerTable.noChances = true; PokerTable.autoRun = false;
   ok((t.result.wins || []).every((w) => t.seats[w.seat]), 'the last result still names a seated player');
   t.startHand(); ok(t.seats[6].inHand && t.seats[6].cards.length === 2, 'dealt in at the new seat');
 }
+{ // one player loses everything: the cards are collected and the table waits, then deals again after a buy in
+  const t = mk(2, 300, { runTimes: 1 }); t.startHand();
+  ok(!t.clearHand() && t.phase === 'preflop', 'cards are not collected during a hand');
+  t.act(t.seats[t.turn].id, 'raise', 300); t.act(t.seats[t.turn].id, 'call');
+  let g = 0; while (t.phase === 'done' && t.seats.filter((x) => x && x.stack > 0).length === 2 && g++ < 50) { t.startHand(); t.act(t.seats[t.turn].id, 'raise', t.seats[t.turn].stack + t.seats[t.turn].bet); if (t.phase !== 'done') t.act(t.seats[t.turn].id, 'call'); }
+  const sum = t.seats.reduce((a, x) => a + (x ? x.stack : 0), 0);
+  if (t.seats.filter((x) => x && x.stack > 0).length === 1) {
+    ok(!t.canStart(), 'one player with chips cannot start a hand');
+    ok(t.clearHand() && t.phase === 'waiting' && t.board.length === 0 && t.result === null && t.seats.every((x) => !x || (x.cards.length === 0 && !x.inHand)), 'cards collected, table waits');
+    ok(t.seats.reduce((a, x) => a + (x ? x.stack : 0), 0) === sum, 'collecting cards moves no chips');
+    const st = t.publicState('p0'); ok(st.phase === 'waiting' && !st.canStart, 'players see a waiting table');
+    const broke = t.seats.find((x) => x && x.stack === 0); t.addChips(broke.id, 300);
+    ok(t.canStart(), 'after a buy in a hand can start'); t.startHand(); ok(t.phase === 'preflop', 'the next hand is dealt');
+  } else ok(false, 'no player went broke in 50 all in hands');
+}
 PokerTable.noChances = false; PokerTable.samples = 0;
 console.log(`${n - fails}/${n} poker checks passed`);
 process.exit(fails ? 1 : 0);

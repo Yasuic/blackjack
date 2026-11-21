@@ -1,9 +1,10 @@
 // The poker page: a Texas Hold'em table for up to 9 in the big meeting room. The host's browser runs
 // the table (js/poker.js); every other browser sends its moves there and is told only what it may see.
-import { PokerTable, POKER_SEATS, pokerDeck, cardText } from './poker.js?v=20261121o';
-import { sha256 } from './game.js?v=20261121o';
-import { webglOK, initRoom } from './room3d.js?v=20261121o';
-import { params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame } from './common.js?v=20261121o';
+import { PokerTable, POKER_SEATS, pokerDeck, cardText } from './poker.js?v=20261121p';
+import { sha256 } from './game.js?v=20261121p';
+import { chipSound, cardSound, hitSound, standSound, winSound } from './fx.js?v=20261121p';
+import { webglOK, initRoom } from './room3d.js?v=20261121p';
+import { params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame } from './common.js?v=20261121p';
 
 const PREFIX = 'bjt-pk-';
 const app = $('#app');
@@ -138,7 +139,7 @@ function doMove(id, m) {
     case 'act': if (t.waitCards) throw new Error('One moment: the table just moved to a new host.'); t.act(id, m.a, m.amount); break;
     case 'cards': t.giveCards(id, m.cards, m.salt); break;
     case 'away': t.sitOut(id, !!m.on); break;
-    case 'add': t.addChips(id, m.amount); break;
+    case 'add': { const x = t.seats[t.seatOf(id)], broke = x && x.stack === 0; t.addChips(id, m.amount); if (broke && x.out && x.stack > 0) t.sitOut(id, false); break; } // chips after going broke bring the player back in
     case 'take': t.takeChips(id, m.amount); break;
     case 'vaway': t.voteAway(id, String(m.id), !!m.on); break;
     case 'fx': relayFx(id, m.e); break;
@@ -213,6 +214,14 @@ function hostClock() {
     return;
   }
   if (S.pendingSettings) { try { t.updateSettings(S.pendingSettings); } catch {} S.pendingSettings = null; push(); }
+  // A player with no chips left has 20 seconds to buy in again; after that they sit out, so the others are never stuck.
+  S.brokeT ||= {};
+  for (const x of t.seats) {
+    if (!x) continue;
+    if (x.stack > 0 || x.out) { delete S.brokeT[x.id]; continue; }
+    S.brokeT[x.id] ||= now;
+    if (now - S.brokeT[x.id] > 20000) { delete S.brokeT[x.id]; t.sitOut(x.id, true); t.addLog(`${t.players[x.id]?.name || 'A player'} has no chips and sits out.`); push(); }
+  }
   if (t.phase === 'done' && !S.doneAt) S.doneAt = now;
   // Before a deal: a player whose browser has been gone for 40 seconds is marked away, so no blinds are taken
   // from them. They keep the seat and the chips, and are back in as soon as their browser returns.
@@ -221,8 +230,11 @@ function hostClock() {
     const gone = S.goneAt[x.id];
     if (t.players[x.id]?.connected === false && gone && now - gone > 40000) { t.sitOut(x.id, true); S.autoAway[x.id] = true; t.addLog(`${t.players[x.id].name} is offline and was marked away.`); push(); }
   }
-  if (!S.started || S.paused || !t.settings.autoStart || !t.canStart()) return;
   const r = t.result;
+  // Too few players for a new hand (away, or out of chips): once the result has been shown, the cards are
+  // collected and the table waits. It deals again by itself as soon as two players can play.
+  if (t.phase === 'done' && !t.canStart() && now - S.doneAt >= 6000 + (r?.showdown ? 2500 : 0) + (r?.runout ? (r.runout.length + (r.boards ? r.boards.length : 1)) * stepMs() : 0)) { t.clearHand(); S.doneAt = 0; push(); return; }
+  if (!S.started || S.paused || !t.settings.autoStart || !t.canStart()) return;
   const wait = t.phase === 'done' ? 4500 + (r?.showdown ? 2500 : 0) + (r?.runout ? (r.runout.length + (r.boards ? r.boards.length : 1)) * stepMs() : 0) : 800;
   if (now - (S.doneAt || 0) >= wait) { t.startHand(); S.doneAt = 0; push(); }
 }
@@ -350,14 +362,15 @@ function seatSpots(W, H) {
 const toward = (p, f) => ({ x: 50 + (p.x - 50) * f, y: 50 + (p.y - 50) * f });
 
 // The badge under the board: what your own hand is right now, in its own colour by strength.
-const RANKS_UI = [['Royal flush', 9, '👑'], ['Straight flush', 8, '⚡'], ['Four', 7, '💎', 'Quads'], ['Full house', 6, '🏠'], ['Flush', 5, '🌊'], ['Straight', 4, '📏'], ['Three', 3, '🔱', 'Trips'], ['Two pair', 2, '✌️'], ['Pair', 1, '👥'], ['', 0, '🂠', 'High card']];
+const RANKS_UI = [['Royal flush', 9, '👑'], ['Straight flush', 8, '⚡'], ['Four', 7, '💎', 'Four of a kind'], ['Full house', 6, '🏠'], ['Flush', 5, '🌊'], ['Straight', 4, '📏'], ['Three', 3, '🔱', 'Three of a kind'], ['Two pair', 2, '✌️'], ['Pair', 1, '👥'], ['', 0, '🂠', 'High card']];
+// The short name of a hand, without which cards make it: 'Pair of queens' is shown as 'Pair'. The log keeps the long one.
+const shortHand = (name) => String(name || '').split(' | ').map((h) => { const r = RANKS_UI.find((x) => h.startsWith(x[0])); return r[3] || r[0]; }).join(' | ');
 function rankBadge(seat) {
   if (!seat || !seat.hand || !seat.inHand || seat.folded) return '';
   const parts = seat.hand.split(' | ');
-  if (parts.length > 1) return `<div class="pk-rank pk-stand two t${Math.max(...parts.map((h) => RANKS_UI.find((r) => h.startsWith(r[0]))[1]))}">${parts.map((h, k) => { const [key, , icon, label] = RANKS_UI.find((r) => h.startsWith(r[0])); return `<b>${icon} Board ${k + 1}: ${label || key}</b><small>${esc(h)}</small>`; }).join('')}</div>`;
+  if (parts.length > 1) return `<div class="pk-rank flat two t${Math.max(...parts.map((h) => RANKS_UI.find((r) => h.startsWith(r[0]))[1]))}">${parts.map((h, k) => { const [key, , icon, label] = RANKS_UI.find((r) => h.startsWith(r[0])); return `<b>${icon} Board ${k + 1}: ${label || key}</b>`; }).join('')}</div>`;
   const [key, tier, icon, label] = RANKS_UI.find((r) => seat.hand.startsWith(r[0]));
-  const title = label || key, rest = seat.hand.replace(/^(Royal flush|Straight flush|Full house|Flush|Straight|Two pair),?\s*/, '').replace(/^Four /, '').replace(/^Three /, '').replace(/^Pair of /, '');
-  return `<div class="pk-rank pk-stand t${tier}"><b>${icon} ${title}</b>${rest && rest !== seat.hand || tier === 0 || tier === 1 || tier === 3 || tier === 7 ? `<small>${esc(rest)}</small>` : ''}</div>`;
+  return `<div class="pk-rank flat t${tier}"><b>${icon} ${label || key}</b></div>`;
 }
 const stepMs = () => Number(params.get('step')) || { fast: 1100, normal: 1900, long: 3200 }[(S.st || S.table)?.settings?.showSpeed] || 1100; // an all in board comes one step at a time, this many milliseconds apart
 // Where an all in showdown is in its show: which cards are out, whose chances to print, and whether the winners are known yet.
@@ -389,6 +402,26 @@ function seatLayout(st) {
   const rel = (i) => (i - Math.max(0, mySeat) + POKER_SEATS) % POKER_SEATS;
   return { mySeat, at: (i) => spots[rel(i)] };
 }
+// Sounds for what just happened at the table: the deal, each new board card, and each player's move.
+function playSounds(st) {
+  const now = { hand: st.handNo, phase: st.phase, board: st.board.length + (st.board2?.length || 0), seats: st.seats.map((x) => x && { id: x.id, bet: x.bet, total: x.total, folded: x.folded, allIn: x.allIn, acted: x.acted, inHand: x.inHand }) };
+  const was = S.snd; S.snd = now;
+  if (!was) return;
+  try {
+    if (now.hand !== was.hand && now.phase !== 'waiting' && now.phase !== 'done') { cardSound(); setTimeout(cardSound, 140); setTimeout(cardSound, 280); return; } // a new hand is dealt
+    if (now.hand !== was.hand) return;
+    if (now.board > was.board) { const n = Math.min(3, now.board - was.board); for (let k = 0; k < n; k++) setTimeout(cardSound, k * 170); } // flop, turn, river
+    now.seats.forEach((x, i) => {
+      const o = was.seats[i];
+      if (!x || !o || x.id !== o.id || !x.inHand) return;
+      if (x.folded && !o.folded) standSound();                                   // fold
+      else if (x.allIn && !o.allIn) chipSound(7);                                  // all in
+      else if (x.total > o.total) chipSound(x.total - o.total > st.settings.bigBlind * 4 ? 4 : 2); // call, bet or raise
+      else if (x.acted && !o.acted && now.board === was.board) hitSound();        // check: a knock on the table
+    });
+    if (now.phase === 'done' && was.phase !== 'done' && st.result?.wins?.some((w) => st.seats[w.seat]?.id === S.myId)) winSound();
+  } catch { /* sound is never worth an error */ }
+}
 function render() {
   const body = $('#pk-body');
   if (!body) return;
@@ -398,6 +431,7 @@ function render() {
     $('#tray').innerHTML = ''; $('#hud-top').innerHTML = '';
     return;
   }
+  playSounds(st);
   const { mySeat, at } = seatLayout(st);
   const stage = runStage(st);
   const showing = stage && !stage.final; // an all in board is still coming out
@@ -421,7 +455,6 @@ function render() {
   seen.n = boards[0].length; seen.rows = boards.length;
   h += `<div class="pk-mid${many ? ' many n' + allBoards.length : ''}">
     <div class="pk-board pk-stand"><div class="pk-pot">${st.bomb && live ? '<span class="pk-bomb">💣 Bomb pot</span>' : ''}${(st.plo || dbl) && st.phase !== 'waiting' ? `<span class="pk-variant">${st.plo ? 'PLO' : "Hold'em"}${dbl ? ' · 2 boards' : ''}</span>` : ''}<b class="pk-potnum"><i>POT</i>${amt(potNow)}</b>${potLine ? `<small>${potLine}</small>` : ''}</div>${rows}</div>
-    ${dbl ? '' : rankBadge(mySeat >= 0 && !showing ? st.seats[mySeat] : null)}
     <div class="pk-spot pot" id="spot-99"></div>
   </div>`;
   const people = [], chips = [], stools = [];
@@ -442,7 +475,7 @@ function render() {
     stools.push({ seat: i, x: P.x, y: P.y });
     if (!seat) {
       if (mySeat < 0) h += `<button class="pk-sit pk-stand" style="left:${A.x}%;top:${A.y}%" data-act="sit" data-seat="${i}"><span class="sit-arrow">Sit ▼</span>Seat ${i + 1}</button>`;
-      else if (!live) h += `<button class="pk-sit pk-move pk-stand" style="left:${A.x}%;top:${A.y}%" data-act="move" data-seat="${i}" title="Move to this seat with your chips"><span class="sit-arrow">Move ▼</span>Seat ${i + 1}</button>`;
+      else if (!live) h += `<button class="pk-sit pk-move pk-stand" style="left:${A.x}%;top:${A.y}%" data-act="move" data-seat="${i}" title="Move to this seat with your chips">Move here</button>`;
       else h += `<div class="pk-empty" style="left:${A.x}%;top:${A.y}%">Empty</div>`;
       continue;
     }
@@ -453,14 +486,14 @@ function render() {
       if (o && o.pct[i] !== undefined) { bubble = `${o.pct[i]}%${o.outs[i] !== undefined ? ` · ${o.outs[i]} out${o.outs[i] === 1 ? '' : 's'}` : ''}`; bcls = 'odds'; }
       else { bubble = 'All in'; bcls = 'allin'; }
     }
-    else if (done && winBy[i]) { bubble = `+${amt(winBy[i])}${!many && seat.hand ? ' · ' + esc(seat.hand) : ''}`; bcls = 'win'; }
+    else if (done && winBy[i]) { bubble = `+${amt(winBy[i])}${!many && seat.hand ? ' · ' + esc(shortHand(seat.hand)) : ''}`; bcls = 'win'; }
     else if (seat.inHand && seat.folded) { bubble = 'Fold'; bcls = 'fold'; }
     else if (seat.allIn && seat.inHand && !done) { bubble = 'All in'; bcls = 'allin'; }
     else if (turn) { bubble = 'Thinking…'; bcls = 'turn'; }
     else if (!seat.connected) { bubble = 'Offline'; bcls = 'fold'; }
     else if (seat.out) { bubble = 'Away'; bcls = 'fold'; }
     else if (live && inH && seat.bet > 0 && seat.bet >= st.currentBet) { bubble = st.phase === 'preflop' && seat.bet <= st.settings.bigBlind ? 'In' : 'Called'; bcls = 'in'; }
-    else if (seat.hand && done && seat.shown) { bubble = esc(seat.hand); bcls = 'in'; }
+    else if (seat.hand && done && seat.shown) { bubble = esc(shortHand(seat.hand)); bcls = 'in'; }
     else if (live && inH) { bubble = 'In'; bcls = 'in'; }
     if (votes[seat.id]?.length && !seat.out) bubble += ` · away vote ${votes[seat.id].length}`;
     // Your own cards are in the panel at the bottom, so in the 3D room they are not stood on the felt as well.
@@ -535,19 +568,20 @@ function drawHud(st, mySeat, showing) {
   let status = '';
   if (st.wait?.length) status = `The table moved to a new host. Waiting a moment for ${esc(st.wait.join(', '))}…`;
   else if (mySeat < 0) status = 'Tap an empty seat to join the game.';
-  else if (o) status = `Your turn${seat.hand && !seat.hand.includes(' | ') ? ' · ' + esc(seat.hand) : ''}`;
-  else if (live && st.turn !== null) status = `Waiting for ${esc(st.seats[st.turn]?.name || '')}`;
+  else if (o) status = 'Your turn';
+  else if (live && st.turn !== null) status = ''; // whose turn it is shows as the light on their name
   else if (st.runAsk) { const a = st.runAsk, nm = esc(st.seats[a.by]?.name || ''); status = !a.n ? (a.by === mySeat ? 'All in. How many times do you want to run it?' : `All in. ${nm} picks how many times to run it…`) : (a.need.includes(mySeat) && !a.yes.includes(mySeat) ? `${nm} asks to run it ${a.n} times. Do you agree?` : `Run it ${a.n} times? Waiting for ${esc(a.need.filter((q) => !a.yes.includes(q)).map((q) => st.seats[q]?.name || '').join(', '))}…`); }
   else if (showing) status = 'All in. The cards are coming out…';
-  else if (st.phase === 'done') status = st.result?.wins?.length ? st.result.wins.map((w) => `${esc(st.seats[w.seat]?.name || 'A player')} wins ${amt(w.amount)}${w.hand ? ' with ' + esc(w.hand) : ''}`).filter((x, i, a) => a.indexOf(x) === i).slice(0, 3).join(' · ') : 'Hand over';
+  else if (st.phase === 'done') status = st.result?.wins?.length ? st.result.wins.map((w) => `${esc(st.seats[w.seat]?.name || 'A player')} wins ${amt(w.amount)}${w.hand ? ' with ' + esc(shortHand(w.hand)) : ''}`).filter((x, i, a) => a.indexOf(x) === i).slice(0, 3).join(' · ') : 'Hand over';
   else status = st.canStart ? (isHost ? 'Press Start to deal the first hand.' : 'Waiting for the host to start.') : 'Two players with chips are needed to play.';
   const bounty = st.result?.bounty?.length ? ` · 7-2 bounty: ${st.result.bounty.map((b) => `${esc(st.seats[b.seat]?.name || '')} +${money(b.amount)}`).join(', ')}` : '';
-  top.innerHTML = `<div class="status">${status}${bounty}</div>`;
+  const badge = live && !showing && seat ? rankBadge(seat) : ''; // your own hand, named once, beside the status line
+  top.innerHTML = status || bounty || badge ? `<div class="pk-statrow">${badge}${status || bounty ? `<div class="status">${status}${bounty}</div>` : ''}</div>` : '';
   // The host's Start and Stop button at the top right: Start deals, Stop holds the game after the hand in play.
   const hr = $('#host-run');
   if (hr) { const running = S.started && !S.paused; hr.hidden = !isHost; hr.textContent = running ? '⏸ Stop' : '▶ Start'; hr.title = running ? 'Stop dealing after this hand' : 'Deal the next hand and keep dealing'; hr.classList.toggle('primary', !running); hr.disabled = !running && !st.canStart; }
   let h = '';
-  if (seat && seat.cards.length && seat.cards[0]) h += `<div class="pk-myhand${seat.cards.length > 2 ? ' four' : ''}">${seat.cards.map((c) => cardHTML(c, 'big')).join('')}${seat.hand && !showing ? `<span class="${seat.hand.includes(' | ') ? 'two' : ''}">${seat.hand.includes(' | ') ? seat.hand.split(' | ').map((x, k) => `<em>Board ${k + 1}</em> ${esc(x)}`).join('<br>') : esc(seat.hand)}</span>` : ''}</div>`;
+  if (seat && seat.cards.length && seat.cards[0]) h += `<div class="pk-myhand${seat.cards.length > 2 ? ' four' : ''}">${seat.cards.map((c) => cardHTML(c, 'big')).join('')}</div>`;
   if (o) {
     const key = st.handNo + '|' + st.phase + '|' + st.currentBet + '|' + o.minTo;
     if (o.canRaise && (S.raiseFor !== key || S.raiseTo === null)) { S.raiseFor = key; S.raiseTo = o.minTo; }
@@ -556,10 +590,10 @@ function drawHud(st, mySeat, showing) {
     h += `<div class="pk-acts">
       <button class="pk-act fold" data-act="fold">Fold</button>
       ${o.canCheck ? '<button class="pk-act check" data-act="check">Check</button>' : `<button class="pk-act call" data-act="call">Call ${amt(o.toCall)}${o.toCall >= seat.stack ? ' (all in)' : ''}</button>`}
-      ${o.canRaise ? `<button class="pk-act raise" data-act="raise" id="raise-btn" title="Tap to raise. Hold and drag up to pick the amount."><i class="pk-dragtip">▲ drag</i><span id="raise-txt">${to >= o.maxTo && o.allIn !== false ? 'All in ' : o.isBet ? 'Bet ' : 'Raise to '}${amt(to)}</span></button>` : ''}
+      ${o.canRaise ? `<button class="pk-act raise" data-act="raise" id="raise-btn" title="Tap to raise. Hold and drag up to pick the amount."><i class="pk-dragtip">▲ drag</i><span id="raise-txt">${S.raiseOpen !== key ? (o.isBet ? 'Bet' : 'Raise') : (to >= o.maxTo && o.allIn !== false ? 'All in ' : o.isBet ? 'Bet ' : 'Raise to ') + amt(to)}</span></button>` : ''}
     </div>`;
-    if (o.canRaise) h += `<div class="pk-raise">
-      <div class="pk-presets"><button data-act="preset" data-v="${o.minTo}">Min</button><button data-act="preset" data-v="${frac(1 / 3)}">⅓ pot</button><button data-act="preset" data-v="${frac(0.5)}">½ pot</button><button data-act="preset" data-v="${frac(2 / 3)}">⅔ pot</button><button data-act="preset" data-v="${frac(1)}">Pot</button><button data-act="preset" data-v="${o.maxTo}">${o.allIn === false ? 'Max' : 'All in'}</button></div>
+    if (o.canRaise && S.raiseOpen === key) h += `<div class="pk-raise">
+      <div class="pk-presets"><button data-act="raise-back" class="back">‹ Back</button><button data-act="preset" data-v="${o.minTo}">Min</button><button data-act="preset" data-v="${frac(1 / 3)}">⅓ pot</button><button data-act="preset" data-v="${frac(0.5)}">½ pot</button><button data-act="preset" data-v="${frac(2 / 3)}">⅔ pot</button><button data-act="preset" data-v="${frac(1)}">Pot</button><button data-act="preset" data-v="${o.maxTo}">${o.allIn === false ? 'Max' : 'All in'}</button></div>
       <div class="pk-slide"><input type="range" id="raise-range" min="${o.minTo}" max="${o.maxTo}" step="${Math.max(1, Math.min(st.settings.bigBlind, o.maxTo - o.minTo) || 1)}" value="${to}" /><input type="number" id="raise-num" min="${o.minTo}" max="${o.maxTo}" value="${to}" inputmode="numeric" /></div>
     </div>`;
   } else if (seat && st.runAsk && ((st.runAsk.by === mySeat && !st.runAsk.n) || (st.runAsk.n && st.runAsk.need.includes(mySeat) && !st.runAsk.yes.includes(mySeat)))) {
@@ -578,6 +612,11 @@ function drawHud(st, mySeat, showing) {
     if (!live && isHost && (!S.started || !st.settings.autoStart || S.paused) && st.canStart) b.push(`<button class="btn primary" data-act="start">${st.handNo ? 'Deal next hand' : 'Start'}</button>`);
     if (b.length) h += `<div class="pk-acts small">${b.join('')}</div>`;
   } else if (!live && isHost && st.canStart && (!S.started || S.paused)) h += '<div class="pk-acts small"><button class="btn primary" data-act="start">Start</button></div>';
+  // Out of chips after a hand: buy in again or sit out. With no answer in 20 seconds the table marks you as sitting out.
+  if (seat && seat.stack === 0 && !(seat.inHand && live)) {
+    if (!seat.out) { S.brokeAt ||= Date.now(); h += `<div class="pk-broke"><span>You are out of chips. <b id="broke-s">${Math.max(0, 20 - Math.floor((Date.now() - S.brokeAt) / 1000))}</b> s to choose</span><button class="btn primary" data-act="rebuy">Buy in ${money(st.settings.startStack)}</button><button class="btn" data-act="away">Sit out</button></div>`; }
+    else { S.brokeAt = 0; h += `<div class="pk-broke"><span>You are sitting out with no chips.</span><button class="btn primary" data-act="rebuy">Buy in ${money(st.settings.startStack)}</button></div>`; }
+  } else S.brokeAt = 0;
   if (seat) {
     h += `<div class="pk-mine">
       <button class="btn small${seat.out ? ' gold' : ''}" data-act="away">${seat.out ? "✅ I'm back" : '💤<span> Away</span>'}</button>
@@ -728,13 +767,17 @@ document.addEventListener('click', (e) => {
     case 'fold': send({ t: 'act', a: 'fold' }); break;
     case 'check': send({ t: 'act', a: 'check' }); break;
     case 'call': send({ t: 'act', a: 'call' }); break;
-    case 'raise': { if (Date.now() - (S.dragEnd || 0) < 350) break; const o = st.options; if (!o?.canRaise) break; const to = Math.max(o.minTo, Math.min(o.maxTo, Math.round(Number($('#raise-num')?.value ?? S.raiseTo)))); send({ t: 'act', a: o.isBet ? 'bet' : 'raise', amount: to }); break; }
+    case 'raise-back': S.raiseOpen = null; render(); break;
+    case 'raise': { if (Date.now() - (S.dragEnd || 0) < 350) break; const o = st.options; if (!o?.canRaise) break;
+      // The first tap opens the small raise panel (sizes and a slider); the second tap sends the amount shown.
+      if (S.raiseOpen !== S.raiseFor) { S.raiseOpen = S.raiseFor; render(); break; } const to = Math.max(o.minTo, Math.min(o.maxTo, Math.round(Number($('#raise-num')?.value ?? S.raiseTo)))); send({ t: 'act', a: o.isBet ? 'bet' : 'raise', amount: to }); break; }
     case 'preset': setRaise(el.dataset.v); break;
     case 'show': send({ t: 'show', which: el.dataset.w === undefined ? 'both' : Number(el.dataset.w) }); break;
     case 'rabbit': send({ t: 'rabbit' }); break;
     case 'away': { const s = st.seats.find((x) => x && x.id === S.myId); send({ t: 'away', on: !s.out }); break; }
     case 'straddle': { const s = st.seats.find((x) => x && x.id === S.myId); send({ t: 'straddle', on: !s.straddle }); break; }
     case 'add': modal(`<h3>My chips</h3><div class="pk-set"><label>Amount<input type="number" id="addamt" min="1" value="${st.settings.startStack}" inputmode="numeric" /></label><div class="pk-acts small"><button class="btn primary" data-act="add-go">➕ Add chips</button><button class="btn" data-act="take-go">➖ Take chips off</button></div><p class="hint">Everyone sees each change in the hand log, and the ledger counts it. Chips added during a hand arrive when the hand ends. Chips can only be taken off while you are not in a hand.</p></div>`); break;
+    case 'rebuy': send({ t: 'add', amount: st.settings.startStack }); break;
     case 'add-go': send({ t: 'add', amount: Number($('#addamt').value) }); $('#modal').close(); break;
     case 'take-go': send({ t: 'take', amount: Number($('#addamt').value) }); $('#modal').close(); break;
     case 'runs': modal(`<h3>Run it how many times?</h3><div class="pk-emoji runs">${[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => `<button data-act="runs-go" data-n="${n}">${n}×</button>`).join('')}</div><p class="hint">When everyone in a hand is all in before the last card, the rest of the board is dealt this many times and the pot is shared between the runs. The lowest pick among the players in the hand counts.</p>`); break;
@@ -812,7 +855,7 @@ document.addEventListener('pointermove', (e) => {
   g.style.left = Math.max(60, Math.min(innerWidth - 60, d.x)) + 'px'; g.style.top = d.y - span - 64 + 'px'; g.style.height = span + 'px';
   g.innerHTML = `<div class="pk-gnum" style="bottom:${f * 100}%"><b>${v >= o.maxTo && o.allIn !== false ? 'All in ' : ''}${amt(v)}</b><small>${share}% of pot</small></div><div class="pk-gfill" style="height:${f * 100}%"></div>`;
 }, { passive: false });
-const dragStop = () => { if (S.drag?.on) S.dragEnd = Date.now(); S.drag = null; $('#pk-gauge')?.remove(); };
+const dragStop = () => { const was = S.drag?.on; if (was) S.dragEnd = Date.now(); S.drag = null; $('#pk-gauge')?.remove(); if (was && S.raiseOpen !== S.raiseFor) { S.raiseOpen = S.raiseFor; render(); } };
 document.addEventListener('pointerup', dragStop);
 document.addEventListener('pointercancel', dragStop);
 document.addEventListener('input', (e) => {
@@ -831,6 +874,7 @@ document.addEventListener('keydown', (e) => {
 }, true);
 wireGameSwitch('poker', () => S.code || params.get('room'), () => S.role === 'host');
 // Once the clock for a decision is used up, the plate counts the player's time bank down.
+setInterval(() => { const b = $('#broke-s'); if (b && S.brokeAt) b.textContent = Math.max(0, 20 - Math.floor((Date.now() - S.brokeAt) / 1000)); }, 500);
 setInterval(() => {
   const el = $('.pk-bank'), st = S.st;
   if (!el || !st || st.turnLeft === null) return;

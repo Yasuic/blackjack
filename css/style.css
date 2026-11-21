@@ -17,7 +17,7 @@
   --spade: #1b1b1f;
   --heart: #d63a3a;
   --diamond: #d63a3a;
-  --club: #1b1b1f;
+  --club: #18803f; /* clubs are green, so they never look like spades */
   --radius: 12px;
 }
 body.four-colour { --diamond: #2a6fdb; --club: #1f9a4f; }

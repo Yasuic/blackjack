@@ -389,3 +389,35 @@ export function throwSound(item, stage) {
       break;
   }
 }
+
+// ---------- Roulette: the ball on the wheel ----------
+// A steady rolling hiss while the ball runs round the rim, clicks over the frets, and a last rattle into the pocket.
+// roll(speed): speed is the ball's turning speed in radians a second; the sound gets lower and softer as it slows.
+export function spinSound() {
+  const ac = muted ? null : audio();
+  if (!ac) return { roll() {}, click() {}, drop() {}, stop() {} };
+  const src = ac.createBufferSource();
+  src.buffer = noise(ac); src.loop = true;
+  const bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1800; bp.Q.value = 1.4;
+  const g = ac.createGain(); g.gain.value = 0.0001;
+  // The ball passes the listener once a turn, so the hiss swells and fades with each lap.
+  const lfo = ac.createOscillator(), lg = ac.createGain(); lfo.frequency.value = 1.5; lg.gain.value = 0;
+  lfo.connect(lg).connect(g.gain);
+  src.connect(bp).connect(g).connect(ac.destination);
+  src.start(); lfo.start();
+  let dead = false, lastClick = 0;
+  const end = () => { if (dead) return; dead = true; try { g.gain.cancelScheduledValues(ac.currentTime); g.gain.setTargetAtTime(0.0001, ac.currentTime, 0.05); src.stop(ac.currentTime + 0.3); lfo.stop(ac.currentTime + 0.3); } catch { /* already stopped */ } };
+  return {
+    roll(speed) {
+      if (dead) return;
+      const v = Math.min(1, Math.abs(speed) / 10), t = ac.currentTime;
+      g.gain.setTargetAtTime(muted ? 0.0001 : 0.02 + 0.13 * v, t, 0.08);
+      lg.gain.setTargetAtTime(muted ? 0 : 0.012 + 0.05 * v, t, 0.08);
+      bp.frequency.setTargetAtTime(700 + 2600 * v, t, 0.08);
+      lfo.frequency.setTargetAtTime(Math.max(0.3, Math.abs(speed) / (Math.PI * 2)), t, 0.08);
+    },
+    click(level = 1) { if (dead || muted || ac.currentTime - lastClick < 0.035) return; lastClick = ac.currentTime; clack(ac, ac.currentTime, 0.5 * level); tone(ac, 'triangle', 2100 + Math.random() * 500, 1500, ac.currentTime, 0.035, 0.05 * level); },
+    drop() { if (dead) return; const t = ac.currentTime; g.gain.setTargetAtTime(0.0001, t, 0.04); lg.gain.setTargetAtTime(0, t, 0.04); if (muted) return; [0, 0.07, 0.125, 0.165].forEach((d, i) => { clack(ac, t + d, 0.7 / (i + 1)); tone(ac, 'sine', 520 - i * 40, 300, t + d, 0.06, 0.12 / (i + 1)); }); },
+    stop: end,
+  };
+}

@@ -1,6 +1,6 @@
 // No-limit Texas Hold'em for up to 9 players. Pure rules: the host's browser owns one PokerTable and
 // every action goes through it. Nothing here touches the page or the network.
-import { SUITS, RANKS, sha256, fairSeed, fairShoe, MAX_CHIPS } from './game.js?v=20261121o';
+import { SUITS, RANKS, sha256, fairSeed, fairShoe, MAX_CHIPS } from './game.js?v=20261121p';
 
 export const POKER_SEATS = 9;
 export const POKER_DEFAULTS = {
@@ -297,6 +297,15 @@ export class PokerTable {
   canStart() { return !this.inHand() && this.eligible().length >= 2; }
   nextFrom(i, ok) { for (let k = 1; k <= POKER_SEATS; k++) { const j = (i + k) % POKER_SEATS; if (ok(j)) return j; } return -1; }
   draw() { const c = this.deck.shift(); this.dealt.push(c); return c; }
+
+  // Collects the cards of a finished hand and goes back to waiting. Used when too few players can play the next hand.
+  clearHand() {
+    if (this.phase !== 'done') return false;
+    for (const x of this.seats) if (x) Object.assign(x, { bet: 0, total: 0, cards: [], folded: false, allIn: false, acted: false, inHand: false, show: false, mask: null, cc: null, salt: null, won: 0, hand: null, allInAt: 0 });
+    this.board = []; this.board2 = []; this.rabbit = null; this.rabbit2 = null; this.pot = 0; this.result = null; this.allInRun = false; this.runAsk = null; this.runout = null; this.runs = 1; this.runBase = null; this.boards = null; this.turn = null; this.bomb = false;
+    this.phase = 'waiting';
+    return true;
+  }
 
   startHand() {
     if (!this.canStart()) throw new Error('Two players with chips are needed.');

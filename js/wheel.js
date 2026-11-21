@@ -2,7 +2,8 @@
 // rim, slows, drops, bounces off the frets and settles in the pocket of the number the host's spin gave.
 // The path is worked out backwards from that pocket, so the ball always ends on the real number, and it is a pure
 // function of the time since the spin started, so every screen shows the same motion.
-import { WHEEL, colorOf } from './roulette.js?v=20261121o';
+import { WHEEL, colorOf } from './roulette.js?v=20261121p';
+const fx = typeof window !== 'undefined' ? import('./fx.js?v=20261121p') : null; // sounds need a browser; the tests load this file without one
 
 const TAU = Math.PI * 2, STEP = TAU / 37;
 const COLORS = { red: '#c62f2f', black: '#17191f', green: '#1f9a4d' };
@@ -105,11 +106,24 @@ export function showSpin({ n, seed, ms, elapsed = 0, hold = 2600 }) {
   const g = cv.getContext('2d'); g.scale(dpr, dpr);
   const t0 = performance.now() - elapsed, T = ms / 1000;
   let raf = 0, dead = false, shown = false;
-  const close = () => { if (dead) return; dead = true; cancelAnimationFrame(raf); pop.classList.add('out'); setTimeout(() => pop.remove(), 350); };
+  // Sound that follows the ball: a rolling hiss on the rim, a click for each fret it crosses, a rattle into the pocket.
+  let snd = null;
+  if (elapsed < ms) fx?.then((m) => { if (!dead) snd = m.spinSound(); });
+  let lastBall = null, lastT = 0, lastFret = null, dropped = false;
+  const close = () => { if (dead) return; dead = true; snd?.stop(); cancelAnimationFrame(raf); pop.classList.add('out'); setTimeout(() => pop.remove(), 350); };
   const frame = (now) => {
     if (dead) return;
     const t = (now - t0) / 1000, st = wheelState(n, seed, t, T), done = t >= st.T2;
     drawWheel(g, size, st, n, done);
+    if (snd && !dropped) {
+      if (st.phase === 3) { dropped = true; snd.drop(); }
+      else {
+        if (lastBall !== null && t > lastT) snd.roll((st.ball - lastBall) / (t - lastT) * (st.phase === 2 ? 0.6 : 1));
+        const fret = Math.floor((st.ball - st.wheel) / STEP);
+        if (st.phase === 2 && lastFret !== null && fret !== lastFret) snd.click(0.6 + st.lift);
+        lastBall = st.ball; lastT = t; lastFret = fret;
+      }
+    }
     if (t >= T && !shown) { shown = true; const col = colorOf(n); res.hidden = false; res.className = 'ro-pop-res ' + col; res.innerHTML = `<b>${n}</b><span>${col === 'green' ? 'Zero' : col[0].toUpperCase() + col.slice(1)}${n ? (n % 2 ? ' · odd' : ' · even') : ''}</span>`; }
     if (t * 1000 >= ms + hold) { close(); return; }
     raf = requestAnimationFrame(frame);

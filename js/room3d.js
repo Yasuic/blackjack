@@ -162,7 +162,7 @@ function buildOffice(signText, midShift = 0, midScale = 1, skipRoom = null, live
     chrome: mk({ color: '#b9bec4', roughness: 0.25, metalness: 0.9 }),
     screen: mk({ color: '#0d0f12', roughness: 0.25, metalness: 0.2 }),
     // What the office screens show: the ARC Group logo, from the photo of it, lit like a screen that is on.
-    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261121o'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
+    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261121p'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
     dark: mk({ color: '#30353c', roughness: 0.6 }),
   };
   const group = new THREE.Group();
@@ -768,7 +768,7 @@ function buildOffice(signText, midShift = 0, midScale = 1, skipRoom = null, live
     const t = D.furniture.find((f) => f.id === 't3');
     if (t) { const x = -(t.cx - 0.12), z = -(t.cy + 0.08), y = Hh.desk; cyl(0.032, 0.034, 0.13, 14, col('#2a1a12', 0.35), x, y + 0.065, z); cyl(0.014, 0.02, 0.025, 10, col('#111316', 0.5), x, y + 0.1425, z, false); cyl(0.005, 0.005, 0.04, 6, col('#111316', 0.5), x, y + 0.175, z, false); box(0.045, 0.012, 0.016, col('#111316', 0.5), x + 0.015, y + 0.198, z, false); box(0.04, 0.05, 0.002, col('#e9e6df', 0.8), x, y + 0.06, z + 0.034, false); }
   }
-  ['smallBoard', 'securities'].forEach((id) => { // these two rooms are always freezing: it snows inside
+  [].forEach((id) => { // snow removed at the person's request (2026-11-21)
     const r = D.rooms.find((q) => q.id === id); if (!r) return;
     const n = 260, pos = new Float32Array(n * 3), r7 = rng(id.length);
     for (let i = 0; i < n; i++) { pos[i * 3] = -(r.x + 0.1 + r7() * (r.width - 0.2)); pos[i * 3 + 1] = r7() * 2.6; pos[i * 3 + 2] = -(r.y + 0.1 + r7() * (r.depth - 0.2)); }
@@ -903,7 +903,7 @@ function buildStorefront() {
     lamp: lam('#c8161d', 0.6), bulb: lit('#ffe9a8'), red: lit('#c8161d'), gold: lit('#f4c542'), wood: lam('#7a5234', 0.35),
     glass: new THREE.MeshBasicMaterial({ color: '#dff3f7', transparent: true, opacity: 0.13, depthWrite: false }),
     awning: new THREE.MeshBasicMaterial({ map: canvasTexture(512, 64, (g, w, h) => { for (let i = 0; i < 16; i++) { g.fillStyle = i % 2 ? '#fff6e6' : '#f08a1c'; g.fillRect((i * w) / 16, 0, w / 16 + 1, h); } }), side: THREE.DoubleSide }),
-    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261121o') }),
+    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261121p') }),
     menu: new THREE.MeshBasicMaterial({ map: canvasTexture(256, 384, (g, w, h) => {
       g.fillStyle = '#c8161d'; g.fillRect(0, 0, w, h); g.fillStyle = '#f4c542'; g.fillRect(14, 14, w - 28, 44);
       const r = rng(11); g.fillStyle = '#fff3d6';
@@ -1650,7 +1650,7 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
   document.querySelectorAll('.room-lock, .room-reset').forEach((b) => b.remove());
   const lockBtn = document.createElement('button'), resetBtn = document.createElement('button');
   lockBtn.className = 'room-lock'; resetBtn.className = 'room-reset'; resetBtn.textContent = '🪑 Reset view'; resetBtn.title = 'Back to your chair';
-  const drawLock = () => { lockBtn.textContent = locked ? '🔒 Seat locked' : '🔓 Free view'; lockBtn.title = locked ? 'Taps and drags do not move you. Tap to unlock and look or walk around.' : 'Tap to lock yourself in your chair again.'; lockBtn.classList.toggle('on', locked); container.classList.toggle('seat-locked', locked); };
+  const drawLock = () => { lockBtn.textContent = locked ? '🔒 Seat locked' : '🔓 Free view'; lockBtn.title = locked ? 'You stay in your chair. Drag to look around. Tap to unlock and walk around.' : 'Tap to lock yourself in your chair again.'; lockBtn.classList.toggle('on', locked); container.classList.toggle('seat-locked', locked); };
   const setLock = (v) => { locked = !!v; try { localStorage.setItem('bj-seat-lock', locked ? '1' : '0'); } catch { /* fine */ } if (locked) { moveKeys.clear(); home(true); } drawLock(); };
   lockBtn.addEventListener('click', (e) => { e.stopPropagation(); setLock(!locked); });
   resetBtn.addEventListener('click', (e) => { e.stopPropagation(); home(true); });
@@ -1667,10 +1667,11 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
   for (const ev of ['pointerdown', 'wheel']) container.addEventListener(ev, () => { tour = null; tourW = 1; }, { capture: true, passive: true });
   container.addEventListener('pointerdown', (e) => {
     if ((e.button > 0 && e.button !== 2) || e.target.closest(interactive)) return;
-    if (locked) return; // seat lock: taps and drags never move you
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     // Mouse: the left button drags you across the room, the right button turns the view. One finger turns the view.
-    if (pointers.size === 1) drag = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: false, pan: e.pointerType === 'mouse' ? e.button !== 2 : (e.button === 2) !== walking, mouse: e.pointerType === 'mouse' && e.button === 0, onUi: false }; // walking: a plain drag moves you, the right button turns
+    if (pointers.size === 1) drag = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: false, pan: locked ? false : e.pointerType === 'mouse' ? e.button !== 2 : (e.button === 2) !== walking, mouse: !locked && e.pointerType === 'mouse' && e.button === 0, // seat lock: a drag only turns your head, it never moves you
+      onUi: false }; // walking: a plain drag moves you, the right button turns
+    else if (pointers.size === 2 && locked) { drag = null; container.classList.remove('dragging'); }
     else if (pointers.size === 2) { const [a, b] = [...pointers.values()]; pinch = Math.hypot(a.x - b.x, a.y - b.y); mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }; drag = null; container.classList.remove('dragging'); }
   });
   // The room follows the hand: drag right and the table moves right, drag down and it comes nearer.
