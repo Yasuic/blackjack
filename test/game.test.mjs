@@ -118,7 +118,7 @@ import { bestMove } from '../js/strategy.js';
 
 {
   const t = Object.assign(new G.Table(), { frozen: true }); t.join('h', 'H'); t.join('a', 'A'); t.join('b', 'B');
-  t.proposeSettings('h', { decks: 1 }, 'x'); t.castVote('a', true); assert.equal(t.settings.decks, 8);
+  t.proposeSettings('h', { decks: 1 }, 'x'); t.castVote('a', true); assert.equal(t.settings.decks, 1000);
   t.castVote('b', true); assert.equal(t.settings.decks, 1);
   t.proposeSettings('h', { decks: 8 }, 'x'); t.castVote('a', false); assert.equal(t.settings.decks, 1);
   // count matches cards drawn

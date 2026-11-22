@@ -1,7 +1,7 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261122s';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe } from './game.js?v=20261122s';
 import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122s';
 import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122s';
 import { tickSound, winSound } from './fx.js?v=20261122s';
@@ -452,6 +452,7 @@ function maybeTakeOver(force = false) {
       let hidden = null;
       try { hidden = text ? JSON.parse(text) : null; } catch { hidden = null; }
       let carried;
+      if (hidden && typeof hidden.shoe === 'string') hidden.shoe = unpackShoe(hidden.shoe);
       if (hidden && Array.isArray(hidden.shoe)) {
         const { shoe, shoeSize, fair, runCount, dealer, turn, pendingSettings, pendingCard } = hidden;
         Object.assign(table, { shoe, shoeSize, fair, runCount, dealer, turn, pendingSettings });
@@ -2417,7 +2418,7 @@ function seatHTML(st, s, i, focus, spot) {
   if (!s) {
     const canSit = me && !isBanker;
     const more = canSit && me.seat !== null;
-    return `<div class="seat empty ${cls}" id="seat-${i}" ${place}>${mini ? '' : `<div class="hands"></div>${spotAreaHTML(st, null, i, false, 0)}`}${canSit ? `<button class="btn small ${more ? 'add-seat' : ''}" data-act="sit" data-seat="${i}" ${more ? 'data-add="1" title="Play this seat as well. Each seat has its own bet and hand."' : ''}>${st.phase === 'betting' || st.phase === 'settled' ? '<span class="sit-float"><span>Sit<i>▼</i></span></span>' : ''}${more ? '+ Seat' : 'Sit here'}</button>` : `<span class="seat-no">Seat ${i + 1}</span>`}</div>`;
+    return `<div class="seat empty ${cls}" id="seat-${i}" ${place}>${mini ? '' : `<div class="hands"></div>${spotAreaHTML(st, null, i, false, 0)}`}${canSit ? `<button class="btn small ${more ? 'add-seat' : ''}" data-act="sit" data-seat="${i}" ${more ? 'data-add="1" title="Play this seat as well. Each seat has its own bet and hand."' : ''}>${st.phase === 'betting' || st.phase === 'settled' ? '<span class="sit-float"><span>Sit<i>▼</i></span></span>' : ''}<b class="sn">${i + 1}</b>${more ? '+ Seat' : 'Sit here'}</button>` : `<span class="seat-no">Seat ${i + 1}</span>`}</div>`;
   }
   const isMe = s.playerId === S.myId;
   // Whose turn it is shows once the deal is finished, not while the first cards are still going round.
@@ -2439,7 +2440,7 @@ function seatHTML(st, s, i, focus, spot) {
   return `<div class="seat ${cls} ${many ? 'many' : ''} ${hot} ${isMe ? 'me' : ''} ${turn ? 'turn' : ''} ${inHand ? 'inhand' : ''} ${s.out ? 'out' : ''} ${s.connected ? '' : 'away'}" id="seat-${i}" ${place} ${mini || many ? 'title="Tap to see this seat large"' : ''}>
     ${hands}
     ${bets}
-    <div class="who" ${isMe ? '' : `data-throw-at="${s.playerId}" title="Tap to throw something at ${esc(s.name)}"`}><span class="name">${s.streak >= 3 ? `<span class="fire">🔥</span>${s.streak} ` : ''}${s.playerId === st.hostId ? '♛ ' : ''}${esc(s.name)}${isMe ? ' (you)' : ''}${s.connected ? '' : ' (away)'}</span><span class="chips">${money(s.chips)}${net}</span>${ready}${isMe && st.banker?.id !== S.myId ? `<button class="seat-out-tag ${s.out ? 'on' : ''}" data-act="sit-out" data-seat="${i}" data-on="${s.out ? 0 : 1}" title="${s.out ? 'Play this seat again from the next round' : 'Skip rounds on this seat. You keep the seat, and a hand in play is still finished.'}">${s.out ? 'Sit in' : 'Sit out'}</button>` : ''}</div>
+    <div class="who" ${isMe ? '' : `data-throw-at="${s.playerId}" title="Tap to throw something at ${esc(s.name)}"`}><span class="name"><b class="sn" title="Seat ${i + 1}">${i + 1}</b>${s.streak >= 3 ? `<span class="fire">🔥</span>${s.streak} ` : ''}${s.playerId === st.hostId ? '♛ ' : ''}${esc(s.name)}${isMe ? ' (you)' : ''}${s.connected ? '' : ' (away)'}</span><span class="chips">${money(s.chips)}${net}</span>${ready}${isMe && st.banker?.id !== S.myId ? `<button class="seat-out-tag ${s.out ? 'on' : ''}" data-act="sit-out" data-seat="${i}" data-on="${s.out ? 0 : 1}" title="${s.out ? 'Play this seat again from the next round' : 'Skip rounds on this seat. You keep the seat, and a hand in play is still finished.'}">${s.out ? 'Sit in' : 'Sit out'}</button>` : ''}</div>
   </div>`;
 }
 
@@ -3037,7 +3038,7 @@ function renderSettings(st) {
     ${fold('set-cards', '🂠 Cards and reshuffle', `<div class="settings-grid">
       <label class="full">Cards in the shoe
         <select id="set-decks">
-          ${[[1, '1 deck'], [2, '2 decks'], [6, '6 decks'], [8, '8 decks'], [20, '20 decks'], ['csm', 'Randomized (full shuffle every round)']].map(([v, l]) => `<option value="${v}" ${String(s.decks) === String(v) ? 'selected' : ''}>${l}</option>`).join('')}
+          ${[[1, '1 deck'], [2, '2 decks'], [6, '6 decks'], [8, '8 decks'], [20, '20 decks'], [100, '100 decks'], [1000, '1000 decks'], ['csm', 'Randomized (full shuffle every round)']].map(([v, l]) => `<option value="${v}" ${String(s.decks) === String(v) ? 'selected' : ''}>${l}</option>`).join('')}
         </select></label>
       <label class="full">When to reshuffle
         <select id="set-mode">
@@ -3788,6 +3789,22 @@ function placeHurry() {
     b.style.left = Math.round(x) + 'px';
     b.style.top = Math.round(y) + 'px';
     x += w + 6;
+  }
+  // Buttons that would run into the panel at the bottom go up beside Voice and Chat instead, so nothing covers its text.
+  const panel = $('#tray')?.getBoundingClientRect();
+  const hit = (q) => panel && panel.width && q.left < panel.right && q.right > panel.left && q.top < panel.bottom && q.bottom > panel.top;
+  const spill = bs.filter((b) => !b.hidden && hit(b.getBoundingClientRect()));
+  if (!spill.length) return;
+  const rows = [...document.querySelectorAll('.chat-btn')].map((c) => c.getBoundingClientRect()).filter((q) => q.width).sort((p, q) => q.top - p.top);
+  for (const row of rows) {
+    let cx = row.right + 6;
+    while (spill.length) {
+      const b = spill[0], w = b.getBoundingClientRect().width;
+      if (cx + w > panel.left - 6) break;
+      b.style.left = Math.round(cx * k) + 'px'; b.style.top = Math.round(row.top * k) + 'px'; b.style.height = Math.round(row.height * k) + 'px';
+      cx += w + 6; spill.shift();
+    }
+    if (!spill.length) break;
   }
 }
 setInterval(placeHurry, 500);

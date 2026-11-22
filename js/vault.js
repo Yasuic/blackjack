@@ -100,7 +100,7 @@ export function makeOpener(box, own) {
     },
   };
 }
-export function cleanBox(b) { return b && typeof b.kid === 'string' && Number.isInteger(b.need) && typeof b.ct === 'string' && b.ct.length < 600000 ? { kid: b.kid.slice(0, 20), need: b.need, ct: b.ct } : null; }
+export function cleanBox(b) { return b && typeof b.kid === 'string' && Number.isInteger(b.need) && typeof b.ct === 'string' && b.ct.length < 4000000 ? { kid: b.kid.slice(0, 20), need: b.need, ct: b.ct } : null; }
 export function cleanPiece(p) { return p && typeof p.kid === 'string' && Number.isInteger(p.x) && typeof p.y === 'string' ? { kid: p.kid.slice(0, 20), x: p.x, y: p.y.slice(0, 64), need: p.need | 0 } : null; }
 
 // ---------- For the poker and baccarat pages (blackjack has the same steps in its own code) ----------

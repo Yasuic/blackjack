@@ -6,7 +6,7 @@ export const RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q
 
 export const DEFAULT_SETTINGS = {
   seats: 7,              // player seats at the table (any whole number from 1 up)
-  decks: 8,              // 1, 2, 6, 8, 20, or 'csm' (randomized: full reshuffle before every round)
+  decks: 1000,           // 1, 2, 6, 8, 20, 100, 1000, or 'csm' (randomized: full reshuffle before every round)
   shuffleMode: 'penetration', // 'penetration' or 'rounds'
   penetration: 65,       // reshuffle once this % of the shoe has been dealt
   shuffleEvery: 5,       // or reshuffle every N rounds
@@ -136,6 +136,21 @@ function randomInt(n) {
   return Math.floor(Math.random() * n);
 }
 
+export const DECK_CHOICES = [1, 2, 6, 8, 20, 100, 1000];
+// A shoe of 1000 decks is 52,000 cards. Saved and locked as one letter per card, it stays small (52 KB instead of about 1 MB).
+const CARD_LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+export function packShoe(shoe) {
+  if (!Array.isArray(shoe)) return shoe;
+  let out = '';
+  for (const c of shoe) { const k = RANKS.indexOf(c.r) * 4 + SUITS.indexOf(c.s); if (k < 0) return shoe; out += CARD_LETTERS[k]; }
+  return out;
+}
+export function unpackShoe(x) {
+  if (typeof x !== 'string') return x;
+  const out = [];
+  for (const ch of x) { const k = CARD_LETTERS.indexOf(ch); if (k >= 0) out.push({ r: RANKS[k >> 2], s: SUITS[k & 3] }); }
+  return out;
+}
 export function buildShoe(decks) {
   const shoe = orderedShoe(decks);
   for (let i = shoe.length - 1; i > 0; i--) {
@@ -425,7 +440,7 @@ export class Table {
     num('startChips', 1);
     num('peekCost', 0);
     for (const k of ['betTimer', 'turnTimer']) { const v = Number(s[k]); s[k] = Number.isFinite(v) && v > 0 ? clamp(Math.round(v), 5, 300) : 0; }
-    if (![1, 2, 6, 8, 20, 'csm'].includes(s.decks)) s.decks = [1, 2, 6, 8, 20].includes(Number(s.decks)) ? Number(s.decks) : 'csm';
+    if (![...DECK_CHOICES, 'csm'].includes(s.decks)) s.decks = DECK_CHOICES.includes(Number(s.decks)) ? Number(s.decks) : 'csm';
     if (![1.5, 1.2, 1].includes(s.blackjackPays)) s.blackjackPays = [1.5, 1.2, 1].includes(Number(s.blackjackPays)) ? Number(s.blackjackPays) : (Number.isFinite(old.blackjackPays) ? old.blackjackPays : 1.5);
     s.sideBets = Array.isArray(s.sideBets) ? [...new Set(s.sideBets)].filter((k) => SIDE_KEYS.includes(k)) : (Array.isArray(old.sideBets) ? old.sideBets : DEFAULT_SETTINGS.sideBets);
     if (s.shuffleMode !== 'rounds') s.shuffleMode = 'penetration';
@@ -1667,11 +1682,12 @@ export class Table {
   // Save and restore so the host can refresh the page without losing the table.
   toJSON() {
     const { settings, seats, players, phase, dealer, turn, round, roundsSinceShuffle, log, shoe, shoeSize, banker, bankerNet, pendingBanker, buyIns, runCount, hostId, pendingSettings, frozen, fair, hist, evts, created, frozenSnap, shuffleNext, bankerLeaving } = this;
-    return { settings, seats, players, phase, dealer, turn, round, roundsSinceShuffle, log, shoe, shoeSize, banker, bankerNet, pendingBanker, buyIns, runCount, hostId, pendingSettings, frozen, fair, hist, evts, created, frozenSnap, shuffleNext, bankerLeaving };
+    return { settings, seats, players, phase, dealer, turn, round, roundsSinceShuffle, log, shoe: packShoe(shoe), shoeSize, banker, bankerNet, pendingBanker, buyIns, runCount, hostId, pendingSettings, frozen, fair, hist, evts, created, frozenSnap, shuffleNext, bankerLeaving };
   }
   static fromJSON(obj) {
     const t = new Table(obj.settings);
     Object.assign(t, obj);
+    t.shoe = unpackShoe(obj.shoe) || [];
     if (!obj.fair) t.fair.current = null; // a table saved before fair shuffles: its shoe has no seed to show
     // Tables saved before the seat count was a setting keep the seats they had.
     if (!Array.isArray(t.seats) || !t.seats.length) t.seats = Array(seatCount(obj.settings?.seats)).fill(null);
