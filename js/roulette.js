@@ -1,7 +1,7 @@
 // European roulette (one zero, 37 pockets) for up to 9 players against the house. Pure rules: the host's
 // browser owns one RouTable and every bet goes through it. Nothing here touches the page or the network.
-import { sha256, MAX_CHIPS } from './game.js?v=20261122w';
-import { isFrozen, bankJoin, setBank, clearBank, bankGone, bankSettle, ledgerNet, ledgerSum, bankAdopt, bankCashOut, bankCarryIn } from './bank.js?v=20261122w';
+import { sha256, MAX_CHIPS } from './game.js?v=20261122x';
+import { isFrozen, bankJoin, setBank, clearBank, bankGone, bankSettle, ledgerNet, ledgerSum, bankAdopt, bankCashOut, bankCarryIn } from './bank.js?v=20261122x';
 
 export const ROU_SEATS = 9;
 export const ROU_DEFAULTS = {
@@ -82,7 +82,7 @@ export class RouTable {
     this.hostId = null;
     this.bets = {};      // id -> { key: amount }
     this.lastBets = {};
-    this.phase = 'betting'; // betting | done
+    this.phase = 'betting'; // betting | closing (bets closed, seeds coming in) | done
     this.round = 0;
     this.spin = null;    // { n, color } of the round just spun
     this.pays = {};      // id -> { staked, back, net, wins: [{ key, bet, net }] }
@@ -142,7 +142,7 @@ export class RouTable {
     if (!this.canSpin()) { this.ready = {}; return false; }
     const v = this.voters();
     if (!v.length || !Object.keys(this.ready).length || v.some((id) => !this.ready[id])) return false;
-    this.doSpin();
+    if (this.seedWait) this.closeBets(); else this.doSpin();
     return true;
   }
   addChips(id, amount) {
@@ -168,7 +168,8 @@ export class RouTable {
   clearBank(byId) { clearBank(this, byId); }
   ledgerSum() { return ledgerSum(this); }
   setClientSeed(id, seed, commit) {
-    if (!this.players[id] || commit !== this.fair.next.commit) return;
+    // Seeds count only once bets are closed, so nobody can work out the number while bets can still change.
+    if (this.phase !== 'closing' || !this.players[id] || commit !== this.fair.next.commit || this.fair.seeds[id]) return;
     this.fair.seeds[id] = String(seed).replace(/[^0-9a-zA-Z]/g, '').slice(0, 64);
   }
 
@@ -217,8 +218,16 @@ export class RouTable {
   canSpin() { return this.phase === 'betting' && Object.keys(this.bets).some((id) => this.staked(id) > 0); }
   chipsTotal() { return r2(Object.values(this.players).reduce((a, p) => a + p.chips, 0) + Object.keys(this.bets).reduce((a, id) => a + this.staked(id), 0)); }
 
-  doSpin() {
+  // Bets close first. Guests then send their seeds, and the wheel turns once they are in (or after a short wait).
+  closeBets() {
     if (!this.canSpin()) throw new Error('Place a bet first.');
+    this.phase = 'closing'; this.closeAt = Date.now(); this.fair.seeds = {}; this.ready = {};
+  }
+  // Players whose seed the host waits for: everyone online except the host itself.
+  seedWaiting() { return Object.values(this.players).filter((p) => p.id !== this.hostId && p.connected && !p.quiet && !p.kicked && !this.fair.seeds[p.id]).map((p) => p.id); }
+  doSpin() {
+    if (this.phase === 'betting') { if (!this.canSpin()) throw new Error('Place a bet first.'); this.phase = 'closing'; this.ready = {}; }
+    if (this.phase !== 'closing') return;
     const f = this.fair, seeds = {};
     // Every player's seed counts except the host's own: the host knows the hidden seed, so its own could be picked to fit.
     for (const id of Object.keys(f.seeds).sort()) if (id !== this.hostId) seeds[id] = f.seeds[id];
@@ -287,6 +296,7 @@ export class RouTable {
     if (!('bankId' in st)) { t.base = null; bankAdopt(t); }
     if (t.canSpin()) t.betStart = Date.now();
     if (t.phase === 'done') t.doneAt = Date.now();
+    if (t.phase === 'closing') t.closeAt = Date.now();
     return t;
   }
 }

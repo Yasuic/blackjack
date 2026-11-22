@@ -38,6 +38,8 @@ ok(spinNumber('abc', { a: '1' }) === spinNumber('abc', { a: '1' }) && [0, 1, 2, 
   ok(thr === 4, 'bad bets refused');
   t.bet('b', 'black', 10); t.unbet('b', 'black'); ok(t.players.b.chips === 1000 && !t.bets.b, 'a bet taken back');
   ok(!JSON.stringify(t.publicState('b')).includes(t.fair.next.seed), 'the seed of the coming spin is not told');
+  t.setClientSeed('b', 'early', t.fair.next.commit); ok(!t.fair.seeds.b, 'a seed sent while bets are open is ignored');
+  t.closeBets(); ok(t.phase === 'closing' && !t.canSpin(), 'bets close before the seeds come in');
   t.setClientSeed('b', 'bobseed', t.fair.next.commit);
   const before = t.chipsTotal();
   t.doSpin();

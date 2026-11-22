@@ -1,12 +1,12 @@
 // The roulette page: a European roulette table for up to 9 in Nigel's room. The host's browser runs
 // the table (js/roulette.js); every other browser sends its bets there and is told only what it may see.
-import { RouTable, ROU_SEATS, WHEEL, colorOf, betNumbers, betName, betPays, verifySpin } from './roulette.js?v=20261122w';
-import { showSpin } from './wheel.js?v=20261122w';
-import { webglOK, initRoom } from './room3d.js?v=20261122w';
-import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122w';
-import { showDropped, params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML } from './common.js?v=20261122w';
+import { RouTable, ROU_SEATS, WHEEL, colorOf, betNumbers, betName, betPays, verifySpin } from './roulette.js?v=20261122x';
+import { showSpin } from './wheel.js?v=20261122x';
+import { webglOK, initRoom } from './room3d.js?v=20261122x';
+import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122x';
+import { showDropped, params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML } from './common.js?v=20261122x';
 
-import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261122w';
+import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261122x';
 const PREFIX = 'bjt-ro-';
 // A settings change by vote (js/vote.js): any player at the table may ask, every other player at the table who is online has to say yes.
 const VOTE = {
@@ -66,6 +66,7 @@ function startHost(code, resume) {
   let saved = null;
   try { saved = JSON.parse(safeGet('ro-host') || 'null'); } catch {}
   S.table = resume && saved && saved.code === code && saved.table ? RouTable.restore(saved.table) : new RouTable();
+  S.table.seedWait = true;
   const t = S.table;
   for (const p of Object.values(t.players)) p.connected = false;
   t.hostId = S.myId;
@@ -165,13 +166,16 @@ const showMs = () => SPIN_MS() + 4200;
 function hostClock() {
   const t = S.table;
   if (!t) return;
+  t.seedWait = true;
   if (voteTick(t, VOTE)) push();
   const now = Date.now();
   if (S.pendingSettings && t.phase === 'betting' && !t.canSpin()) { t.updateSettings(S.pendingSettings); S.pendingSettings = null; push(); }
   // A player whose browser has sent nothing for 9 seconds is not waited for when the others press Spin.
   { let ch = false; for (const p of Object.values(t.players)) { if (p.id === S.myId || p.kicked) continue; const q = S.net?.quietFor?.(p.id); if (q !== null && q !== undefined && t.setQuiet(p.id, q > 9000)) ch = true; } if (ch) push(); }
   if (t.phase === 'betting') {
-    if (!S.paused && t.settings.betTime && t.betStart !== null && now - t.betStart >= t.settings.betTime * 1000 && t.canSpin()) { t.doSpin(); push(); }
+    if (!S.paused && t.settings.betTime && t.betStart !== null && now - t.betStart >= t.settings.betTime * 1000 && t.canSpin()) { t.closeBets(); push(); }
+  } else if (t.phase === 'closing') {
+    if (!t.seedWaiting().length || now - (t.closeAt || 0) >= 3000) { t.doSpin(); push(); }
   } else if (now - (t.doneAt || 0) >= showMs()) { t.next(); push(); }
 }
 
@@ -263,7 +267,7 @@ function takeOver() {
 }
 function sendSeed() {
   const c = S.st?.fair?.nextCommit;
-  if (!c || S.seedFor === c || S.role !== 'guest') return;
+  if (S.st?.phase !== 'closing' || !c || S.seedFor === c || S.role !== 'guest') return;
   if (S.net.send({ t: 'seed', seed: randomHex(16), commit: c })) S.seedFor = c;
 }
 function send(m) {
@@ -457,7 +461,7 @@ function drawHud(st, me, turn, flatPhone) {
   const spinLine = !seated ? 'Waiting for the players to press Spin.' : !pressed ? (ready.length ? `Press Spin. ${need - waiting.length} of ${need} have pressed.` : 'Bets are down. Everyone presses Spin.') : `Waiting for ${waiting.slice(0, 3).map(nameOf).map(esc).join(', ')}${waiting.length > 3 ? ' and ' + (waiting.length - 3) + ' more' : ''} to press Spin.`;
   const spinBtn = (cls) => seated ? `<button class="btn ${cls} primary${pressed ? ' pressed' : ''}" data-act="deal"${st.canSpin && !done ? '' : ' disabled'}>${pressed ? '✓ ' : ''}Spin${need > 1 && st.canSpin && !done ? ` ${need - waiting.length}/${need}` : ''}</button>` : '';
   let status;
-  if (turn) status = 'No more bets. The wheel is turning…';
+  if (turn || st.phase === 'closing') status = 'No more bets. The wheel is turning…';
   else if (done) { const pay = st.pays[S.myId]; status = `<b class="ro-n ${st.spin.color}">${st.spin.n}</b> ${pay ? (pay.net > 0 ? `${st.roundFrozen ? 'Practice: you' : 'You'} won ${money(pay.net)}` : pay.net < 0 ? `${st.roundFrozen ? 'Practice: you' : 'You'} lost ${money(-pay.net)}` : 'You broke even') : ''}`; }
   else if (st.betLeft !== null) status = `Place your bets · <b id="bc-left">${Math.max(0, Math.ceil((st.betLeft - (Date.now() - S.at)) / 1000))}</b> s`;
   else status = st.canSpin ? spinLine : me && me.seat < 0 ? 'The table is full. You are watching.' : 'Pick a chip, then tap a number or a box.';
@@ -530,11 +534,11 @@ function fairHTML(st) {
   const f = st.fair, turn = turning(st);
   const rows = [...f.spins].reverse().filter((r) => !(turn && r.round === st.round)).map((r) => { const c = verifySpin(r); return `<tr><td>${r.round}</td><td><code>${esc(r.commit.slice(0, 10))}…</code></td><td><b class="ro-n ${colorOf(r.n)}">${r.n}</b></td><td>${c.ok ? '<span class="up">Checked ✓</span>' : `<span class="down">${esc(c.why)}</span>`}</td></tr>`; }).join('');
   return `<h3>🔐 Fair spin</h3><div class="pk-fair">
-    <p>Before each spin the host's browser locks in a hidden seed and shows its code (a fingerprint of the seed). Then each player's browser adds a seed of its own. The number comes from all of these together, so nobody can choose it, the host included. Each of the 37 pockets has the same chance.</p>
+    <p>Before each spin the host's browser locks in a hidden seed and shows its code (a fingerprint of the seed). Once bets close, each player's browser adds a seed of its own. The number comes from all of these together, so nobody can choose it, the host included. Each of the 37 pockets has the same chance.</p>
     <p>Code for the next spin: <code>${esc(f.nextCommit.slice(0, 16))}…</code> · player seeds received: ${f.seeds}</p>
     <p>After a spin its seed opens, and your browser works the number out again and compares.</p>
     <table class="pk-table"><tr><th>Spin</th><th>Code</th><th>Number</th><th>Check</th></tr>${rows || '<tr><td colspan="4">No spins yet.</td></tr>'}</table>
-    <p class="hint">Limit: the host's browser holds the hidden seed before the spin, so a host who opens the browser's developer tools could work out the number early. Play with a host you trust.</p></div>`;
+</div>`;
 }
 
 // ---------- Clicks ----------
