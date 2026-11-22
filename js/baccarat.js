@@ -1,7 +1,7 @@
 // Baccarat (punto banco) for up to 9 players against the house. Pure rules: the host's browser owns one
 // BacTable and every bet goes through it. Nothing here touches the page or the network.
-import { sha256, fairShoe, MAX_CHIPS } from './game.js?v=20261122g';
-import { isFrozen, bankJoin, setBank, clearBank, bankGone, bankSettle, ledgerNet, ledgerSum, bankAdopt } from './bank.js?v=20261122g';
+import { sha256, fairShoe, MAX_CHIPS } from './game.js?v=20261122h';
+import { isFrozen, bankJoin, setBank, clearBank, bankGone, bankSettle, ledgerNet, ledgerSum, bankAdopt } from './bank.js?v=20261122h';
 
 export const BAC_SEATS = 9;
 export const BAC_DEFAULTS = {
@@ -327,8 +327,14 @@ export class BacTable {
       const view = st.hand || { P: [], B: [] }, mine = st.peel?.mine || {}, open = st.peel?.open || { P0: false, B0: false, P1: false, B1: false };
       const known = (k) => mine[k] || (open[k] ? view[k[0]]?.[Number(k[1])] : null) || null;
       t.newShoe();
-      const feed = ['P0', 'B0', 'P1', 'B1', ...['P2', 'B2'].filter((k) => k in open)].map(known);
-      t.full = bacRound(() => feed.shift() || t.draw());
+      // Once the third cards are on the table, everyone has seen how many there are. A third card dealt again
+      // has to fit that: a new Player card that would change whether the Banker draws is passed over for the next one.
+      const keys = ['P0', 'B0', 'P1', 'B1', ...['P2', 'B2'].filter((k) => k in open)], second = st.peel?.stage === 2;
+      for (let n = 0; n < 120; n++) {
+        const feed = keys.map(known);
+        t.full = bacRound(() => feed.shift() || t.draw());
+        if (!second || (!!t.full.P[2] === ('P2' in open) && !!t.full.B[2] === ('B2' in open))) break;
+      }
       const stage = t.full.P[2] || t.full.B[2] ? (st.peel?.stage === 2 ? 2 : 1) : 1;
       t.peel = { stage, open: {}, who: { P: st.peel?.who?.P || null, B: st.peel?.who?.B || null }, at: Date.now(), last: Date.now() };
       for (const k of ['P0', 'B0', 'P1', 'B1']) t.peel.open[k] = !!open[k];
