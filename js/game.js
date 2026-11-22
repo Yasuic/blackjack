@@ -362,6 +362,14 @@ export class Table {
     this.shuffleNext = true;
     return false;
   }
+  // Any seated player may ask for a shuffle. Between rounds it happens now, otherwise before the next hand.
+  playerShuffle(clientId) {
+    if (this.banker === clientId) return this.dealerShuffle(clientId);
+    const p = this.players[clientId];
+    if (!p || !this.seatsOf(clientId).length) throw new Error('Only seated players can ask for a shuffle.');
+    if (this.settings.decks === 'csm') throw new Error('This table shuffles before every round already.');
+    return this.askShuffle(p.name);
+  }
   // The player who is the dealer may shuffle too.
   dealerShuffle(clientId) {
     if (this.banker !== clientId) throw new Error('Only the dealer can shuffle.');

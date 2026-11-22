@@ -605,6 +605,7 @@ function runAction(id, msg, onError) {
       case 'dealer-max': t.setDealerMax(id, msg.amount, msg.side); break;
       case 'dealer-big': t.setBigBet(id, msg.off ? { off: true } : { limit: msg.limit, per: msg.per, hands: msg.hands }); break;
       case 'dealer-shuffle': t.dealerShuffle(id); break;
+      case 'shuffle': t.playerShuffle(id); break;
       case 'seed': t.setClientSeed(id, msg.seed); return; // nothing on the table changes, so no update is sent
       default: return;
     }
@@ -2892,7 +2893,8 @@ function renderSettings(st) {
   const ph = st.phase;
   // Settings are only redrawn when they change, so typing in them is not interrupted.
   const locked = !(ph === 'betting' || ph === 'settled');
-  const key = JSON.stringify(st.settings) + locked;
+  const canShuffle = S.role === 'host' || !!myInfo(st).seat || myInfo(st).isBanker;
+  const key = JSON.stringify(st.settings) + locked + canShuffle;
   const box = $('#host-settings');
   if (!box || key === S.settingsKey || box.contains(document.activeElement)) return;
   S.settingsKey = key;
@@ -2913,7 +2915,7 @@ function renderSettings(st) {
       <label class="full mode-pen" ${s.shuffleMode === 'rounds' ? 'hidden' : ''}>Reshuffle when <span id="pen-val">${s.penetration}%</span> of the shoe is used
         <input id="set-pen" type="range" min="20" max="95" step="5" value="${s.penetration}" /></label>
       <label class="full mode-rounds" ${s.shuffleMode === 'rounds' ? '' : 'hidden'}>Reshuffle every N rounds<input id="set-every" type="number" min="1" max="50" value="${s.shuffleEvery}" /></label>
-      <button class="btn full" data-act="h-shuffle">${locked ? 'Shuffle before next hand' : 'Shuffle now'}</button>
+      ${canShuffle ? `<button class="btn full" data-act="h-shuffle">${locked ? 'Shuffle before next hand' : 'Shuffle now'}</button>` : ''}
     </div>`, true)}
     ${fold('set-seats', '🪑 Seats', `<div class="settings-grid">
       <label class="full">Seats at the table<input id="set-seats" type="number" min="1" step="1" inputmode="numeric" value="${s.seats}" ${dis} /></label>
@@ -3396,7 +3398,10 @@ function runAct(el) {
     }); break;
     case 'h-ins': hostDo((t) => t.forceInsurance()); break;
     case 'h-skip': fresh(() => 0, () => hostDo((t) => t.skipTurn())); break;
-    case 'h-shuffle': hostDo((t) => toast(t.askShuffle() ? 'The shoe was shuffled.' : 'The shoe will be shuffled before the next hand.')); break;
+    case 'h-shuffle':
+      // Guests see this button too (in the settings they can vote on); they ask the host to shuffle.
+      if (S.role !== 'host') { send({ t: 'shuffle' }); toast(st && (st.phase === 'betting' || st.phase === 'settled') ? 'Asked for a shuffle.' : 'Asked for a shuffle before the next hand.'); break; }
+      hostDo((t) => toast(t.askShuffle() ? 'The shoe was shuffled.' : 'The shoe will be shuffled before the next hand.')); break;
     case 'h-give': {
       const amt = Math.abs(Number($('#give-amt').value) || 0) * Number(el.dataset.sign);
       hostDo((t) => t.giveChips(el.dataset.id, amt));
