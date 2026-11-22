@@ -1,16 +1,16 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe } from './game.js?v=20261122t';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122t';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122t';
-import { tickSound, winSound } from './fx.js?v=20261122t';
-import * as HX from './history.js?v=20261122t';
-import { webglOK, initRoom } from './room3d.js?v=20261122t';
-import { showDropped, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261122t';
-import { makeVault, makeOpener, cleanBox, cleanPiece } from './vault.js?v=20261122t';
-import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122t';
-import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122t';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe } from './game.js?v=20261122u';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122u';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122u';
+import { tickSound, winSound } from './fx.js?v=20261122u';
+import * as HX from './history.js?v=20261122u';
+import { webglOK, initRoom } from './room3d.js?v=20261122u';
+import { showDropped, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261122u';
+import { makeVault, makeOpener, cleanBox, cleanPiece } from './vault.js?v=20261122u';
+import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122u';
+import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122u';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -1260,6 +1260,26 @@ function rebetSum(st) {
   return rs.length > 1 ? rs.reduce((a, r) => a + betTotal(r), 0) : betTotal(st.rebet);
 }
 function rebetHands(st) { const n = Object.values(st.rebets || {}).filter(Boolean).length; return n > 1 ? ` on ${n} hands` : ''; }
+// "Auto rebet": when betting opens, last round's bets go down on all my seats and I am dealt in, with no taps.
+// Bets put down by hand are left alone (the player presses Deal me in for those).
+S.autoRebet = safeGet('bj-autorebet') === '1';
+function autoRebetBtn() {
+  return `<button class="btn small auto-rebet ${S.autoRebet ? 'gold on' : ''}" data-act="auto-rebet" title="Each round, bet the same as last round on all your seats and get dealt in by yourself">🔁 Auto rebet: ${S.autoRebet ? 'on' : 'off'}</button>`;
+}
+function autoRebetStep() {
+  if (!S.autoRebet || S.auto?.on) return;
+  const st = S.state;
+  if (!st || st.phase !== 'betting' || st.noDealer || st.bankShort) return;
+  const { me, seat, isBanker } = myInfo(st);
+  if (!me || !seat || isBanker) return;
+  const mine = (me.seats || [me.seat]).filter((i) => st.seats[i] && !st.seats[i].out);
+  if (!mine.length) return;
+  const key = st.round;
+  if (!mine.some((i) => betTotal(st.seats[i].bet))) { if (S.arRebet !== key && st.rebet) { S.arRebet = key; doRebet(); } return; }
+  if (S.arRebet !== key || S.arReady === key || seat.ready) return;
+  if (mine.every((i) => st.seats[i].bet.main >= st.settings.minBet)) { S.arReady = key; runAct({ dataset: { act: 'ready' }, disabled: false }); }
+}
+setInterval(autoRebetStep, 600);
 function doRebet() {
   const st = S.state;
   if (!st) return;
@@ -2913,7 +2933,7 @@ function trayInner(st) {
     const queued = S.rebetWhenOpen === st.round;
     const rb = st.rebet ? `<button class="btn gold rebet-btn ${queued ? 'on' : ''}" data-act="rebet" title="Bet the same as last round (B)">${queued ? `✓ Rebet ${money(rebetSum(st))}${rebetHands(st)} goes down when betting opens. Tap to cancel` : `↻ Rebet ${money(rebetSum(st))}${rebetHands(st)}`}</button>` : '';
     return `<div class="tray-msg round-result"><b class="${rnet > 0 ? 'up' : rnet < 0 ? 'down' : ''}">${head}</b>${breakdown}</div>
-      <div class="actions">${rb}<span class="hint">Betting opens when the cards are cleared.</span></div>`;
+      <div class="actions">${rb}${autoRebetBtn()}<span class="hint">Betting opens when the cards are cleared.</span></div>`;
   }
   if (ph === 'betting') {
     const b = seat.bet;
@@ -2935,7 +2955,7 @@ function trayInner(st) {
         ${pvpBtnHTML(st, seat)}
         
         ${sideKeys(st).length ? '<button class="btn" data-act="sides-plus" title="Adds 1 to every side bet on all your hands">+1 all side bets</button>' : ''}
-        ${rebet || `<button class="btn" data-act="clear" ${(myInfo(st).me?.seats || []).some((i) => betTotal(st.seats[i]?.bet)) || betTotal(b) ? '' : 'disabled'}>Clear all</button>`}
+        ${autoRebetBtn()}${rebet || `<button class="btn" data-act="clear" ${(myInfo(st).me?.seats || []).some((i) => betTotal(st.seats[i]?.bet)) || betTotal(b) ? '' : 'disabled'}>Clear all</button>`}
         ${bigBtnHTML(st)}
         <button class="btn danger" data-act="stand-up">${(myInfo(st).me?.seats || []).length > 1 ? `Leave seat ${myInfo(st).me.seat + 1}` : 'Leave seat'}</button>
         ${(myInfo(st).me?.seats || []).length > 1 ? '<button class="btn danger" data-act="stand-up-all">Leave all seats</button>' : ''}
@@ -3405,6 +3425,7 @@ function runAct(el) {
     }
     case 'undo': if (S.undo.length) { S.mainChips.pop(); const last = S.undo.pop(); chipSound(); placeBet(last); } break;
     case 'rebet': doRebet(); break;
+    case 'auto-rebet': S.autoRebet = !S.autoRebet; safeSet('bj-autorebet', S.autoRebet ? '1' : '0'); toast(S.autoRebet ? 'Auto rebet on: each round your last bets go down and you are dealt in by yourself.' : 'Auto rebet off.'); render(); autoRebetStep(); break;
     case 'keys': $('#modal-body').innerHTML = keysHTML(); $('#modal').showModal(); break;
     case 'history': showHistory(); break;
     case 'view-pad': safeSet('bj-view-pad', viewPadOn() ? '0' : '1'); if (!viewPadOn() && S.room?.walking?.()) S.room.walk(false); document.body.classList.toggle('view-hidden', !viewPadOn()); for (const b of document.querySelectorAll('.menu-item[data-act=view-pad]')) b.textContent = '🎥 View buttons: ' + (viewPadOn() ? 'on' : 'off'); break;
