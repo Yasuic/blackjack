@@ -9,7 +9,7 @@ export const BAC_DEFAULTS = {
   maxBet: 500,       // largest bet on Player or Banker
   maxSide: 100,      // largest bet on Tie or a pair
   startChips: 1000,  // chips a new player gets
-  betTime: 15,       // seconds from the first bet to the deal (0 = the host deals by hand)
+  betTime: 30,       // seconds from the first bet to the deal (0 = the host deals by hand)
   decks: 8,
 };
 // What each spot pays for 1 chip bet. Banker pays 0.95 (the house keeps 5% of a Banker win).
@@ -106,7 +106,7 @@ export class BacTable {
     s.maxBet = clampInt(s.maxBet, s.minBet, MAX_CHIPS, Math.max(s.minBet, this.settings.maxBet));
     s.maxSide = clampInt(s.maxSide, s.minBet, MAX_CHIPS, Math.max(s.minBet, this.settings.maxSide));
     s.startChips = clampInt(s.startChips, 1, MAX_CHIPS, this.settings.startChips);
-    s.betTime = [0, 8, 10, 15, 20, 30, 45, 60].includes(Number(s.betTime)) ? Number(s.betTime) : this.settings.betTime;
+    { const v = Math.round(Number(s.betTime)); s.betTime = !Number.isFinite(v) ? this.settings.betTime : v <= 0 ? 0 : Math.min(300, Math.max(5, v)); }
     s.decks = [6, 8].includes(Number(s.decks)) ? Number(s.decks) : this.settings.decks;
     this.settings = s;
   }

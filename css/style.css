@@ -1735,3 +1735,5 @@ body:not(.game-poker) .spot { box-shadow: 0 0 10px rgba(63,230,214,.22), inset 0
 .og-foot { display: flex; justify-content: space-between; font-size: 11px; opacity: .65; margin-top: 4px; }
 .office-dlg { max-height: calc(100vh - 24px); overflow: auto; }
 .vote-pop[hidden] { display: none !important; }
+.conn-drop-host { display: block; margin: 10px auto 0; pointer-events: auto; }
+body.in-room #conn-pill { max-width: 104px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }

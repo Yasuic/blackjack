@@ -341,6 +341,21 @@ function snapMsg(conn) {
 }
 // A player's browser found no host at the table's address. After a short wait (longer for players
 // further down the list, so only one steps up) it opens the table itself.
+// "Become host" from the menu or the connection notice: the host's browser hands the table over, or, when the
+// host's browser is gone, this browser takes the table at once. The table never changes host on its own.
+function askBecomeHost() {
+  if (S.role !== 'player') return;
+  if (S.taking) { toast('Taking over as host…'); return; }
+  S.wantHostAt = Date.now(); // good for 90 seconds: if the host turns out to be gone, this browser takes the table
+  clearTimeout(S.askHostT);
+  if (!S.online) {
+    toast('The host is offline. Taking over the table…'); maybeTakeOver();
+    S.askHostT = setTimeout(() => { S.askHostT = null; if (S.role === 'player' && !S.online) toast('The old host\'s browser still holds the table address. It frees up within a minute, then you take over.'); }, 15000);
+    return;
+  }
+  send({ t: 'host-ask' }); toast('Asking the host\'s browser for the table…');
+  S.askHostT = setTimeout(() => { S.askHostT = null; if (S.role === 'player' && !S.taking && S.online) toast('The host\'s browser did not answer. Its tab may be asleep. If it drops, press Become host again.'); }, 8000);
+}
 function maybeTakeOver() {
   if (S.role !== 'player' || S.kicked || S.taking || S.conn?.open || S.online) return;
   let snap = null;
@@ -358,11 +373,14 @@ function maybeTakeOver() {
   // Nobody may have taken the table already: the next address has to be empty too.
   if (snap && !dead(g + 1)) return;
   S.noHostAt ||= now;
+  // The host never changes on its own: the table waits for its host until a player presses Become host.
+  const want = now - (S.wantHostAt || 0) < 90000;
+  if (snap && !want) return;
   const at = snap ? snap.order.indexOf(S.myId) : -1;
   const rank = snap ? (at < 0 ? snap.order.length + 1 : at) : 2;
   // The host gets 30 seconds to come back (a reload, a short drop) before another browser takes the table.
   // A player who pressed Become host does not wait the 30 seconds (the checks above still make sure nobody holds the table).
-  if (now - S.noHostAt < (now - (S.wantHostAt || 0) < 90000 ? 1500 : snap ? HOST_WAIT + rank * 4000 : 6000 + rank * 6000)) return;
+  if (now - S.noHostAt < (want ? 1500 : snap ? HOST_WAIT + rank * 4000 : 6000 + rank * 6000)) return;
   S.taking = true;
   const newGen = snap ? g + 1 : 0;
   const peer = new Peer(hostAddr(newGen), peerOptions());
@@ -1647,7 +1665,7 @@ function render(note) {
   const pill = $('#conn-pill');
   if (pill) {
     pill.className = 'pill ' + (S.online ? 'live' : 'off');
-    pill.textContent = S.online ? `Table ${S.code}${S.role === 'player' && S.viaRelay ? ' · backup path' : ''}` : (S.role === 'host' ? 'Opening table...' : 'Reconnecting...');
+    pill.textContent = S.online ? `Table ${S.code}${S.role === 'player' && S.viaRelay ? ' · backup path' : ''}` : (S.role === 'host' ? 'Opening...' : 'Offline');
   }
   const share = $('#share');
   if (share && share.value !== shareLink()) share.value = shareLink();
@@ -1663,9 +1681,9 @@ function render(note) {
       let mine = null; try { mine = JSON.parse(safeGet('bj-host') || 'null')?.code; } catch {}
       box = document.createElement('div'); box.id = 'offline-note'; box.className = 'offline-note'; box.dataset.why = S.why || '';
       const why = S.why === 'net' ? ['Your connection dropped.', 'This phone or computer lost its internet link for a moment. The page keeps trying and joins the table again by itself.']
-        : S.why === 'nohost' ? ['The host is away.', 'The host\'s browser closed or went to sleep. In a few seconds the table opens again in another player\'s browser, with the same seats and chips and a new shuffle. This page joins again by itself.']
+        : S.why === 'nohost' ? ['The host is away.', 'The host\'s browser closed or went to sleep. The table waits for the host to come back, with the same seats, chips and cards. If the host is gone, press Become host to run the table in your browser.']
         : ['Cannot reach the host.', 'The table is open, but the link to the host does not open. Either the host\'s browser is asleep or in a background tab, or one of the two networks blocks the link. Ask the host to open the game tab. If the host stays away, the table moves to another player after about a minute. If that does not happen, switch between Wi-Fi and mobile data, or turn off a VPN. The page keeps trying.' + linkNote()];
-      box.innerHTML = `<b>${why[0]}</b><div>${why[1]}</div>${mine === S.code ? `<a class="btn gold" href="${location.pathname}?host=${encodeURIComponent(S.code)}">I am the host: reopen my table</a>` : ''}<a class="btn" href="${location.pathname}">Start a new table</a>`;
+      box.innerHTML = `<b>${why[0]}</b><div>${why[1]}</div>${mine === S.code ? `<a class="btn gold" href="${location.pathname}?host=${encodeURIComponent(S.code)}">I am the host: reopen my table</a>` : ''}${S.why === 'nohost' && S.role === 'player' && S.state ? '<button class="btn gold" data-act="become-host">👑 Become host</button>' : ''}<a class="btn" href="${location.pathname}">Start a new table</a>`;
       document.body.appendChild(box);
     } else if (!stuck && box) box.remove();
     if (!S.online && !S.offTick) S.offTick = setInterval(() => { if (S.online) { clearInterval(S.offTick); S.offTick = null; } render(); }, 2000);
@@ -3015,7 +3033,7 @@ function renderSettings(st) {
     </div>`, true)}
     ${fold('set-auto', '⏱️ Automatic dealer and timers', `<div class="settings-grid">
       <label class="check full"><input id="set-auto" type="checkbox" ${s.autoDeal !== false ? 'checked' : ''} ${dis} /> Deal as soon as everyone is ready</label>
-      <label>Betting time<select id="set-bettimer" ${dis}>${timerOpts(s.betTimer)}</select></label>
+      <label>Betting time (seconds, 0 = off)<input id="set-bettimer" type="number" inputmode="numeric" min="0" max="300" step="1" value="${Number(s.betTimer) || 0}" ${dis} /></label>
       <label>Time per move<select id="set-turntimer" ${dis}>${timerOpts(s.turnTimer)}</select></label>
       <div class="hint full">When betting time runs out, the dealer deals to everyone with a bet. When time per move runs out, the dealer stands for that player.</div>
     </div>`, true)}
@@ -3380,23 +3398,7 @@ function runAct(el) {
     case 'hints': safeSet('bj-hints2', hintsOn() ? '0' : '1'); el.textContent = hintsOn() ? '💡 Strategy hints: on' : '💡 Strategy hints: off'; render(); break;
     case 'buyin-open': openBuyIn(); break;
     case 'office': showOffice(S.code, S.myId); break;
-    case 'become-host': {
-      if (S.role !== 'player') break;
-      if (S.taking) { toast('Taking over as host…'); break; }
-      // Good for 90 seconds: if the host turns out to be gone, this browser takes the table without the 30 second wait.
-      S.wantHostAt = Date.now();
-      if (!S.online) {
-        // The host's browser is gone: take the table now instead of waiting the 30 seconds.
-        toast('The host is offline. Taking over the table…'); maybeTakeOver();
-        clearTimeout(S.askHostT);
-        S.askHostT = setTimeout(() => { S.askHostT = null; if (S.role === 'player' && !S.online) toast('The old host\'s browser still holds the table address. It frees up within a minute, then you take over.'); }, 15000);
-        break;
-      }
-      send({ t: 'host-ask' }); toast('Asking the host\'s browser for the table…');
-      clearTimeout(S.askHostT);
-      S.askHostT = setTimeout(() => { S.askHostT = null; if (S.role === 'player' && !S.taking && S.online) toast('The host\'s browser did not answer. Its tab may be asleep. If it drops, you take over at once.'); }, 8000);
-      break;
-    }
+    case 'become-host': askBecomeHost(); break;
     case 'ledger-toggle': { const l = $('#ledger'); l.classList.toggle('closed'); safeSet('bj-ledger', l.classList.contains('closed') ? '0' : '1'); renderLedger(S.state); break; }
     case 'buyin-answer': hostDo((t) => t.answerBuyIn(Number(el.dataset.id), el.dataset.yes === '1')); break;
     case 'throw-open': openThrowPanel(el); break;
@@ -4049,4 +4051,4 @@ S.others = {};
 watchOffice('blackjack', () => S.code, (g, list) => { S.others[g] = list.filter((p) => p.id.split('#')[0] !== S.myId); S.room?.setOthers(S.others); });
 
 // "Connection dropped" notice and blocked buttons while this browser has no link to the table (common.js showDropped).
-setInterval(() => showDropped(S.role === 'player' && !S.online && !!S.state && !S.kicked), 400);
+setInterval(() => showDropped(S.role === 'player' && !S.online && !!S.state && !S.kicked, 'Your moves are not being sent. The table waits for the host. If the host is gone, you can take over.', askBecomeHost), 400);

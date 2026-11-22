@@ -9,7 +9,7 @@ export const ROU_DEFAULTS = {
   maxInside: 100,   // largest bet on one number (or split, street, corner, six line)
   maxOutside: 500,  // largest bet on red, black, odd, even, low, high, a dozen or a column
   startChips: 1000,
-  betTime: 20,      // seconds from the first bet to the spin (0 = the host spins by hand)
+  betTime: 30,      // seconds from the first bet to the spin (0 = the host spins by hand)
 };
 export const RED = new Set([1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]);
 export const colorOf = (n) => (n === 0 ? 'green' : RED.has(n) ? 'red' : 'black');
@@ -102,7 +102,7 @@ export class RouTable {
     s.maxInside = clampInt(s.maxInside, s.minBet, MAX_CHIPS, Math.max(s.minBet, this.settings.maxInside));
     s.maxOutside = clampInt(s.maxOutside, s.minBet, MAX_CHIPS, Math.max(s.minBet, this.settings.maxOutside));
     s.startChips = clampInt(s.startChips, 1, MAX_CHIPS, this.settings.startChips);
-    s.betTime = [0, 10, 15, 20, 30, 45, 60].includes(Number(s.betTime)) ? Number(s.betTime) : this.settings.betTime;
+    { const v = Math.round(Number(s.betTime)); s.betTime = !Number.isFinite(v) ? this.settings.betTime : v <= 0 ? 0 : Math.min(300, Math.max(5, v)); }
     this.settings = s;
   }
   addLog(line) { this.log.push(line); if (this.log.length > 200) this.log.splice(0, this.log.length - 200); }

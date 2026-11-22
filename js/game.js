@@ -19,7 +19,7 @@ export const DEFAULT_SETTINGS = {
   blackjackPays: 1.5,    // 3:2
   allowSurrender: true,
   autoDeal: true,        // deal as soon as every seated player is ready
-  betTimer: 20,          // seconds for betting before the dealer deals on its own (0 = off)
+  betTimer: 30,          // seconds for betting before the dealer deals on its own (0 = off)
   turnTimer: 30,
   peekCost: 10,          // price to see the next card in the shoe
   sideBets: ['hot3', 'bustIt', 'twentyOnePlus3'], // side bets offered at this table

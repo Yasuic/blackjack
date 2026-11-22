@@ -253,7 +253,7 @@ document.addEventListener('change', (e) => {
 // While this browser has no link to the table, its moves go nowhere. A clear notice says so and a see-through
 // cover over the table blocks every button below the top bar, so nobody plays on without knowing. It goes
 // away the moment the link is back.
-export function showDropped(on, text = 'Your moves are not being sent. Trying to connect again…') {
+export function showDropped(on, text = 'Your moves are not being sent. Trying to connect again…', onHost = null) {
   let el = document.getElementById('conn-drop');
   if (!on) { if (el) { el.remove(); document.body.classList.remove('conn-dropped'); } return; }
   if (!el) {
@@ -263,6 +263,10 @@ export function showDropped(on, text = 'Your moves are not being sent. Trying to
     document.body.appendChild(el); document.body.classList.add('conn-dropped');
   }
   const span = el.querySelector('span'); if (span.textContent !== text) span.textContent = text;
+  // "Become host": the table never moves on its own, so a player can take it over from here.
+  let btn = el.querySelector('.conn-drop-host');
+  if (onHost && !btn) { btn = document.createElement('button'); btn.className = 'btn small conn-drop-host'; btn.textContent = '👑 Become host'; el.querySelector('.conn-drop-box').appendChild(btn); }
+  if (btn) { btn.hidden = !onHost; btn.onclick = onHost ? (e) => { e.stopPropagation(); onHost(); } : null; }
   const bar = document.querySelector('.topbar');
   el.style.top = (bar ? Math.max(0, Math.round(bar.getBoundingClientRect().bottom)) : 0) + 'px';
 }

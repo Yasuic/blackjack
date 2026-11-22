@@ -93,7 +93,9 @@ function openHost(code) {
     piece: (id, piece) => S.hold?.add(piece),
     gone: (id) => { S.table?.disconnect(id); S.goneAt[id] = Date.now(); push(); },
     status: (text, ok) => { S.conn = [text, ok]; drawConn(); if (ok && S.role === 'host') carryDone(GAME, S.code); },
-    taken: () => { // someone already runs this table (your own other tab, or a player who took the table over): join it instead
+    taken: () => {
+      if (Date.now() < (S.retakeUntil || 0)) { try { S.net.close(); } catch {} setTimeout(() => { if (S.role === 'host' && S.table) openHost(code); }, 1500); return; } // the old host is still letting go of the address
+      // someone already runs this table (your own other tab, or a player who took the table over): join it instead
       S.hold = null; S.net.close(); clearInterval(S.clock); S.table = null; startGuest(code, true);
     },
   });
@@ -152,19 +154,61 @@ function takeOver() {
   toast('The host left. The table now runs in your browser.');
   if (hold) hold.done.then(finish); else finish(null);
 }
+// ---------- "Become host": any player takes the table into their browser, no vote ----------
+// The host's browser sends its saved table (the same thing it keeps for a reload) and then joins as a player.
+// The table never changes host on its own: when the host's browser is gone, it waits until a player presses Become host.
+function handOver(id) {
+  const t = S.table, p = t?.players[id];
+  if (!p || S.handing || S.hold) { S.net.send(id, { t: 'err', msg: S.hold ? 'The table is still moving. Try again in a few seconds.' : 'Someone else is taking over right now.' }); return; }
+  S.handing = true;
+  t.addLog(`${p.name} took over as host. The table now runs in ${p.name}'s browser.`);
+  push();
+  const saved = safeGet('pk-host');
+  if (!saved) { S.handing = false; return; }
+  S.net.send(id, { t: 'host-give', saved });
+  setTimeout(() => {
+    S.handing = false;
+    try { S.net.close(); } catch {}
+    clearInterval(S.clock); S.table = null;
+    safeSet('pk-host', 'null');
+    startGuest(S.code, true);
+    toast(`${p.name} is the host now. You are a player at the same table.`);
+  }, 1000);
+}
+function takeGiven(m) {
+  if (S.role !== 'guest' || S.taking) return;
+  let ok = false;
+  try { const x = JSON.parse(String(m.saved || '')); ok = x && x.code === S.code && !!x.table && !!PokerTable.restore(x.table); } catch { ok = false; }
+  if (!ok) { toast('The table could not be handed over. Try again.'); return; }
+  S.taking = true; clearTimeout(S.askT); clearTimeout(S.takeT); S.takeT = null;
+  safeSet('pk-host', String(m.saved));
+  try { S.net.close(); } catch {}
+  S.retakeUntil = Date.now() + 20000;
+  setTimeout(() => { S.taking = false; startHost(S.code, true); toast('You are the host now: keep this tab open.'); }, 2500);
+}
+function becomeHost() {
+  if (S.role !== 'guest' || S.taking) return;
+  if (S.nohost && S.st) { toast('The host is offline. Taking over the table…'); takeOver(); return; }
+  if (!S.net?.send({ t: 'host-ask' })) { toast('Not connected to the host right now. If the host is gone, try again in a few seconds.'); return; }
+  toast('Asking the host\'s browser for the table…');
+  clearTimeout(S.askT);
+  S.askT = setTimeout(() => { if (S.role === 'guest' && !S.taking) toast("The host's browser did not answer. Its tab may be asleep."); }, 8000);
+}
 function watchHost() {
   const st = S.st;
   if (!st || S.role !== 'guest' || S.takeT || params.get('takeover') === '0') return;
   const list = st.players.filter((p) => p.connected && p.id !== st.hostId).sort((a, b) => (a.seat < 0 ? 99 : a.seat) - (b.seat < 0 ? 99 : b.seat) || (a.id < b.id ? -1 : 1));
   let rank = list.findIndex((p) => p.id === S.myId);
   if (rank < 0) rank = list.length;
-  S.takeT = setTimeout(() => { S.takeT = null; if (S.role === 'guest' && S.nohost) takeOver(); }, 30000 + rank * 4000); // the host gets 30 seconds to come back first
+  // The host never changes on its own: the table waits for its host until a player presses Become host.
+  void rank;
 }
 function hostMsg(id, m) {
   // A host change is being settled: note who came back and ask for their piece of the key (js/vault.js).
   if (S.hold) { if (m.t === 'hello') { S.hold.hellos[id] = m; S.net.send(id, { t: 'piece-ask', kid: S.hold.kid }); } return; }
   const t = S.table;
   if (!t) return;
+  if (m.t === 'host-ask') { handOver(id); return; }
   try {
     if (m.t === 'hello') { if (t.players[id]?.kicked) { S.net.send(id, { t: 'kicked' }); return; } t.join(id, m.name, m.look); if (m.carry && typeof m.carry === 'object') { try { t.carryIn(id, m.carry.amount, m.carry.from, m.carry.cid); } catch { /* fine */ } } if (m.mine) t.giveCards(id, m.mine.cards, m.mine.salt); delete S.goneAt[id]; if (S.autoAway[id]) { delete S.autoAway[id]; t.sitOut(id, false); } }
     else if (!t.players[id] || t.players[id].kicked) return;
@@ -373,6 +417,7 @@ function startGuest(code, again) {
       }
       else if (m.t === 'err') toast(m.msg);
       else if (m.t === 'cashed') gotCashed(m);
+      else if (m.t === 'host-give') takeGiven(m);
       else if (m.t === 'fx') showFx(m.from, m.e);
       else if (m.t === 'kicked') { S.net.close(); showLanding('The host removed you from the table.'); }
     },
@@ -958,6 +1003,7 @@ function drawMenu(st) {
     <div class="menu-invite"><div class="menu-title">🔗 Invite link</div><div class="share"><input id="share" readonly value="${esc(shareLink())}" /><button class="btn small" data-act="copy">Copy</button></div></div>
     ${mySeatNow(st) ? '<button class="menu-item" data-act="add">🪙 My chips</button>' : ''}
     <button class="menu-item" data-act="ledger">📒 Ledger</button>
+    ${S.role === 'guest' ? '<button class="menu-item" data-act="become-host" title="The table moves to your browser. No vote.">👑 Become host</button>' : ''}
     <button class="menu-item" data-act="log">📝 Hand log</button>
     <button class="menu-item" data-act="dl-hands">⬇️ Download hand history</button>
     <button class="menu-item" data-act="fair">🔐 Fair deck</button>
@@ -1144,6 +1190,7 @@ document.addEventListener('click', (e) => {
     case 'pause': S.paused = !S.paused; if (!S.paused) S.started = true; closeMenu(); push(); break;
     case 'bomb': if (t) { t.setBombNext(!t.bombNext); push(); } break;
     case 'ledger': closeMenu(); modal(ledgerHTML(st)); break;
+    case 'become-host': becomeHost(); break;
     case 'office': modal(officeLedgerHTML(S.code, S.myId)); break;
     case 'log': closeMenu(); modal(`<h3>Hand log</h3><div class="log pk-log">${st.log.map((l) => `<div>${esc(l)}</div>`).reverse().join('')}</div>`); break;
     case 'rules': closeMenu(); modal(rulesHTML(st)); break;
@@ -1253,7 +1300,7 @@ S.others = {};
 watchOffice('poker', () => S.code, (g, list) => { S.others[g] = list.filter((p) => p.id.split('#')[0] !== S.myId); S.room?.setOthers(S.others); });
 
 // "Connection dropped" notice and blocked buttons while this browser has no link to the table (common.js showDropped).
-setInterval(() => showDropped(!!S.hold || (S.role === 'guest' && !!S.st && !!S.conn && S.conn[1] === false && document.body.classList.contains('in-room')), S.hold ? "The table is moving to your browser. One moment…" : undefined), 400);
+setInterval(() => showDropped(!!S.hold || (S.role === 'guest' && !!S.st && !!S.conn && S.conn[1] === false && document.body.classList.contains('in-room')), S.hold ? "The table is moving to your browser. One moment…" : 'Your moves are not being sent. The table waits for the host. If the host is gone, you can take over.', S.hold ? null : becomeHost), 400);
 
 // ---------- One wallet for the office (common.js walkTo) ----------
 // This table's ledger lines for the office ledger.
