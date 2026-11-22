@@ -20,7 +20,7 @@ const ROOM_PREFIX = 'bjt-';
 // so the new host never has to wait for the old host's address to be released.
 const hostAddr = (g) => ROOM_PREFIX + S.code + (g > 0 ? '-' + g : '');
 const CHIPS = [1, 5, 25, 100, 500];
-const VOTE_SECONDS = 30;
+const VOTE_SECONDS = 12; // short, so one player away from the screen does not hold the table up for long
 
 const S = {
   role: null,        // 'host' or 'player'
@@ -1683,6 +1683,8 @@ function renderVote(st) {
   S.voteEndsLocal = S.voteBoxId === v.id ? S.voteEndsLocal : Date.now() + (st.voteEndsIn || VOTE_SECONDS * 1000);
   S.voteBoxId = v.id;
   if (!box) { box = document.createElement('div'); box.id = 'vote'; box.className = 'vote-pop'; document.body.appendChild(box); }
+  // Only players who still have to answer see the card. The asker and those who answered see the result in the log.
+  box.hidden = !v.canVote;
   const mine = v.candidate === S.myId;
   const isSet = v.kind === 'settings';
   const title = mine ? 'Waiting for votes' : isSet ? `${esc(v.name)} wants to change the settings` : `${esc(v.name)} wants to be the dealer`;

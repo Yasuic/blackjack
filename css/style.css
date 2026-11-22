@@ -1734,3 +1734,4 @@ body:not(.game-poker) .spot { box-shadow: 0 0 10px rgba(63,230,214,.22), inset 0
 .office-chart rect.win { fill: rgba(95,211,141,.6); } .office-chart rect.loss { fill: rgba(255,123,123,.6); }
 .og-foot { display: flex; justify-content: space-between; font-size: 11px; opacity: .65; margin-top: 4px; }
 .office-dlg { max-height: calc(100vh - 24px); overflow: auto; }
+.vote-pop[hidden] { display: none !important; }

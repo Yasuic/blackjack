@@ -1,10 +1,10 @@
 // A settings change by vote, for poker, baccarat and roulette (blackjack has the same rule in its own code).
 // Any seated player may ask for a change. Every other seated player who is online has to say yes within
-// 30 seconds; one no, or no answer in time, leaves the settings as they are. A change that passes starts
+// 12 seconds; one no, or no answer in time, leaves the settings as they are. A change that passes starts
 // between hands, never in the middle of one. The host's browser keeps the vote on the table object.
 import { esc } from './common.js?v=20261122p';
 
-export const VOTE_MS = 30000;
+export const VOTE_MS = 12000; // short, so one player away from the screen does not hold the table up for long
 
 // cfg: { labels: { key: [name, format?] }, seated(id), voters(by) -> ids of the online seated players other than `by`,
 //        name(id), canApply(), apply(patch), log(text) }
@@ -63,6 +63,7 @@ export function drawVote(v, send) {
   if (!v || !v.id) { if (box) box.remove(); shownId = null; return; }
   if (shownId !== v.id) { shownId = v.id; ends = Date.now() + v.left; }
   if (!box) { box = document.createElement('div'); box.id = 'vote'; box.className = 'vote-pop'; document.body.appendChild(box); }
+  box.hidden = !v.canVote; // only players who still have to answer see the card
   const key = [v.id, v.yes, v.canVote].join(':');
   if (box.dataset.k === key) return;
   box.dataset.k = key;

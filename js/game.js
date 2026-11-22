@@ -611,6 +611,8 @@ export class Table {
     this.seats.forEach((s, i) => { if (s && s.playerId === clientId) out.push(i); });
     return out;
   }
+  // A player whose every seat is sitting out is away: they are not asked to vote.
+  allOut(id) { const mine = this.seatsOf(id); return mine.length > 0 && mine.every((i) => this.seats[i].out); }
   fixSeat(p) { const o = this.seatsOf(p.id); p.seat = o.length ? o[0] : null; }
   clearSeats(p) { this.seatsOf(p.id).forEach((i) => { this.seats[i] = null; }); p.seat = null; }
 
@@ -651,7 +653,7 @@ export class Table {
     if (this.banker === clientId) throw new Error('You are already the dealer.');
     if (this.vote) throw new Error('A vote is already running.');
     const voters = Object.values(this.players)
-      .filter((x) => x.id !== clientId && x.connected && !x.kicked)
+      .filter((x) => x.id !== clientId && x.connected && !x.kicked && !this.allOut(x.id))
       .map((x) => x.id);
     this.voteSeq = (this.voteSeq || 0) + 1;
     if (!voters.length) { this.applyDealer(clientId); return null; }
@@ -663,7 +665,7 @@ export class Table {
   // A settings change, from the host or from any player, needs a yes from everyone else who is online.
   proposeSettings(hostId, patch, summary) {
     if (this.vote) throw new Error('A vote is already running.');
-    const voters = Object.values(this.players).filter((x) => x.id !== hostId && x.connected && !x.kicked).map((x) => x.id);
+    const voters = Object.values(this.players).filter((x) => x.id !== hostId && x.connected && !x.kicked && !this.allOut(x.id)).map((x) => x.id);
     this.voteSeq = (this.voteSeq || 0) + 1;
     // A change of the seat count alone passes when all but one say yes: one player away from the screen
     // (often the dealer) does not hold it up.
