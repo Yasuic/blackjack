@@ -1,12 +1,12 @@
 // The roulette page: a European roulette table for up to 9 in Nigel's room. The host's browser runs
 // the table (js/roulette.js); every other browser sends its bets there and is told only what it may see.
-import { RouTable, ROU_SEATS, WHEEL, colorOf, betNumbers, betName, betPays, verifySpin } from './roulette.js?v=20261122k';
-import { showSpin } from './wheel.js?v=20261122k';
-import { webglOK, initRoom } from './room3d.js?v=20261122k';
-import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122k';
-import { showDropped, params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML } from './common.js?v=20261122k';
+import { RouTable, ROU_SEATS, WHEEL, colorOf, betNumbers, betName, betPays, verifySpin } from './roulette.js?v=20261122l';
+import { showSpin } from './wheel.js?v=20261122l';
+import { webglOK, initRoom } from './room3d.js?v=20261122l';
+import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122l';
+import { showDropped, params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML } from './common.js?v=20261122l';
 
-import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261122k';
+import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261122l';
 const PREFIX = 'bjt-ro-';
 // A settings change by vote (js/vote.js): any player at the table may ask, every other player at the table who is online has to say yes.
 const VOTE = {
@@ -106,7 +106,17 @@ function doMove(id, m) {
     case 'rebet': t.rebet(id); break;
     case 'add': t.addChips(id, m.amount); break;
     case 'take': t.takeChips(id, m.amount); break;
-    case 'bank': if (m.on) t.setBank(id); else if (id === t.bankId || id === t.hostId) t.clearBank(id); break;
+    case 'bank':
+      if (m.on) t.setBank(id);
+      else if (id === t.bankId || id === t.hostId) {
+        try { t.clearBank(id); }
+        catch (e) {
+          // Bets or a round in motion: the dealer stops when this round ends. The host can still remove the dealer at once (it throws, kept as is).
+          if (id === t.bankId) { t.bankLeaving = !t.bankLeaving; t.addLog(t.bankLeaving ? `${t.players[id].name} stops dealing after this round.` : `${t.players[id].name} keeps dealing.`); }
+          else throw e;
+        }
+      }
+      break;
     case 'seed': t.setClientSeed(id, m.seed, m.commit); break;
     case 'ready': t.pressSpin(id); break;
     case 'fx': relayFx(id, m.e); break;

@@ -1,7 +1,7 @@
 // Shared by the poker and baccarat pages: small helpers, the playing card picture, the game switch at the
 // top left, and the link between the host's browser and the players' browsers.
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122k';
-import { cleanBox, cleanPiece } from './vault.js?v=20261122k';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122l';
+import { cleanBox, cleanPiece } from './vault.js?v=20261122l';
 export const params = new URLSearchParams(location.search);
 export const $ = (sel, el = document) => el.querySelector(sel);
 export function safeGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
@@ -273,7 +273,9 @@ export function bankBarHTML(st, myId, isHost) {
   const me = st.players.find((p) => p.id === myId), seated = me && me.seat >= 0;
   if (st.frozen) return `<div class="bank-bar frozen"><b>Frozen ledger</b><span>Practice against the house. Chips go back when a player is the dealer.</span>${seated ? '<button class="btn small gold" data-act="bank-on">Be the dealer</button>' : ''}</div>`;
   const b = st.players.find((p) => p.id === st.bankId);
-  return `<div class="bank-bar"><b>Dealer: ${esc(b ? b.name : '?')}${st.bankId === myId ? ' (you)' : ''}</b><span>Real chips. The ledger adds up to zero.</span>${st.bankId === myId || isHost ? `<button class="btn small" data-act="bank-off">${st.bankId === myId ? 'Stop dealing' : 'Remove dealer'}</button>` : ''}</div>`;
+  const leaving = !!st.bankLeaving;
+  const mineBtn = st.bankId === myId ? `<button class="btn small ${leaving ? 'gold' : ''}" data-act="bank-off">${leaving ? 'Stopping after this round: keep dealing' : 'Stop dealing after this round'}</button>` : (isHost ? '<button class="btn small" data-act="bank-off">Remove dealer</button>' : '');
+  return `<div class="bank-bar${leaving ? ' leaving' : ''}"><b>Dealer: ${esc(b ? b.name : '?')}${st.bankId === myId ? ' (you)' : ''}${leaving ? ' (stopping after this round)' : ''}</b><span>Real chips. The ledger adds up to zero.</span>${mineBtn}</div>`;
 }
 export function bankLedgerHTML(st, myId) {
   const rows = [...st.players].sort((a, b) => b.net - a.net);

@@ -757,6 +757,23 @@ export class Table {
     this.ev(on ? 'sit out' : 'sit back in', clientId, `seat ${idx + 1}`);
   }
 
+  // "Leave after this round" (players) and "Stop dealing after this round" (the player who is the dealer).
+  // In a round it only marks the player, and pressing again (on = false) calls it off. The player leaves the
+  // seats when the round is over; the dealer leaves the dealer seat when the round is settled. Between rounds it happens at once.
+  leaveLater(clientId, on = true) {
+    const p = this.mustPlayer(clientId);
+    if (this.banker === clientId) {
+      if (!on) { if (this.bankerLeaving) { this.bankerLeaving = false; this.addLog(`${p.name} keeps dealing after all.`); } return; }
+      if (this.inRound()) { if (!this.bankerLeaving) { this.bankerLeaving = true; this.addLog(`${p.name} stops dealing after this round.`); } return; }
+      this.leaveDealer(clientId);
+      return;
+    }
+    if (!on) { if (p.leaving) { p.leaving = false; this.addLog(`${p.name} stays at the table after all.`); } return; }
+    const mine = this.seatsOf(clientId);
+    if (!mine.length) return;
+    if (this.inRound() && mine.some((i) => this.seats[i].hands.length)) { if (!p.leaving) { p.leaving = true; this.addLog(`${p.name} leaves after this round.`); } return; }
+    this.standUp(clientId);
+  }
   // A seated player agreed to sit out. Between rounds they leave now; in a round they leave when it ends.
   leaveAfter(clientId) {
     const p = this.mustPlayer(clientId);
@@ -1372,6 +1389,13 @@ export class Table {
     this.practiceRound = !this.banker;
     this.phase = 'settled';
     this.rabbit = true; // the next card can be shown until the first bet of the next round
+    if (this.bankerLeaving) {
+      // The dealer asked to stop after this round. A dealer who owes chips stays until they are covered.
+      this.bankerLeaving = false;
+      const b = this.players[this.banker];
+      if (b && b.chips < 0) this.addLog(`${b.name} owes chips and stays the dealer until they are covered.`);
+      else if (b && !this.pendingBanker) { this.banker = null; this.addLog(`${b.name} left the dealer seat.`); }
+    }
     if (this.pendingBanker) this.applyDealer(this.pendingBanker);
     if (this.pendingSettings) this.applySettings(this.pendingSettings);
     this.turn = null;
@@ -1469,8 +1493,9 @@ export class Table {
           hands: s.hands.map((h) => ({ ...h, ...handTotal(h.cards), blackjack: isBlackjack(h) })),
         };
       }),
-      players: Object.values(this.players).filter((p) => !p.kicked).map((p) => ({ id: p.id, name: p.name, look: p.look, chips: p.chips, seat: p.seat, seats: this.seatsOf(p.id), connected: p.connected, boughtIn: p.boughtIn || 0, totalIn: p.totalIn ?? this.settings.startChips, left: !!p.kicked })),
+      players: Object.values(this.players).filter((p) => !p.kicked).map((p) => ({ id: p.id, name: p.name, look: p.look, chips: p.chips, seat: p.seat, seats: this.seatsOf(p.id), connected: p.connected, leaving: !!p.leaving, boughtIn: p.boughtIn || 0, totalIn: p.totalIn ?? this.settings.startChips, left: !!p.kicked })),
       hostId: this.hostId || null,
+      bankerLeaving: !!this.bankerLeaving,
       count: !this.settings.countTraining ? null : {
         running: (this.runCount || 0) - (hide && hole ? hiLo(hole) : 0),
         decksLeft: (this.shoe.length + (hide && hole ? 1 : 0)) / 52,
@@ -1493,8 +1518,8 @@ export class Table {
 
   // Save and restore so the host can refresh the page without losing the table.
   toJSON() {
-    const { settings, seats, players, phase, dealer, turn, round, roundsSinceShuffle, log, shoe, shoeSize, banker, bankerNet, pendingBanker, buyIns, runCount, hostId, pendingSettings, frozen, fair, hist, evts, created, frozenSnap, shuffleNext } = this;
-    return { settings, seats, players, phase, dealer, turn, round, roundsSinceShuffle, log, shoe, shoeSize, banker, bankerNet, pendingBanker, buyIns, runCount, hostId, pendingSettings, frozen, fair, hist, evts, created, frozenSnap, shuffleNext };
+    const { settings, seats, players, phase, dealer, turn, round, roundsSinceShuffle, log, shoe, shoeSize, banker, bankerNet, pendingBanker, buyIns, runCount, hostId, pendingSettings, frozen, fair, hist, evts, created, frozenSnap, shuffleNext, bankerLeaving } = this;
+    return { settings, seats, players, phase, dealer, turn, round, roundsSinceShuffle, log, shoe, shoeSize, banker, bankerNet, pendingBanker, buyIns, runCount, hostId, pendingSettings, frozen, fair, hist, evts, created, frozenSnap, shuffleNext, bankerLeaving };
   }
   static fromJSON(obj) {
     const t = new Table(obj.settings);

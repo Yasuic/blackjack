@@ -1,7 +1,7 @@
 // Baccarat (punto banco) for up to 9 players against the house. Pure rules: the host's browser owns one
 // BacTable and every bet goes through it. Nothing here touches the page or the network.
-import { sha256, fairShoe, MAX_CHIPS } from './game.js?v=20261122k';
-import { isFrozen, bankJoin, setBank, clearBank, bankGone, bankSettle, ledgerNet, ledgerSum, bankAdopt } from './bank.js?v=20261122k';
+import { sha256, fairShoe, MAX_CHIPS } from './game.js?v=20261122l';
+import { isFrozen, bankJoin, setBank, clearBank, bankGone, bankSettle, ledgerNet, ledgerSum, bankAdopt } from './bank.js?v=20261122l';
 
 export const BAC_SEATS = 9;
 export const BAC_DEFAULTS = {
@@ -282,7 +282,7 @@ export class BacTable {
     this.phase = 'done';
     this.doneAt = Date.now();
   }
-  next() { if (this.phase !== 'done') return; this.phase = 'betting'; this.hand = null; this.pays = {}; this.betStart = null; }
+  next() { if (this.phase !== 'done') return; this.phase = 'betting'; this.hand = null; this.pays = {}; this.betStart = null;  if (this.bankLeaving) { this.bankLeaving = false; try { this.clearBank(this.bankId); } catch { this.bankLeaving = true; } } }
 
   // ---- what everyone is told (never the shoe, never a seed of a shoe still in play) ----
   publicState(forId) {
@@ -296,7 +296,7 @@ export class BacTable {
       betLeft: this.betStart !== null && this.settings.betTime ? Math.max(0, this.settings.betTime * 1000 - (Date.now() - this.betStart)) : null,
       cardsLeft: undefined, shoeNo: this.shoeNo,
       players: Object.values(this.players).filter((p) => !p.kicked).map((p) => ({ id: p.id, name: p.name, connected: p.connected, chips: p.chips, totalIn: p.totalIn, look: p.look, seat: p.seat, net: ledgerNet(this, p), base: this.base?.[p.id] || null })),
-      bankId: this.bankId, frozen: this.frozen, roundFrozen: !!this.roundFrozen, ledgerSum: this.ledgerSum(),
+      bankId: this.bankId, bankLeaving: !!this.bankLeaving, frozen: this.frozen, roundFrozen: !!this.roundFrozen, ledgerSum: this.ledgerSum(),
       fair: { nextCommit: this.fair.next.commit, mySeed: !!this.fair.seeds[forId], seeds: Object.keys(this.fair.seeds).filter((id) => id !== this.hostId).length,
         cur: this.cur ? { shoe: this.cur.shoe, commit: this.cur.commit, decks: this.cur.decks, dealt: this.cur.dealt.length - (this.full ? this.full.P.length + this.full.B.length : 0) } : null, // cards of a round still face down are not counted yet: the count would tell if a third card is coming
         past: this.past.map((r) => ({ shoe: r.shoe, commit: r.commit, serverSeed: r.serverSeed, clientSeeds: r.clientSeeds, decks: r.decks, dealt: r.dealt })) },

@@ -1,16 +1,16 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261122k';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122k';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122k';
-import { tickSound, winSound } from './fx.js?v=20261122k';
-import * as HX from './history.js?v=20261122k';
-import { webglOK, initRoom } from './room3d.js?v=20261122k';
-import { showDropped, watchOffice } from './common.js?v=20261122k';
-import { makeVault, makeOpener, cleanBox, cleanPiece } from './vault.js?v=20261122k';
-import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122k';
-import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122k';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261122l';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122l';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122l';
+import { tickSound, winSound } from './fx.js?v=20261122l';
+import * as HX from './history.js?v=20261122l';
+import { webglOK, initRoom } from './room3d.js?v=20261122l';
+import { showDropped, watchOffice } from './common.js?v=20261122l';
+import { makeVault, makeOpener, cleanBox, cleanPiece } from './vault.js?v=20261122l';
+import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122l';
+import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122l';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -601,6 +601,7 @@ function runAction(id, msg, onError) {
         break;
       }
       case 'leave-dealer': t.leaveDealer(id); break;
+      case 'leave-later': t.leaveLater(id, msg.on !== false); break;
       case 'dealer-max': t.setDealerMax(id, msg.amount, msg.side); break;
       case 'dealer-shuffle': t.dealerShuffle(id); break;
       case 'seed': t.setClientSeed(id, msg.seed); return; // nothing on the table changes, so no update is sent
@@ -2655,13 +2656,24 @@ function toggleVoicePanel(on = !$('#voice-panel')) {
   drawVoice();
 }
 
+// While a round is played: "Leave after this round" for a player with a hand, "Stop dealing after this round" for the dealer.
+// A second press calls it off.
+function leaveLaterHTML(st) {
+  if (!['insurance', 'playing', 'dealer'].includes(st.phase)) return '';
+  const me = st.players.find((p) => p.id === S.myId), isB = st.banker?.id === S.myId;
+  if (!me || (!isB && !(me.seats || []).some((i) => st.seats[i]?.hands?.length))) return '';
+  const on = isB ? !!st.bankerLeaving : !!me.leaving;
+  const text = isB ? (on ? '✋ Stopping: tap to keep dealing' : '✋ Stop dealing after this round') : (on ? '🚪 Leaving: tap to stay' : '🚪 Leave after this round');
+  return `<button class="chat-btn leave-later ${on ? 'on' : ''}" data-act="leave-later" data-on="${on ? 1 : 0}" title="${isB ? 'You stay the dealer until this round is paid, then the dealer seat is free.' : 'You play this round to the end, then your seats are free.'}">${text}</button>`;
+}
 function drawSitOut(st) {
   let el = $('#sitout-bar');
   if (el && !el.isConnected) el = null;
   if (!el) { el = document.createElement('div'); el.id = 'sitout-bar'; app.appendChild(el); }
   const h = st ? `<button class="chat-btn ${S.chatOpen ? 'on' : ''}" data-act="chat" title="Chat with everyone at the table">💬 Chat${S.chatUnread ? `<i>${S.chatUnread > 9 ? '9+' : S.chatUnread}</i>` : ''}</button>`
     + `<button class="chat-btn ${V.on ? 'on' : ''}" data-act="voice" title="Voice chat with the table">🎧 Voice${V.list.length ? ` (${V.list.length})` : ''}</button>`
-    + (V.on ? `<button class="chat-btn mic-btn ${V.mic ? 'live' : ''}" data-act="voice-mic" title="Turn your microphone on or off">${V.mic ? '🎤 Mic on' : '🔇 Mic off'}</button>` : '') : '';
+    + (V.on ? `<button class="chat-btn mic-btn ${V.mic ? 'live' : ''}" data-act="voice-mic" title="Turn your microphone on or off">${V.mic ? '🎤 Mic on' : '🔇 Mic off'}</button>` : '')
+    + leaveLaterHTML(st) : '';
   if (el.dataset.h !== h) { el.dataset.h = h; el.innerHTML = h; }
 }
 function autoBarHTML(st) {
@@ -3262,6 +3274,7 @@ function runAct(el) {
     case 'mute': setMuted(!isMuted()); el.textContent = isMuted() ? '🔇 Sound: off' : '🔊 Sound: on'; if (!isMuted()) chipSound(); break;
     case 'sit-dealer': send({ t: 'sit-dealer' }); break;
     case 'leave-dealer': send({ t: 'leave-dealer' }); break;
+    case 'leave-later': send({ t: 'leave-later', on: el.dataset.on !== '1' }); break;
     case 'd-shuffle': send({ t: 'dealer-shuffle' }); toast(st.phase === 'betting' || st.phase === 'settled' ? 'The shoe was shuffled.' : 'The shoe will be shuffled before the next hand.'); break;
     case 'dealer-max': {
       const v = Math.round(Number($('#dealer-max')?.value)), sv = Math.round(Number($('#dealer-max-side')?.value));

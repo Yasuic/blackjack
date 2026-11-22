@@ -1,15 +1,15 @@
 // The poker page: a Texas Hold'em table for up to 9 in the big meeting room. The host's browser runs
 // the table (js/poker.js); every other browser sends its moves there and is told only what it may see.
-import { PokerTable, POKER_SEATS, pokerDeck, cardText } from './poker.js?v=20261122k';
-import { sha256 } from './game.js?v=20261122k';
-import { botMove, isBot, BOT_NAMES } from './pokerbot.js?v=20261122k';
-import { chipSound, cardSound, hitSound, standSound, potSound, tickSound, turnSound, punchSound } from './fx.js?v=20261122k';
-import { webglOK, initRoom } from './room3d.js?v=20261122k';
-import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122k';
-import { showDropped, params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame } from './common.js?v=20261122k';
+import { PokerTable, POKER_SEATS, pokerDeck, cardText } from './poker.js?v=20261122l';
+import { sha256 } from './game.js?v=20261122l';
+import { botMove, isBot, BOT_NAMES } from './pokerbot.js?v=20261122l';
+import { chipSound, cardSound, hitSound, standSound, potSound, tickSound, turnSound, punchSound } from './fx.js?v=20261122l';
+import { webglOK, initRoom } from './room3d.js?v=20261122l';
+import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122l';
+import { showDropped, params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame } from './common.js?v=20261122l';
 
-import { shareHidden, startHold } from './vault.js?v=20261122k';
-import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261122k';
+import { shareHidden, startHold } from './vault.js?v=20261122l';
+import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261122l';
 const PREFIX = 'bjt-pk-';
 // A settings change by vote (js/vote.js): any player at the table may ask, every other player at the table who is online has to say yes.
 const VOTE = {
@@ -178,6 +178,7 @@ function doMove(id, m) {
     case 'sit': t.sit(id, Number(m.seat), m.buyIn); break;
     case 'move': t.moveSeat(id, Number(m.seat)); break;
     case 'stand': t.standUp(id); break;
+    case 'leave-later': t.leaveLater(id, m.on !== false); break;
     case 'act': if (t.waitCards) throw new Error('One moment: the table just moved to a new host.'); t.act(id, m.a, m.amount); break;
     case 'cards': t.giveCards(id, m.cards, m.salt); break;
     case 'away': t.sitOut(id, !!m.on); break;
@@ -917,6 +918,7 @@ function drawHud(st, mySeat, showing) {
     // Only what is used during play stays on screen (top left). Chips, the amount view and Leave seat are in the menu.
     h += `<div class="pk-mine">
       ${st.settings.straddle ? `<button class="btn small" data-act="straddle">Straddle: ${seat.straddle ? 'on' : 'off'}</button>` : ''}
+${(() => { const x = st.seats.find((x) => x && x.id === S.myId); return x && x.inHand && st.phase !== 'waiting' && st.phase !== 'done' ? `<button class="btn pk-leave-later ${x.leaving ? 'on' : ''}" data-act="leave-later" data-on="${x.leaving ? 1 : 0}" title="You play this hand to the end, then your seat is free.">${x.leaving ? '🚪 Leaving after this hand. Tap to stay' : '🚪 Leave after this hand'}</button>` : ''; })()}
       <button class="btn danger pk-leave" data-act="stand">🚪 Leave seat</button>
     </div>`;
   }
@@ -1125,6 +1127,7 @@ document.addEventListener('click', (e) => {
     case 'vaway': send({ t: 'vaway', id: el.dataset.id, on: el.dataset.on === '1' }); $('#modal').close(); break;
     case 'stand': closeMenu(); modal(`<h3>Leave your seat?</h3><p>${st.phase !== 'waiting' && st.phase !== 'done' && st.seats.find((x) => x && x.id === S.myId)?.inHand ? 'Your hand will be folded. ' : ''}You take your chips with you and can sit again later.</p><div class="row"><button class="btn" data-act="stand-no">Stay</button><button class="btn primary" data-act="stand-go">Leave seat</button></div>`); break;
     case 'stand-go': $('#modal').close(); send({ t: 'stand' }); break;
+    case 'leave-later': send({ t: 'leave-later', on: el.dataset.on !== '1' }); break;
     case 'stand-no': $('#modal').close(); break;
     case 'start': if (t) { S.started = true; S.paused = false; try { t.startHand(); } catch (er) { toast(er.message); } push(); } break;
     case 'hostrun': if (S.role !== 'host') break; if (S.started && !S.paused) { S.paused = true; toast('Stopped. The hand in play finishes, then no new hand is dealt.'); push(); } else if (t) { S.started = true; S.paused = false; if (!t.inHand()) { try { t.startHand(); S.doneAt = 0; } catch (er) { toast(er.message); } } push(); } break;

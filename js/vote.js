@@ -2,7 +2,7 @@
 // Any seated player may ask for a change. Every other seated player who is online has to say yes within
 // 30 seconds; one no, or no answer in time, leaves the settings as they are. A change that passes starts
 // between hands, never in the middle of one. The host's browser keeps the vote on the table object.
-import { esc } from './common.js?v=20261122k';
+import { esc } from './common.js?v=20261122l';
 
 export const VOTE_MS = 30000;
 

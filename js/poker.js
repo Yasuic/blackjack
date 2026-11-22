@@ -1,6 +1,6 @@
 // No-limit Texas Hold'em for up to 9 players. Pure rules: the host's browser owns one PokerTable and
 // every action goes through it. Nothing here touches the page or the network.
-import { SUITS, RANKS, sha256, fairSeed, fairShoe, MAX_CHIPS } from './game.js?v=20261122k';
+import { SUITS, RANKS, sha256, fairSeed, fairShoe, MAX_CHIPS } from './game.js?v=20261122l';
 
 export const POKER_SEATS = 9;
 export const POKER_DEFAULTS = {
@@ -184,6 +184,15 @@ export class PokerTable {
   inHand() { return this.phase !== 'waiting' && this.phase !== 'done'; }
   mustPlayer(id) { const p = this.players[id]; if (!p) throw new Error('Join the table first.'); return p; }
   seatOf(id) { return this.seats.findIndex((x) => x && x.id === id); }
+  // "Leave after this hand": a seated player plays the current hand to its end, then the seat frees (hand-end
+  // cleanup frees any seat with leaving set). Pressing again (on=false) cancels. Between hands it leaves at once.
+  leaveLater(id, on = true) {
+    const i = this.seatOf(id); if (i < 0) return;
+    const x = this.seats[i];
+    if (!on) { if (x.leaving) { x.leaving = false; this.addLog(`${this.name(i)} stays at the table.`); } return; }
+    if (this.inHand() && x.inHand) { if (!x.leaving) { x.leaving = true; this.addLog(`${this.name(i)} leaves after this hand.`); } return; }
+    this.standUp(id);
+  }
   name(i) { return this.players[this.seats[i].id]?.name || 'Player'; }
   chipsTotal() { return this.seats.reduce((a, x) => a + (x ? x.stack + x.bet : 0), 0) + this.pot; }
 
