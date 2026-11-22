@@ -1,11 +1,11 @@
 // The poker page: a Texas Hold'em table for up to 9 in the big meeting room. The host's browser runs
 // the table (js/poker.js); every other browser sends its moves there and is told only what it may see.
-import { PokerTable, POKER_SEATS, pokerDeck, cardText } from './poker.js?v=20261122a';
-import { sha256 } from './game.js?v=20261122a';
-import { botMove, isBot, BOT_NAMES } from './pokerbot.js?v=20261122a';
-import { chipSound, cardSound, hitSound, standSound, potSound, tickSound, turnSound } from './fx.js?v=20261122a';
-import { webglOK, initRoom } from './room3d.js?v=20261122a';
-import { params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame } from './common.js?v=20261122a';
+import { PokerTable, POKER_SEATS, pokerDeck, cardText } from './poker.js?v=20261122b';
+import { sha256 } from './game.js?v=20261122b';
+import { botMove, isBot, BOT_NAMES } from './pokerbot.js?v=20261122b';
+import { chipSound, cardSound, hitSound, standSound, potSound, tickSound, turnSound } from './fx.js?v=20261122b';
+import { webglOK, initRoom } from './room3d.js?v=20261122b';
+import { params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame } from './common.js?v=20261122b';
 
 const PREFIX = 'bjt-pk-';
 const app = $('#app');
@@ -78,7 +78,7 @@ function openHost(code) {
     },
   });
   clearInterval(S.clock);
-  S.clock = setInterval(hostClock, 400);
+  S.clock = setInterval(hostClock, 200);
 }
 // The cards and the secret word of this browser's own hand, kept so they survive a reload and a move of the table.
 function keepMine(st) {
@@ -199,7 +199,7 @@ function hostClock() {
   }
   if (t.inHand()) {
     S.doneAt = 0;
-    // The run it question waits 20 seconds for each step, then the board is dealt once.
+    // The run it question waits 10 seconds for each step, then the board is dealt once.
     if (t.runAsk && !t.runAsk.done) {
       // Computer players answer the run it question after a second: they deal once, and say yes to what a person asks.
       const a = t.runAsk;
@@ -210,12 +210,12 @@ function hostClock() {
           if (b !== undefined) { t.runAnswer(t.seats[b].id, true); push(); return; }
         } catch { /* the question was settled meanwhile */ }
       }
-      if (now - a.at > 20000) { t.runTimeout(); push(); }
+      if (now - a.at > RUN_ASK_MS) { t.runTimeout(); push(); }
       return;
     }
     if (t.turn !== null && isBot(t.seats[t.turn].id)) {
-      // A computer player's turn: it "thinks" for 0.6 to 1.4 seconds, then plays from its own cards and the board.
-      const id = t.seats[t.turn].id, think = 600 + ((t.handNo * 7 + t.turn * 13 + t.board.length * 5 + Math.round(t.currentBet)) % 9) * 100;
+      // A computer player's turn: it "thinks" for 0.9 to 1.7 seconds (after the beat, when it is first to act on a street), then plays from its own cards and the board.
+      const id = t.seats[t.turn].id, think = (t.seats.some((x) => x && x.acted) ? 0 : BEAT_MS) + 900 + ((t.handNo * 7 + t.turn * 13 + t.board.length * 5 + Math.round(t.currentBet)) % 9) * 100;
       if (now - (t.turnStarted || now) > think) {
         try { const m = botMove(t, id); if (m) t.act(id, m.a, m.amount); }
         catch { try { const o = t.options(id); t.act(id, o.canCheck ? 'check' : 'fold'); } catch { /* not its turn any more */ } }
@@ -264,9 +264,9 @@ function hostClock() {
   if (S.rabUntil && now < S.rabUntil) return;
   // Too few players for a new hand (away, or out of chips): once the result has been shown, the cards are
   // collected and the table waits. It deals again by itself as soon as two players can play.
-  if (t.phase === 'done' && !t.canStart() && now - S.doneAt >= 6000 + (r?.showdown ? 2500 : 0) + (r?.runout ? (r.runout.length + (r.boards ? r.boards.length : 1)) * stepMs() : 0)) { t.clearHand(); S.doneAt = 0; push(); return; }
+  if (t.phase === 'done' && !t.canStart() && now - S.doneAt >= endWait(r) + 1500) { t.clearHand(); S.doneAt = 0; push(); return; }
   if (!S.started || S.paused || !t.settings.autoStart || !t.canStart()) return;
-  const wait = t.phase === 'done' ? 4500 + (r?.showdown ? 2500 : 0) + (r?.runout ? (r.runout.length + (r.boards ? r.boards.length : 1)) * stepMs() : 0) : 800;
+  const wait = t.phase === 'done' ? endWait(r) : 800;
   if (now - (S.doneAt || 0) >= wait) { t.startHand(); S.doneAt = 0; push(); }
 }
 
@@ -404,11 +404,44 @@ function rankBadge(seat) {
   return `<div class="pk-rank flat t${tier}"><b>${icon} ${label || key}</b></div>`;
 }
 const RABBIT_MS = 1300; // a rabbit hunt turns one card every this many milliseconds
-const stepMs = () => Number(params.get('step')) || { fast: 1100, normal: 1900, long: 3200 }[(S.st || S.table)?.settings?.showSpeed] || 1100; // an all in board comes one step at a time, this many milliseconds apart
+const stepMs = () => Number(params.get('step')) || { fast: 2000, normal: 3000, long: 4000 }[(S.st || S.table)?.settings?.showSpeed] || 2000; // an all in board comes one street at a time, this many milliseconds apart
+// The pace of a hand, as measured on a PokerNow table: the bets stay in front of the players for a beat before
+// they go to the pot and the next card comes; at a showdown the cards turn first and the winner shows after;
+// the next hand is dealt 3 seconds after a result (6 or 9 on the slower settings).
+const BEAT_MS = Number(params.get('beat') ?? 800), SHOW_MS = 900, RUN_ASK_MS = 10000;
+const afterMs = () => ({ fast: 3000, normal: 6000, long: 9000 }[(S.st || S.table)?.settings?.showSpeed] || 3000);
+const endWait = (r) => BEAT_MS + (r?.runout ? (r.runout.length + (r.boards && !r.dbl ? r.boards.length : 1)) * stepMs() + afterMs() : r?.showdown ? SHOW_MS + afterMs() : 3000);
+// For the beat after a betting round, the screen shows the table as it was just before the bets were swept:
+// the state before, with each seat's bet, chips and fold as noted by the table (st.swept). No hidden card is in it.
+function beatView(real) {
+  // prevSt is the last state from before the newest sweep (the host redraws the same moment more than once).
+  if (S.curSt !== real) { if (!S.curSt || S.curSt.swept?.seq !== real.swept?.seq || S.curSt.handNo !== real.handNo) { S.prevSt = S.curSt; S.prevCards = S.curCards; } S.curSt = real; S.curCards = { board: [...(real.board || [])], board2: real.board2 ? [...real.board2] : null }; } // the host's state shares the table's own card lists, so they are copied
+  const sw = real.swept, base = S.prevSt;
+  if (sw && sw.seq !== S.beatSeq) {
+    const first = S.beatSeq === undefined;
+    S.beatSeq = sw.seq;
+    S.beat = null;
+    if (!first && BEAT_MS > 0 && base && base.handNo === real.handNo && sw.hand === real.handNo && base.phase !== 'done' && base.phase !== 'waiting' && base.seats.every((x, i) => !x === !real.seats[i] && (!x || x.id === real.seats[i].id))) {
+      const any = sw.seats.some((x) => x && x.bet > 0);
+      S.beat = { seq: sw.seq, until: Date.now() + (any ? BEAT_MS : Math.round(BEAT_MS * 0.55)), base, cards: S.prevCards || { board: base.board.slice(0, sw.board), board2: base.board2 ? base.board2.slice(0, sw.board) : null } };
+      setTimeout(render, S.beat.until - Date.now() + 25);
+    }
+  }
+  const b = S.beat;
+  if (!b || b.seq !== sw?.seq || Date.now() >= b.until) { S.beat = null; return real; }
+  return { ...b.base, board: b.cards.board.slice(0, sw.board), board2: b.cards.board2 ? b.cards.board2.slice(0, sw.board) : null, players: real.players, log: real.log, settings: real.settings, swept: sw, beat: true, pot: sw.pot, potTotal: sw.potTotal, turn: null, turnLeft: null, options: null, runAsk: null,
+    seats: b.base.seats.map((x, i) => (x && sw.seats[i] ? { ...x, ...sw.seats[i] } : x)) };
+}
 // Where an all in showdown is in its show: which cards are out, whose chances to print, and whether the winners are known yet.
 function runStage(st) {
   const ro = st.phase === 'done' && st.result?.runout ? st.result.runout : null;
-  if (!ro) return null;
+  if (!ro) {
+    // A plain showdown: the cards turn face up first, the winner and the chips show a moment later.
+    if (st.phase !== 'done' || !st.result?.showdown) return null;
+    if (S.shown?.hand !== st.handNo) { S.shown = { hand: st.handNo, t0: Date.now() }; setTimeout(render, SHOW_MS + 30); }
+    const final = Date.now() - S.shown.t0 >= SHOW_MS;
+    return { k: final ? 1 : 0, last: 1, final, n: 5, odds: null, boards: 99, plain: true };
+  }
   const R = st.result.boards && !st.result.dbl ? st.result.boards.length : 1, last = ro.length + R - 1;
   if (S.run?.hand !== st.handNo) {
     S.run = { hand: st.handNo, t0: Date.now() };
@@ -544,7 +577,7 @@ function playSounds(st) {
 function render() {
   const body = $('#pk-body');
   if (!body) return;
-  const st = S.st;
+  const st = S.st ? beatView(S.st) : S.st;
   if (!st) {
     body.innerHTML = `<div class="pk-wait pk-stand">${S.nohost ? (params.get('open') ? 'Opening the table…' : 'The poker table is not open yet. Waiting for the host…') : 'Joining the table…'}</div>`;
     $('#tray').innerHTML = ''; $('#hud-top').innerHTML = '';
@@ -623,7 +656,7 @@ function render() {
     if (showing && inH) {
       const o = stage.odds;
       if (o && o.pct[i] !== undefined) { bubble = `${o.pct[i]}%${o.outs[i] !== undefined ? ` · ${o.outs[i]} out${o.outs[i] === 1 ? '' : 's'}` : ''}`; bcls = 'odds'; }
-      else { bubble = 'All in'; bcls = 'allin'; }
+      else if (!stage.plain) { bubble = 'All in'; bcls = 'allin'; }
     }
     else if (done && winBy[i]) { bubble = `+${amt(winBy[i])}${!many && seat.hand ? ' · ' + esc(shortHand(seat.hand)) : ''}`; bcls = 'win'; }
     else if (seat.allIn && seat.inHand && !seat.folded && !done) { bubble = 'All in'; bcls = 'allin'; }
@@ -730,8 +763,9 @@ function drawHud(st, mySeat, showing) {
   else if (mySeat < 0) status = 'Tap an empty seat to join the game.';
   else if (o) status = 'Your turn';
   else if (live && st.turn !== null) status = ''; // whose turn it is shows as the light on their name
+  else if (st.beat) status = '';
   else if (st.runAsk) { const a = st.runAsk, nm = esc(st.seats[a.by]?.name || ''); status = !a.n ? (a.by === mySeat ? 'All in. How many times do you want to run it?' : `All in. ${nm} picks how many times to run it…`) : (a.need.includes(mySeat) && !a.yes.includes(mySeat) ? `${nm} asks to run it ${a.n} times. Do you agree?` : `Run it ${a.n} times? Waiting for ${esc(a.need.filter((q) => !a.yes.includes(q)).map((q) => st.seats[q]?.name || '').join(', '))}…`); }
-  else if (showing) status = 'All in. The cards are coming out…';
+  else if (showing) status = S.shown?.hand === st.handNo && !st.result?.runout ? 'Showdown' : 'All in. The cards are coming out…';
   else if (st.phase === 'done') status = st.result?.wins?.length ? st.result.wins.map((w) => `${esc(st.seats[w.seat]?.name || 'A player')} wins ${amt(w.amount)}${w.hand ? ' with ' + esc(shortHand(w.hand)) : ''}`).filter((x, i, a) => a.indexOf(x) === i).slice(0, 3).join(' · ') : 'Hand over';
   else status = st.canStart ? (isHost ? 'Press Start to deal the first hand.' : 'Waiting for the host to start.') : 'Two players with chips are needed to play.';
   const bounty = st.result?.bounty?.length ? ` · 7-2 bounty: ${st.result.bounty.map((b) => `${esc(st.seats[b.seat]?.name || '')} +${money(b.amount)}`).join(', ')}` : '';

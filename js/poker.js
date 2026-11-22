@@ -1,6 +1,6 @@
 // No-limit Texas Hold'em for up to 9 players. Pure rules: the host's browser owns one PokerTable and
 // every action goes through it. Nothing here touches the page or the network.
-import { SUITS, RANKS, sha256, fairSeed, fairShoe, MAX_CHIPS } from './game.js?v=20261122a';
+import { SUITS, RANKS, sha256, fairSeed, fairShoe, MAX_CHIPS } from './game.js?v=20261122b';
 
 export const POKER_SEATS = 9;
 export const POKER_DEFAULTS = {
@@ -470,7 +470,15 @@ export class PokerTable {
   }
 
   // ---- streets ----
-  collect() { for (const x of this.seats) if (x) { this.pot += x.bet; x.bet = 0; x.acted = false; } this.currentBet = 0; this.minRaise = this.settings.bigBlind; }
+  // Before the bets go to the pot, the table notes how it looked (swept): every screen shows that for a short
+  // beat, so the last call is seen before the next card or the showdown. Only public numbers are in it.
+  collect(street = false) {
+    if (street || this.seats.some((x) => x && x.bet > 0)) {
+      this.swept = { seq: (this.swept?.seq || 0) + 1, hand: this.handNo, board: this.board.length, pot: this.pot, potTotal: this.potTotal(),
+        seats: this.seats.map((x) => (x ? { bet: x.bet, stack: x.stack, total: x.total, folded: !!x.folded, allIn: !!x.allIn, acted: !!x.acted } : null)) };
+    }
+    for (const x of this.seats) if (x) { this.pot += x.bet; x.bet = 0; x.acted = false; } this.currentBet = 0; this.minRaise = this.settings.bigBlind;
+  }
   // Chips nobody matched go back before the next card, so the pot only holds called money.
   refundUncalled() {
     const bets = this.seats.map((x, i) => (x && x.inHand ? [x.bet, i] : null)).filter(Boolean).sort((a, b) => b[0] - a[0]);
@@ -483,7 +491,7 @@ export class PokerTable {
   }
   endStreet() {
     this.refundUncalled();
-    this.collect();
+    this.collect(true);
     const live = this.liveSeats();
 
     if (live.length <= 1) { this.finishHand(); return; }
@@ -830,7 +838,7 @@ export class PokerTable {
     const me = this.seatOf(forId);
     return {
       game: 'poker', settings: this.settings, phase: this.phase, handNo: this.handNo, button: this.button, board: this.board, board2: this.dbl ? this.board2 || [] : null, plo: !!this.plo, dbl: !!this.dbl, rabbit2: this.rabbit2 || null, bomb: !!this.bomb,
-      pot: this.pot, minRaise: this.minRaise, pending: this.pending, moved: this.moved || 0, mySalt: me >= 0 ? this.seats[me].salt || null : null, wait: this.waitCards ? this.missingCards().map((i) => this.name(i)) : undefined, potTotal: this.potTotal(), pots: this.inHand() || done ? this.potsNow() : [], currentBet: this.currentBet, turn: this.turn,
+      pot: this.pot, minRaise: this.minRaise, pending: this.pending, moved: this.moved || 0, mySalt: me >= 0 ? this.seats[me].salt || null : null, wait: this.waitCards ? this.missingCards().map((i) => this.name(i)) : undefined, potTotal: this.potTotal(), swept: this.swept || null, pots: this.inHand() || done ? this.potsNow() : [], currentBet: this.currentBet, turn: this.turn,
       turnLeft: this.turn !== null && this.settings.turnTimer ? Math.max(0, this.settings.turnTimer * 1000 - (Date.now() - (this.turnStarted || Date.now()))) : null,
       hostId: this.hostId, awayVotes: this.awayVotes || {}, canStart: this.canStart(), bombNext: this.bombNext, result: this.result, rabbit: this.rabbit, allInRun: !!this.allInRun && !done ? true : undefined,
       runAsk: this.runAsk && !this.runAsk.done ? { by: this.runAsk.by, max: this.runAsk.max, n: this.runAsk.n, yes: this.runAsk.yes, need: this.runAsk.need, left: Math.max(0, 20000 - (Date.now() - this.runAsk.at)) } : undefined,
