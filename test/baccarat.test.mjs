@@ -1,4 +1,6 @@
-import { BacTable, bacRound, bacPay, bacTotal, verifyShoe, cardText } from '../js/baccarat.js';
+import { BacTable, bacRound, bacPay, bacTotal, bacNext, verifyShoe, cardText } from '../js/baccarat.js';
+import { KeyGuard, mixKeys, keyFor, pickIndex } from '../js/cardkeys.js';
+import { replayShoe } from '../js/game.js';
 BacTable.noPeel = true; // the older checks below deal and pay in one step; the peel is checked at the end
 let fails = 0, n = 0;
 const ok = (c, m) => { n++; if (!c) { fails++; console.log('FAIL', m); } };
@@ -155,6 +157,107 @@ for (let bt = 0; bt <= 7; bt++) for (let v = 0; v <= 9; v++) {
   }
   ok(bad === 0 && paid > 100 && kept > 100 && minePeel > 50 && sums === paid, `a host move mid round keeps bets and turned cards and pays the round (${paid} rounds, ${kept} turned cards kept, ${minePeel} peeled cards kept, ${bad} wrong)`);
   BacTable.noPeel = true;
+}
+
+{ // Card keys (js/cardkeys.js): the guest's browser gives keys only for the next cards, at most two past the cards dealt
+  const g = new KeyGuard('secretA'), view = (cards, open = true, shoe = 1, host = 'h') => ({ cards, open, shoe, host });
+  ok(g.serve({ from: 1, count: 2 }, view(0, false)).alarm && g.out.length === 0, 'no keys while the bets are open');
+  ok(g.serve({ from: 1, count: 3 }, view(0)).alarm, 'more than two keys at once is refused');
+  ok(g.serve({ from: 2, count: 1 }, view(0)).alarm, 'a key past the next card is refused');
+  ok(g.serve({ from: 13, count: 2 }, view(10)).alarm, 'card 13 while card 11 is next is refused');
+  ok(g.serve({ from: 0, count: 1 }, view(0)).alarm && g.serve({ from: 1, count: 0 }, view(0)).alarm && g.serve({ from: 'x', count: 1 }, view(0)).alarm, 'bad requests are refused');
+  const a = g.serve({ from: 1, count: 2 }, view(0), 1000);
+  ok(!a.alarm && a.keys.length === 2 && a.keys[0] === keyFor('secretA', 1) && a.keys[1] === keyFor('secretA', 2), 'the next two cards get their keys');
+  ok(g.serve({ from: 3, count: 2 }, view(0), 1000).alarm, 'the 2 card window: keys for cards 3 and 4 before cards 1 and 2 are dealt are refused');
+  ok(!g.serve({ from: 1, count: 2 }, view(0), 1000).alarm, 'asking again for the same cards gives the same keys and nothing new');
+  ok(g.check(view(0), 5000) === null && g.out.length === 2, 'no alarm before 5 seconds');
+  ok(/without dealing/.test(g.check(view(1), 6100) || '') && g.out.length === 0, 'alarm: a key not used for a dealt card within 5 seconds');
+  const b = new KeyGuard('secretA');
+  b.serve({ from: 1, count: 2 }, view(0), 0);
+  ok(b.check(view(2), 6000) === null, 'no alarm when every key was used');
+  b.serve({ from: 3, count: 2 }, view(2), 0);
+  ok(b.check(view(0, true, 2), 6000) === null, 'a new shoe has nothing to compare');
+  b.serve({ from: 5, count: 1 }, view(4), 0);
+  ok(b.check(view(4, true, 1, 'other'), 6000) === null, 'a new host has nothing to compare');
+  ok(new KeyGuard('secretB').serve({ from: 1, count: 1 }, view(0)).keys[0] !== a.keys[0], 'another secret gives other keys');
+  ok(pickIndex('s', 'n', 3, 400) === pickIndex('s', 'n', 3, 400) && mixKeys({ x: ['a'], y: ['b'] }, 1)[0] !== mixKeys({ x: ['a'] }, 1)[0], 'keys mix from every guest');
+}
+{ // A keyed table: rounds go to a real result with the guests' keys, the host never draws a card before its key is here
+  BacTable.noPeel = false;
+  const t = new BacTable({ startChips: 1e6, maxBet: 1000 });
+  t.keyed = true;
+  for (const id of ['h', 'g1', 'g2']) t.join(id, id);
+  const guards = { g1: new KeyGuard('s1'), g2: new KeyGuard('s2') };
+  let alarms = 0, notDone = 0, wrongRule = 0, early = 0, needs = '', reqs = 0, peekBets = 0, now = 0, cardsSeen = 0;
+  for (let r = 0; r < 400; r++) {
+    t.bet('g1', 'player', 10 + (r % 7)); t.bet('g2', 'banker', 20); if (r % 3 === 0) t.bet('h', 'tie', 5);
+    // asking for keys while bets are open is refused
+    if (r === 0) { const st = t.publicState('g1'); peekBets = guards.g1.serve({ from: t.kc + 1, count: 2 }, { cards: st.fair.cards, open: st.phase === 'peel' && !st.halted, shoe: st.fair.cur?.shoe, host: st.hostId }).alarm ? 1 : 0; }
+    const sum0 = t.ledgerSum();
+    t.deal();
+    if (t.full.P.length + t.full.B.length !== 0) early++; // nothing is drawn before the keys come
+    let guard = 0;
+    while (t.phase === 'peel' && guard++ < 60) {
+      const need = t.need();
+      if (need) {
+        if (r < 3) needs += need;
+        const parts = {};
+        for (const id of ['g1', 'g2']) {
+          const st = t.publicState(id);
+          const res = guards[id].serve({ from: t.kc + 1, count: need }, { cards: st.fair.cards, open: st.phase === 'peel' && !st.halted, shoe: st.fair.cur?.shoe, host: st.hostId }, now);
+          if (res.alarm) alarms++;
+          parts[id] = res.keys;
+        }
+        reqs++;
+        t.keys = mixKeys(parts, need); t.more(); t.keys = null;
+        if (t.phase === 'peel' && t.peel.stage === 1 && t.full.P.length + t.full.B.length >= 4 && t.publicState('g1').hand.P.length !== 2) early++; // the third card is not on the table before the first four are turned
+        continue;
+      }
+      now += 100;
+      for (const k of t.peelKeys()) if (!t.peel.open[k]) { if (t.peel.who[k[0]]) t.openCard(t.peel.who[k[0]], k); else { t.peel.open[k] = true; t.peelAdvance(); } break; }
+    }
+    if (t.phase !== 'done') { notDone++; break; }
+    cardsSeen += t.hand.P.length + t.hand.B.length;
+    // the third card rule: the same cards in deal order give the same round
+    const order = []; { const P = [], B = []; for (let s = bacNext(P, B); s; s = bacNext(P, B)) { const c = (s === 'P' ? t.hand.P : t.hand.B)[(s === 'P' ? P : B).length]; (s === 'P' ? P : B).push(c); order.push(c); } }
+    const again = bacRound(() => order.shift());
+    if (again.winner !== t.hand.winner || again.P.length !== t.hand.P.length || again.B.length !== t.hand.B.length || t.ledgerSum() !== sum0) wrongRule++;
+    for (const id of ['g1', 'g2']) { const st = t.publicState(id); if (guards[id].check({ cards: st.fair.cards, shoe: st.fair.cur?.shoe, host: st.hostId }, now + 6000)) alarms++; }
+    t.next();
+  }
+  ok(peekBets === 1, 'a host asking for keys before the deal is refused');
+  ok(alarms === 0 && notDone === 0 && wrongRule === 0 && early === 0, `rounds with guest keys: no alarm, every round ends, the third card rule holds, zero sum (${alarms} alarms, ${notDone} stuck, ${wrongRule} wrong, ${early} early)`);
+  ok(needs.startsWith('22'), 'the first four cards come two by two: ' + needs);
+  ok(t.past.length > 0 && t.past.every((s) => verifyShoe(s).ok && s.draws.length === s.dealt.length), 'finished keyed shoes check against their seeds and keys: ' + t.past.length);
+  ok(t.past.every((s) => replayShoe({ decks: s.decks, serverSeed: s.serverSeed, clientSeeds: s.clientSeeds, draws: s.draws }).map(cardText).join() === s.dealt.map(cardText).join()), 'the same pick as blackjack (game.js replayShoe)');
+  const bad = { ...t.past[0], draws: ['x', ...t.past[0].draws.slice(1)] };
+  ok(!verifyShoe(bad).ok, 'a changed key fails the check');
+  ok(!JSON.stringify(t.publicState('g1')).includes(t.cur.serverSeed) && !('draws' in t.publicState('g1').fair.cur), 'the seed and keys of the shoe in play are not told');
+  // the next card depends on the key: the host holding the shoe cannot tell it
+  { const left = t.shoe.length, k = t.cur.draws.length + 1; const set = new Set(); for (let i = 0; i < 20; i++) { const c = t.shoe[pickIndex(t.cur.serverSeed, keyFor('guest' + i, t.kc + 1), k, left)]; set.add(cardText(c)); } ok(set.size > 5, 'different keys give different next cards: ' + set.size); }
+  // halted: no deal, no card drawn; resume goes on
+  t.bet('g1', 'player', 10); t.deal(); t.halt();
+  let thr = false; ok(t.need() === 0 && t.publicState('g1').halted, 'a breached table draws no card');
+  t.resume(); ok(t.need() === 2, 'after Resume the round goes on');
+  t.keys = null; t.more(); t.more(); for (let i = 0; i < 20 && t.phase === 'peel'; i++) { for (const k of t.peelKeys()) t.peel.open[k] = true; t.peelAdvance(); if (t.need()) t.more(); }
+  ok(t.phase === 'done', 'the round ends'); t.next();
+  t.halt(); t.bet('g1', 'player', 10); try { t.deal(); } catch { thr = true; } ok(thr && t.phase === 'betting', 'no round starts while paused'); t.resume();
+  // a host move in the middle of the deal: the hidden copy and the public state both carry on to a result
+  t.deal(); t.keys = mixKeys({ g1: guards.g1.serve({ from: t.kc + 1, count: 2 }, { cards: t.kc, open: true, shoe: t.cur.shoe, host: 'h' }).keys }, 2); t.more(); t.keys = null;
+  const hid = BacTable.fromHidden(JSON.parse(t.hidden()), t.publicState('g1'), 'g1');
+  ok(hid.keyed && hid.need() === 2 && hid.full.P.length === 1, 'the hidden copy goes on with the same two cards out');
+  const pub = BacTable.fromPublic(JSON.parse(JSON.stringify(t.publicState('g2'))), 'g2', true);
+  ok(pub.phase === 'peel' && pub.need() === 2 && pub.full.P.length === 1 && pub.bets.g1?.player === 10, 'the public copy goes on with the bets');
+  for (const m of [hid, pub]) { for (let i = 0; i < 30 && m.phase === 'peel'; i++) { if (m.need()) m.more(); else { for (const k of m.peelKeys()) m.peel.open[k] = true; m.peelAdvance(); } } }
+  ok(hid.phase === 'done' && pub.phase === 'done' && hid.pays.g1 && pub.pays.g1, 'both moved tables pay the round');
+  BacTable.noPeel = true;
+}
+{ // Nobody else at the table: the host's browser makes each key as it draws
+  const t = new BacTable(); t.join('h', 'H'); t.keyed = true;
+  for (let r = 0; r < 50; r++) { t.bet('h', 'banker', 5); t.deal(); for (let i = 0; i < 30 && t.phase === 'peel'; i++) { if (t.need()) t.more(); else { for (const k of t.peelKeys()) t.peel.open[k] = true; t.peelAdvance(); } } if (t.phase !== 'done') break; t.next(); }
+  ok(t.phase === 'betting' && t.round === 50 && t.cur.draws.every((d) => /^[0-9a-f]{16}$/.test(d)), 'with no guests the host makes the keys and every round ends');
+  const u = new BacTable(); u.join('h', 'H'); u.bet('h', 'player', 5); u.deal();
+  ok(u.phase === 'done' && u.cur.draws.length === u.cur.dealt.length, 'a table without the page draws every card at once');
 }
 console.log(`${n - fails}/${n} baccarat checks passed`);
 process.exit(fails ? 1 : 0);

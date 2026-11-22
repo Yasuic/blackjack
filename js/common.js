@@ -1,8 +1,8 @@
 // Shared by the poker and baccarat pages: small helpers, the playing card picture, the game switch at the
 // top left, and the link between the host's browser and the players' browsers.
-import { openTable } from './shell.js?v=20261122zd';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122zd';
-import { cleanBox, cleanPiece } from './vault.js?v=20261122zd';
+import { openTable } from './shell.js?v=20261122ze';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122ze';
+import { cleanBox, cleanPiece } from './vault.js?v=20261122ze';
 export const params = new URLSearchParams(location.search);
 export const $ = (sel, el = document) => el.querySelector(sel);
 export function safeGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
@@ -286,6 +286,24 @@ export function showDropped(on, text = 'Your moves are not being sent. Trying to
   let btn = el.querySelector('.conn-drop-host');
   if (onHost && !btn) { btn = document.createElement('button'); btn.className = 'btn small conn-drop-host'; btn.textContent = '👑 Become host'; el.querySelector('.conn-drop-box').appendChild(btn); }
   if (btn) { btn.hidden = !onHost; btn.onclick = onHost ? (e) => { e.stopPropagation(); onHost(); } : null; }
+  const bar = document.querySelector('.topbar');
+  el.style.top = (bar ? Math.max(0, Math.round(bar.getBoundingClientRect().bottom)) : 0) + 'px';
+}
+
+// ---------- "Network security breached" ----------
+// A guest's browser saw card keys asked for out of turn, or taken and not used for a dealt card (js/cardkeys.js).
+// The game pauses: a notice over the table for everyone, and Resume game for the host. The same look as blackjack.
+export function breachCover(on, isHost, onResume) {
+  let el = document.getElementById('breach-cover');
+  if (!on) { el?.remove(); return; }
+  if (!el) {
+    el = document.createElement('div'); el.id = 'breach-cover'; el.setAttribute('role', 'alert');
+    el.innerHTML = '<div class="breach-box"><b>Network security breached</b><span>The game is paused.</span><button class="btn gold" data-act="h-resume" hidden>Resume game</button></div>';
+    document.body.appendChild(el);
+  }
+  const btn = el.querySelector('[data-act=h-resume]');
+  btn.hidden = !isHost;
+  btn.onclick = (e) => { e.stopPropagation(); onResume?.(); };
   const bar = document.querySelector('.topbar');
   el.style.top = (bar ? Math.max(0, Math.round(bar.getBoundingClientRect().bottom)) : 0) + 'px';
 }

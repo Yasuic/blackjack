@@ -1,13 +1,14 @@
 // The baccarat page: a punto banco table for up to 9 in the small meeting room. The host's browser runs
 // the table (js/baccarat.js); every other browser sends its bets there and is told only what it may see.
-import { outerLink } from './shell.js?v=20261122zd';
-import { BacTable, BAC_SEATS, BAC_SPOTS, BAC_KEYS, verifyShoe, cardText } from './baccarat.js?v=20261122zd';
-import { webglOK, initRoom } from './room3d.js?v=20261122zd';
-import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122zd';
-import { showDropped, onOfficeBack, officeView, params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML } from './common.js?v=20261122zd';
+import { outerLink } from './shell.js?v=20261122ze';
+import { BacTable, BAC_SEATS, BAC_SPOTS, BAC_KEYS, verifyShoe, cardText } from './baccarat.js?v=20261122ze';
+import { webglOK, initRoom } from './room3d.js?v=20261122ze';
+import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122ze';
+import { showDropped, onOfficeBack, officeView, params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML, breachCover } from './common.js?v=20261122ze';
+import { KeyGuard, mixKeys, newNonce } from './cardkeys.js?v=20261122ze';
 
-import { shareHidden, startHold } from './vault.js?v=20261122zd';
-import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261122zd';
+import { shareHidden, startHold } from './vault.js?v=20261122ze';
+import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261122ze';
 const PREFIX = 'bjt-bc-';
 // A settings change by vote (js/vote.js): any player at the table may ask, every other player at the table who is online has to say yes.
 const VOTE = {
@@ -99,6 +100,10 @@ function hostMsg(id, m) {
   const t = S.table;
   if (!t) return;
   if (m.t === 'host-ask') { handOver(id); return; }
+  if (m.t === 'keys') { S.keyWait?.[m.rid]?.(m.keys, id); return; }
+  // A guest's browser found card keys asked for out of turn, or taken and not used for dealt cards: the game pauses for everyone.
+  if (m.t === 'breach') { if (t.players[id] && !t.players[id].kicked) { t.halt(); push(); } return; }
+  if (m.t === 'hello' && S.keyDropped) delete S.keyDropped[id];
   try {
     if (m.t === 'hello') { if (t.players[id]?.kicked) { S.net.send(id, { t: 'kicked' }); return; } t.join(id, m.name, m.look); if (m.carry && typeof m.carry === 'object') { try { t.carryIn(id, m.carry.amount, m.carry.from, m.carry.cid); } catch { /* fine */ } } }
     else if (!t.players[id] || t.players[id].kicked) return;
@@ -159,6 +164,7 @@ function showFx(fromId, e) {
 function push() {
   const t = S.table;
   if (!t) return;
+  t.keyed = true; // cards are drawn only when their keys are here (feed below)
   for (const id of S.net.ids()) S.net.send(id, { t: 'state', st: { ...t.publicState(id), vote: voteView(t, VOTE, id) } });
   // The shoe and the cards nobody has seen go along locked, so the same shoe goes on if this browser leaves.
   shareHidden(S, S.net, Object.values(t.players).filter((p) => p.id !== S.myId && p.seat >= 0 && p.connected && !p.kicked).map((p) => p.id), t.hidden());
@@ -166,6 +172,104 @@ function push() {
   S.at = Date.now();
   try { safeSet('bc-host', JSON.stringify({ code: S.code, table: { ...t, log: t.log.slice(-60) } })); } catch {}
   render();
+  feed();
+}
+
+// ---------- Keys for the cards (js/cardkeys.js) ----------
+// The shoe order is set at the shuffle, but which card comes out as card number k is picked with key k, and the
+// keys are made in the guests' browsers from a secret that never leaves them. To draw cards the host's browser asks
+// the guests for the keys of exactly the cards the round takes next (BacTable.need), and only after the bets are
+// locked and everyone was told so (push above runs before every ask, and the link keeps messages in order).
+// Every guest at the table holds a part of each key, so opening a card early would need all of them to help.
+function keyHolders() {
+  const t = S.table;
+  return S.net.ids().filter((id) => id !== S.myId && t.players[id] && !t.players[id].kicked && !S.keyDropped?.[id]);
+}
+function getKeys(need) {
+  const local = () => Array.from({ length: need }, newNonce);
+  const holders = keyHolders();
+  if (!holders.length) return Promise.resolve(local()); // nobody else is at the table: this browser makes the keys as it draws
+  return new Promise((res) => {
+    const rid = newNonce(), parts = {};
+    S.keyWait ||= {};
+    const finish = () => {
+      clearTimeout(timer); delete S.keyWait[rid];
+      // A guest who did not answer in time is left out until it comes back to the table.
+      for (const id of holders) if (!parts[id]) (S.keyDropped ||= {})[id] = true;
+      res(Object.keys(parts).length ? mixKeys(parts, need) : local());
+    };
+    const timer = setTimeout(finish, 1500);
+    S.keyWait[rid] = (keys, from) => {
+      if (!holders.includes(from) || parts[from]) return;
+      parts[from] = (Array.isArray(keys) ? keys : []).slice(0, need);
+      if (holders.every((id) => parts[id])) finish();
+    };
+    const msg = { t: 'key-req', rid, from: S.table.kc + 1, count: need };
+    for (const id of holders) S.net.send(id, msg);
+  });
+}
+// One ask at a time: when the round needs cards, ask for their keys, draw them, tell everyone, and look again.
+function feed() {
+  const t = S.table;
+  if (!t || S.keyBusy || S.hold || S.role !== 'host' || !t.need()) return;
+  S.keyBusy = true;
+  const need = t.need();
+  getKeys(need).then((keys) => {
+    if (S.table !== t) return;
+    t.keys = keys;
+    try { t.more(); } finally { t.keys = null; }
+  }).catch(() => {}).finally(() => { S.keyBusy = false; if (S.table === t) push(); });
+}
+
+// ---------- The guest's side of the keys ----------
+// This browser gives keys only for the next cards, at most two past the cards already dealt, only while the bets are
+// locked, and checks 5 seconds later that every key was used for a card the table really dealt. It also checks that
+// no bet changed after it gave keys for a round. Anything else stops the game for everyone.
+const keyView = (st) => st && { cards: Number(st.fair?.cards) || 0, open: st.phase === 'peel' && !st.halted, shoe: st.fair?.cur?.shoe, host: st.hostId };
+function keyGuard() {
+  if (S.guard) return S.guard;
+  let sec = null;
+  try { sec = sessionStorage.getItem('bc-key-' + S.code); } catch {}
+  if (!sec) { sec = newNonce() + newNonce(); try { sessionStorage.setItem('bc-key-' + S.code, sec); } catch {} }
+  return (S.guard = new KeyGuard(sec));
+}
+// The bets of the round in play, as one line of text: the same before and after the cards come out.
+function betSig(st) {
+  let src = null;
+  if (st.phase === 'peel') src = st.bets || {};
+  else if (st.phase === 'done') { src = {}; for (const [id, pay] of Object.entries(st.pays || {})) if (pay && !pay.bank) src[id] = st.lastBets?.[id] || {}; }
+  if (!src) return null;
+  return Object.keys(src).sort().map((id) => { const b = src[id] || {}; return BAC_KEYS.some((k) => b[k]) ? id + ':' + BAC_KEYS.map((k) => b[k] || 0).join(',') : ''; }).filter(Boolean).join(' ');
+}
+function keyAlarm(text) {
+  console.warn('[fair] ' + text);
+  S.alert = 'Network security breached.';
+  S.net?.send({ t: 'breach' });
+  render();
+}
+function serveKeys(m) {
+  const st = S.st, g = keyGuard(), r = g.serve(m, keyView(st));
+  if (r.alarm) keyAlarm(r.alarm);
+  else {
+    if (!S.lock || S.lock.round !== st.round || S.lock.host !== st.hostId) S.lock = { round: st.round, host: st.hostId, sig: betSig(st) };
+    setTimeout(lateCheck, g.wait + 50);
+  }
+  return r.keys;
+}
+// Every key given out has to be used by now. While this browser has no link to the table it looks again later.
+function lateCheck(tries = 0) {
+  if (S.role !== 'guest') return;
+  if (S.conn && S.conn[1] === false && tries < 30) { setTimeout(() => lateCheck(tries + 1), 2000); return; }
+  if (S.st?.halted) { if (S.guard) S.guard.out = []; return; } // already paused: the host has to resume first
+  const alarm = S.guard?.check(keyView(S.st));
+  if (alarm) keyAlarm(alarm);
+}
+function lockCheck(st) {
+  const L = S.lock;
+  if (!L || st.hostId !== L.host || st.round !== L.round) { if (L && st.round > L.round) S.lock = null; return; }
+  const sig = betSig(st);
+  if (sig !== null && sig !== L.sig) { S.lock = null; keyAlarm('A bet changed after the cards of the round were dealt.'); }
+  if (st.phase === 'done') S.lock = null;
 }
 // How long a finished round stays on screen: the cards come out one by one, then the result is shown.
 const showMs = () => 4500; // every card is already face up when a round is done: the result stays this long
@@ -176,7 +280,7 @@ function hostClock() {
   const now = Date.now();
   if (S.pendingSettings && t.phase === 'betting' && !t.canDeal()) { t.updateSettings(S.pendingSettings); S.pendingSettings = null; push(); }
   if (t.phase === 'betting') {
-    if (!S.paused && t.settings.betTime && t.betStart !== null && now - t.betStart >= t.settings.betTime * 1000 && t.canDeal()) { t.deal(); push(); }
+    if (!S.paused && !t.halted && t.settings.betTime && t.betStart !== null && now - t.betStart >= t.settings.betTime * 1000 && t.canDeal()) { t.deal(); push(); }
   } else if (t.phase === 'peel') { if (t.peelTick(now)) push(); }
   else if (now - (t.doneAt || 0) >= showMs(t.hand)) { t.next(); push(); }
 }
@@ -191,8 +295,9 @@ function startGuest(code, again) {
       if (m.t === 'state') {
         clearTimeout(S.takeT); S.takeT = null;
         if (S.st && m.st.hostId !== S.st.hostId) toast(`The table now runs in ${m.st.players.find((p) => p.id === m.st.hostId)?.name || 'another player'}'s browser.`);
-        S.st = m.st; S.at = Date.now(); S.nohost = false; render(); sendSeed();
+        S.st = m.st; S.at = Date.now(); S.nohost = false; lockCheck(m.st); render(); sendSeed();
       }
+      else if (m.t === 'key-req') S.net.send({ t: 'keys', rid: m.rid, keys: serveKeys(m) });
       else if (m.t === 'err') toast(m.msg);
       else if (m.t === 'cashed') gotCashed(m);
       else if (m.t === 'host-give') takeGiven(m);
@@ -267,7 +372,7 @@ function takeOver() {
     let t = null;
     try { if (text) t = BacTable.fromHidden(JSON.parse(text), st, S.myId); } catch { t = null; }
     const same = !!t;
-    if (!t) t = BacTable.fromPublic(st, S.myId);
+    if (!t) t = BacTable.fromPublic(st, S.myId, true);
     t.join(S.myId, S.name, getLook());
     for (const [id, m] of Object.entries(hold?.hellos || {})) { try { t.join(id, m.name, m.look); if (m.carry && typeof m.carry === 'object') t.carryIn(id, m.carry.amount, m.carry.from, m.carry.cid); } catch {} }
     t.addLog(`${oldName}'s browser left. The table now runs in ${S.name}'s browser. Chips and bets are kept, ${same ? 'and the same shoe goes on, card for card' : hold ? 'but too few players came back to open the old shoe, so a new shoe is shuffled' : 'and a new shoe is shuffled'}.`);
@@ -573,7 +678,7 @@ function drawHud(st, me, sg) {
     <span class="bc-bal">Chips <b>${money(me ? shownChips(st, me, sg?.final) : 0)}</b>${staked ? `<i> · bet <b>${money(staked)}</b></i>` : ''}</span>
     <button class="btn small" data-act="clear"${done || !staked ? ' disabled' : ''}>Clear</button>
     <button class="btn small" data-act="rebet"${done || staked || !st.lastBets[S.myId] ? ' disabled' : ''}>Rebet</button>
-    ${isHost ? `<button class="btn small primary" data-act="deal"${st.canDeal && !done ? '' : ' disabled'}>Deal<span> now</span></button>` : ''}
+    ${isHost ? `<button class="btn small primary" data-act="deal"${st.canDeal && !done && !st.halted ? '' : ' disabled'}>Deal<span> now</span></button>` : ''}
     <button class="btn small" data-act="add">🪙<span> Chips</span></button>
     <button class="btn small" data-act="react">😀</button>
     <button class="btn small danger" data-act="leave">🚪<span> Leave</span></button>
@@ -629,9 +734,14 @@ function fairHTML(st) {
     <p>Before a shoe is shuffled the host's browser locks in a hidden seed and shows its code (a fingerprint of the seed). Then each player's browser adds a seed of its own. The order of all cards in the shoe comes from these together, so nobody can choose it, the host included.</p>
     <p>${f.cur ? `Shoe ${f.cur.shoe} is in play: code <code>${esc(f.cur.commit.slice(0, 16))}…</code>, ${f.cur.dealt} cards dealt so far.` : 'No shoe has been shuffled yet.'}</p>
     <p>Code for the next shoe: <code>${esc(f.nextCommit.slice(0, 16))}…</code> · player seeds received: ${f.seeds}</p>
-    <p>When a shoe is finished its seed opens, and your browser shuffles it again and compares every card that was dealt.</p>
-    <table class="pk-table"><tr><th>Shoe</th><th>Code</th><th>Dealt</th><th>Check</th></tr>${rows || '<tr><td colspan="4">No finished shoe yet.</td></tr>'}</table>
-    <p class="hint">Limit: the host's browser holds the shoe, so a host who opens the browser's developer tools could read the coming cards. Play with a host you trust.</p></div>`;
+    <details class="fair-how"><summary>How nobody sees the next cards</summary>
+    <p>Each card needs two things to come out: the host's hidden seed and a key from the guests' browsers. Only a guest's browser can make the key, and it is different for every card. So the host's browser holds the shoe but cannot tell which card comes next, and a guest cannot read a card without the host's seed.</p>
+    <p>A guest's browser gives keys only once the bets are locked, only for the next cards of the round, at most two at a time. It never gives keys for cards further ahead, so nobody can look at the next round before betting.</p>
+    <p>Every key a guest gives out has to be used for a card the table really deals within 5 seconds, and no bet may change after the keys are given. If a key is asked for out of turn, taken and not used (to look at a card first), or a bet changes, the guest's browser stops the game for everyone with "Network security breached". The host can then resume.</p>
+    <p>The player who peels a side sees those cards first, as at a real table. With no guest at the table, the host's browser makes the keys itself as it deals.</p></details>
+    ${S.alert ? '<p class="down"><b>Network security breached.</b> The game was paused.</p>' : ''}
+    <p>When a shoe is finished its seed and the card keys open, and your browser shuffles it again and checks every card that was dealt.</p>
+    <table class="pk-table"><tr><th>Shoe</th><th>Code</th><th>Dealt</th><th>Check</th></tr>${rows || '<tr><td colspan="4">No finished shoe yet.</td></tr>'}</table></div>`;
 }
 
 // ---------- Clicks ----------
@@ -740,6 +850,9 @@ watchOffice('baccarat', () => S.code, (g, list, view) => { (S.views ||= {})[g] =
 
 // "Connection dropped" notice and blocked buttons while this browser has no link to the table (common.js showDropped).
 setInterval(() => showDropped(!!S.hold || (S.role === 'guest' && !!S.st && !!S.conn && S.conn[1] === false && document.body.classList.contains('in-room')), S.hold ? "The table is moving to your browser. One moment…" : 'Your moves are not being sent. The table waits for the host. If the host is gone, you can take over.', S.hold ? null : becomeHost), 400);
+
+// "Network security breached": the game is paused for everyone until the host resumes it.
+setInterval(() => breachCover(!!S.st?.halted, S.role === 'host', () => { if (S.role === 'host' && S.table) { S.table.resume(); push(); } }), 400);
 
 // ---------- One wallet for the office (common.js walkTo) ----------
 // This table's ledger lines for the office ledger.
