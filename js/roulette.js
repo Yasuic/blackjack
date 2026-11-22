@@ -1,7 +1,7 @@
 // European roulette (one zero, 37 pockets) for up to 9 players against the house. Pure rules: the host's
 // browser owns one RouTable and every bet goes through it. Nothing here touches the page or the network.
-import { sha256, MAX_CHIPS } from './game.js?v=20261122n';
-import { isFrozen, bankJoin, setBank, clearBank, bankGone, bankSettle, ledgerNet, ledgerSum, bankAdopt } from './bank.js?v=20261122n';
+import { sha256, MAX_CHIPS } from './game.js?v=20261122o';
+import { isFrozen, bankJoin, setBank, clearBank, bankGone, bankSettle, ledgerNet, ledgerSum, bankAdopt, bankCashOut, bankCarryIn } from './bank.js?v=20261122o';
 
 export const ROU_SEATS = 9;
 export const ROU_DEFAULTS = {
@@ -113,6 +113,7 @@ export class RouTable {
     const clean = String(name || 'Player').replace(/[<>]/g, '').trim().slice(0, 16) || 'Player';
     if (p) { p.connected = true; p.quiet = false; p.name = clean; if (look) p.look = look; if (p.seat < 0) p.seat = this.freeSeat(); return p; }
     p = { id, name: clean, connected: true, chips: this.settings.startChips, totalIn: this.settings.startChips, look: look || { skin: 2, hair: 0 }, seat: this.freeSeat() };
+    p.joinT = Date.now();
     this.players[id] = p;
     bankJoin(this, p);
     if (!this.hostId) this.hostId = id;
@@ -158,6 +159,9 @@ export class RouTable {
     p.chips = r2(p.chips - amount); p.totalIn -= amount;
     this.addLog(`${p.name} took ${amount} off the table (now ${p.chips}).`);
   }
+  // ---- walking to another table with the chips (see bank.js) ----
+  cashOut(id) { return bankCashOut(this, id); }
+  carryIn(id, amount, fromName, cid) { return bankCarryIn(this, id, amount, fromName, cid); }
   // ---- the dealer (see bank.js) ----
   get frozen() { return isFrozen(this); }
   setBank(id) { setBank(this, id); }

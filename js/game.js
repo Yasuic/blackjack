@@ -553,7 +553,7 @@ export class Table {
     }
     // Each player says how much they buy in for when they arrive. Any positive amount is fine.
     const start = Math.round(Number(buyIn)) > 0 ? Math.min(MAX_CHIPS, Math.round(Number(buyIn))) : this.settings.startChips;
-    p = { id: clientId, name, chips: start, seat: null, connected: true, lastBet: null, totalIn: start, look: lk };
+    p = { id: clientId, name, chips: start, seat: null, connected: true, lastBet: null, totalIn: start, look: lk, joinT: Date.now() };
     this.players[clientId] = p;
     if (this.frozen && this.frozenSnap) this.frozenSnap[clientId] = this.snapOf(p);
     this.addLog(`${name} joined.`);
@@ -793,6 +793,43 @@ export class Table {
     } else {
       this.addLog(`The host said no to ${p.name}'s buy-in.`);
     }
+  }
+
+  // Walking to another table of the office with the chips (one wallet). The chips leave as cashed out: the
+  // buy-in total goes down by the same amount, so the player's +/- here stays the same and the ledger still
+  // adds up to zero. Chips in a hand that is being played stay until it ends.
+  cashOut(clientId) {
+    const p = this.mustPlayer(clientId);
+    if (this.banker === clientId) throw new Error('You are the dealer. Stop dealing first, then walk over with your chips.');
+    const mine = this.seatsOf(clientId);
+    if (this.inRound() && mine.some((i) => this.seats[i].hands.length)) throw new Error('Your hand is still being played. Walk over when this round ends.');
+    for (const i of mine) { const s = this.seats[i]; s.bet = { main: 0, sides: {} }; s.ready = false; }
+    const snap = this.frozen ? this.frozenSnap?.[clientId] : null, from = snap || p;
+    const amount = Math.max(0, Math.round(from.chips));
+    if (!amount) return 0;
+    from.chips -= amount; from.totalIn = (from.totalIn ?? this.settings.startChips) - amount;
+    if (snap) p.chips = 0;
+    this.buyIns = (this.buyIns || []).filter((b) => b.playerId !== clientId);
+    this.addLog(`${p.name} walked to another table with ${amount.toLocaleString()} chips.`);
+    this.ev('cash-out', clientId, `${amount} to another table`);
+    return amount;
+  }
+  // Chips a player brings from another table. A player who has only just joined gets exactly those chips
+  // in place of the buy-in they joined with.
+  carryIn(clientId, amount, fromName, cid) {
+    const p = this.mustPlayer(clientId);
+    amount = Math.round(Number(amount));
+    if (!(amount > 0) || amount > MAX_CHIPS) return 0;
+    p.carried ||= [];
+    if (cid && p.carried.includes(cid)) return 0;
+    if (cid) { p.carried.push(String(cid).slice(0, 40)); if (p.carried.length > 8) p.carried.shift(); }
+    const snap = this.frozen ? this.frozenSnap?.[clientId] : null;
+    const fresh = p.joinT && Date.now() - p.joinT < 30000 && p.chips === p.totalIn && !this.seatsOf(clientId).some((i) => this.seats[i].hands.length || this.seats[i].bet.main);
+    for (const x of snap ? [p, snap] : [p]) { if (fresh) { x.chips = amount; x.totalIn = amount; } else { x.chips += amount; x.totalIn = (x.totalIn ?? this.settings.startChips) + amount; } }
+    delete p.joinT;
+    this.addLog(`${p.name} brought ${amount.toLocaleString()} chips from ${String(fromName || 'another table').slice(0, 20)}.`);
+    this.ev('buy-in', clientId, `${amount} brought from ${fromName}, balance ${p.chips}`);
+    return amount;
   }
 
   giveChips(clientId, amount) {

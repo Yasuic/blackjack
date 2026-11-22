@@ -1701,3 +1701,36 @@ body:not(.game-poker) .felt:not(.in3d) {
 }
 body:not(.game-poker) .felt::before { border-color: rgba(63,230,214,.28); box-shadow: 0 0 10px rgba(63,230,214,.12); }
 body:not(.game-poker) .spot { box-shadow: 0 0 10px rgba(63,230,214,.22), inset 0 0 8px rgba(63,230,214,.10); }
+
+/* One wallet for the office: the walk cover and the "All tables" ledger. */
+#walk-cover { position: fixed; inset: 0; z-index: 9000; display: grid; place-items: center; background: rgba(6,9,14,0); transition: background .25s; pointer-events: all; }
+#walk-cover.on { background: rgba(6,9,14,.72); }
+#walk-cover .walk-box { padding: 14px 22px; border-radius: 14px; background: #151a22; border: 1px solid #2a3342; color: #e9edf3; font-weight: 700; letter-spacing: .3px; opacity: 0; transform: translateY(6px); transition: opacity .25s, transform .25s; }
+#walk-cover.on .walk-box { opacity: 1; transform: none; }
+.office-btn { margin: 8px 0 4px; }
+.office-dlg { border: 1px solid #2a3342; border-radius: 14px; background: #151a22; color: #e9edf3; padding: 0; max-width: min(720px, calc(100vw - 24px)); width: 100%; }
+.office-dlg::backdrop { background: rgba(0,0,0,.55); }
+.office-body { padding: 16px; }
+.office-body h3 { margin: 0 0 10px; }
+.office-wrap { overflow-x: auto; }
+.office-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.office-table th, .office-table td { padding: 6px 8px; text-align: right; border-bottom: 1px solid #2a3342; white-space: nowrap; }
+.office-table th:first-child, .office-table td:first-child { text-align: left; }
+.office-table tr.me td { background: rgba(232,196,106,.08); }
+.office-table tr.sum td { font-weight: 700; border-top: 1px solid #3a4558; }
+.office-table .up { color: #5fd38d; } .office-table .down { color: #ff7b7b; } .office-table .dim { color: #5c6678; }
+.office-body .hint { font-size: 12px; opacity: .75; margin: 10px 0; }
+.office-graph-wrap { margin-top: 12px; }
+.og-pick-l { font-size: 13px; display: flex; gap: 8px; align-items: center; }
+.og-pick { background: #0f141b; color: #e9edf3; border: 1px solid #2a3342; border-radius: 8px; padding: 4px 8px; }
+.office-graph { margin-top: 8px; }
+.og-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; font-size: 13px; margin-top: 8px; }
+.og-key { font-size: 11px; opacity: .8; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.og-key i { display: inline-block; width: 10px; height: 3px; border-radius: 2px; margin-left: 6px; }
+.og-key i.bar-w { background: rgba(95,211,141,.75); height: 8px; width: 6px; } .og-key i.bar-l { background: rgba(255,123,123,.75); height: 8px; width: 6px; }
+.office-chart { width: 100%; height: auto; display: block; background: #0f141b; border: 1px solid #222a37; border-radius: 10px; margin-top: 4px; }
+.office-chart text { fill: #8b95a7; font-size: 11px; }
+.office-chart .zero { stroke: #3a4558; stroke-width: 1; }
+.office-chart rect.win { fill: rgba(95,211,141,.6); } .office-chart rect.loss { fill: rgba(255,123,123,.6); }
+.og-foot { display: flex; justify-content: space-between; font-size: 11px; opacity: .65; margin-top: 4px; }
+.office-dlg { max-height: calc(100vh - 24px); overflow: auto; }

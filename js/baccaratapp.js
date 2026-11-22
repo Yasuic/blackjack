@@ -1,12 +1,12 @@
 // The baccarat page: a punto banco table for up to 9 in the small meeting room. The host's browser runs
 // the table (js/baccarat.js); every other browser sends its bets there and is told only what it may see.
-import { BacTable, BAC_SEATS, BAC_SPOTS, BAC_KEYS, verifyShoe, cardText } from './baccarat.js?v=20261122n';
-import { webglOK, initRoom } from './room3d.js?v=20261122n';
-import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122n';
-import { showDropped, params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML } from './common.js?v=20261122n';
+import { BacTable, BAC_SEATS, BAC_SPOTS, BAC_KEYS, verifyShoe, cardText } from './baccarat.js?v=20261122o';
+import { webglOK, initRoom } from './room3d.js?v=20261122o';
+import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122o';
+import { showDropped, params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML } from './common.js?v=20261122o';
 
-import { shareHidden, startHold } from './vault.js?v=20261122n';
-import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261122n';
+import { shareHidden, startHold } from './vault.js?v=20261122o';
+import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261122o';
 const PREFIX = 'bjt-bc-';
 // A settings change by vote (js/vote.js): any player at the table may ask, every other player at the table who is online has to say yes.
 const VOTE = {
@@ -19,6 +19,7 @@ const VOTE = {
   log: (text) => S.table.addLog(text),
 };
 const app = $('#app');
+const GAME = 'baccarat';
 const S = { name: safeGet('bj-name') || '', myId: getClientId(), code: null, role: null, table: null, st: null, net: null, room: null,
   conn: ['Connecting', false], chip: Number(safeGet('bc-chip')) || 5, seedFor: '', at: 0, paused: false, show: null };
 if (params.has('roomdebug')) { window.__B = S; window.__bc = { push: () => push(), render: () => render() }; }
@@ -69,6 +70,7 @@ function startHost(code, resume) {
   for (const p of Object.values(t.players)) p.connected = false;
   t.hostId = S.myId;
   t.join(S.myId, S.name, getLook());
+  { const c = carryFor(GAME, code); if (c) { try { t.carryIn(S.myId, c.amount, c.from, c.cid); } catch { /* fine */ } } } // chips brought from another table (kept until this table is surely ours)
   openHost(code);
   history.replaceState(null, '', shareLink());
   showTable();
@@ -78,9 +80,10 @@ function openHost(code) {
   S.net = createHost(PREFIX + code, {
     msg: hostMsg,
     people: () => S.presence || [],
+    ledger: () => (S.table ? officeRows(S.table.publicState(S.myId)) : null),
     piece: (id, piece) => S.hold?.add(piece),
     gone: (id) => { S.table?.disconnect(id); push(); },
-    status: (text, ok) => { S.conn = [text, ok]; drawConn(); },
+    status: (text, ok) => { S.conn = [text, ok]; drawConn(); if (ok && S.role === 'host') carryDone(GAME, S.code); },
     taken: () => { S.hold = null; S.net.close(); clearInterval(S.clock); S.table = null; startGuest(code, true); },
   });
   clearInterval(S.clock);
@@ -92,8 +95,9 @@ function hostMsg(id, m) {
   const t = S.table;
   if (!t) return;
   try {
-    if (m.t === 'hello') { if (t.players[id]?.kicked) { S.net.send(id, { t: 'kicked' }); return; } t.join(id, m.name, m.look); }
+    if (m.t === 'hello') { if (t.players[id]?.kicked) { S.net.send(id, { t: 'kicked' }); return; } t.join(id, m.name, m.look); if (m.carry && typeof m.carry === 'object') { try { t.carryIn(id, m.carry.amount, m.carry.from, m.carry.cid); } catch { /* fine */ } } }
     else if (!t.players[id] || t.players[id].kicked) return;
+    else if (m.t === 'cashout') { let amount = 0, err = null; try { amount = t.cashOut(id); } catch (e) { err = e.message; } S.net.send(id, { t: 'cashed', rid: m.rid, amount, err }); }
     else if (doMove(id, m) === 'quiet') return; // a peel in motion changes nothing at the table
   } catch (e) { S.net.send(id, { t: 'err', msg: e.message }); }
   push();
@@ -176,7 +180,7 @@ function startGuest(code, again) {
   S.role = 'guest'; S.code = code; S.st = null; S.nohost = false;
   history.replaceState(null, '', shareLink());
   if (!again || !$('#pk-body')) showTable(); else render();
-  S.net = createGuest(PREFIX + code, () => ({ t: 'hello', id: S.myId, name: S.name, look: getLook() }), {
+  S.net = createGuest(PREFIX + code, () => ({ t: 'hello', id: S.myId, name: S.name, look: getLook(), carry: carryFor(GAME, code) || undefined }), {
     msg: (m) => {
       if (m.t === 'state') {
         clearTimeout(S.takeT); S.takeT = null;
@@ -184,6 +188,7 @@ function startGuest(code, again) {
         S.st = m.st; S.at = Date.now(); S.nohost = false; render(); sendSeed();
       }
       else if (m.t === 'err') toast(m.msg);
+      else if (m.t === 'cashed') gotCashed(m);
       else if (m.t === 'fx') showFx(m.from, m.e);
       else if (m.t === 'peelfx') setPeel(String(m.key), Number(m.f) || 0);
       else if (m.t === 'kicked') { S.net.close(); showLanding('The host removed you from the table.'); }
@@ -216,7 +221,7 @@ function takeOver() {
     const same = !!t;
     if (!t) t = BacTable.fromPublic(st, S.myId);
     t.join(S.myId, S.name, getLook());
-    for (const [id, m] of Object.entries(hold?.hellos || {})) { try { t.join(id, m.name, m.look); } catch {} }
+    for (const [id, m] of Object.entries(hold?.hellos || {})) { try { t.join(id, m.name, m.look); if (m.carry && typeof m.carry === 'object') t.carryIn(id, m.carry.amount, m.carry.from, m.carry.cid); } catch {} }
     t.addLog(`${oldName}'s browser left. The table now runs in ${S.name}'s browser. Chips and bets are kept, ${same ? 'and the same shoe goes on, card for card' : hold ? 'but too few players came back to open the old shoe, so a new shoe is shuffled' : 'and a new shoe is shuffled'}.`);
     S.hold = null; S.vault = null; S.table = t; S.paused = false;
     push();
@@ -339,6 +344,7 @@ function render() {
     return;
   }
   const me = st.players.find((p) => p.id === S.myId);
+  officeSave(S.code, GAME, officeRows(st)); if (S.role === 'guest' && (me)) carryDone(GAME, S.code);
   const sg = stage(st), done = st.phase !== 'betting', final = st.phase === 'done';
   // Session profit on the top bar: the player's own line of the ledger, held back like the chips while the result is still coming out.
   setProfit(me ? (st.frozen && me.base ? Math.round((me.base.chips - me.base.totalIn) * 100) / 100 : Math.round((me.net - (me.chips - shownChips(st, me, sg?.final))) * 100) / 100) : null);
@@ -543,6 +549,7 @@ document.addEventListener('click', (e) => {
     case 'react-go': send({ t: 'fx', e: el.dataset.e }); break;
     case 'pause': S.paused = !S.paused; closeMenu(); push(); break;
     case 'ledger': closeMenu(); modal(ledgerHTML(st)); break;
+    case 'office': modal(officeLedgerHTML(S.code, S.myId)); break;
     case 'log': closeMenu(); modal(`<h3>Round log</h3><div class="log pk-log">${st.log.map((l) => `<div>${esc(l)}</div>`).reverse().join('')}</div>`); break;
     case 'rules': closeMenu(); modal(rulesHTML(st)); break;
     case 'fair': closeMenu(); modal(fairHTML(st)); break;
@@ -593,3 +600,13 @@ watchOffice('baccarat', () => S.code, (g, list) => { S.others[g] = list.filter((
 
 // "Connection dropped" notice and blocked buttons while this browser has no link to the table (common.js showDropped).
 setInterval(() => showDropped(!!S.hold || (S.role === 'guest' && !!S.st && !!S.conn && S.conn[1] === false && document.body.classList.contains('in-room')), S.hold ? "The table is moving to your browser. One moment…" : undefined), 400);
+
+// ---------- One wallet for the office (common.js walkTo) ----------
+// This table's ledger lines for the office ledger.
+function officeRows(st) { return (st?.players || []).map((p) => ({ id: p.id, name: p.name, chips: p.chips, net: p.net })); }
+// Walking to another table takes this player's chips along. A host cashes out at its own table.
+setCashOut(async () => {
+  if (S.role === 'host' && S.table) { const amount = S.table.cashOut(S.myId); push(); await new Promise((r) => setTimeout(r, 700)); return amount; }
+  if (S.role === 'guest' && S.st) return askCashOut((m) => S.net.send(m));
+  return 0;
+});

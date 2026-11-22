@@ -1,6 +1,6 @@
 // No-limit Texas Hold'em for up to 9 players. Pure rules: the host's browser owns one PokerTable and
 // every action goes through it. Nothing here touches the page or the network.
-import { SUITS, RANKS, sha256, fairSeed, fairShoe, MAX_CHIPS } from './game.js?v=20261122n';
+import { SUITS, RANKS, sha256, fairSeed, fairShoe, MAX_CHIPS } from './game.js?v=20261122o';
 
 export const POKER_SEATS = 9;
 export const POKER_DEFAULTS = {
@@ -214,7 +214,10 @@ export class PokerTable {
     if (this.seatOf(id) >= 0) throw new Error('You already have a seat.');
     if (!Number.isInteger(seatIdx) || seatIdx < 0 || seatIdx >= POKER_SEATS) throw new Error('No such seat.');
     if (this.seats[seatIdx]) throw new Error('That seat is taken.');
-    const amount = clampInt(buyIn ?? this.settings.startStack, 1, MAX_CHIPS, this.settings.startStack);
+    let amount = clampInt(buyIn ?? this.settings.startStack, 1, MAX_CHIPS, this.settings.startStack);
+    // Chips brought from another table are already counted as bought in: they go on the stack first.
+    const pocket = p.pocket || 0;
+    if (pocket > 0) { amount = Math.max(amount, pocket); p.pocket = 0; p.totalIn -= pocket; }
     this.seats[seatIdx] = { id, stack: amount, bet: 0, total: 0, cards: [], folded: false, allIn: false, acted: false, inHand: false, out: false, show: false, bank: this.settings.timeBank };
     p.totalIn += amount;
     this.addLog(`${p.name} sat down with ${amount}.`);
@@ -282,6 +285,38 @@ export class PokerTable {
     if (!amount || amount > x.stack) throw new Error('You do not have that many chips.');
     x.stack -= amount; p.totalIn -= amount;
     this.addLog(`${p.name} took ${amount} off the table (stack now ${x.stack}).`);
+  }
+  // Walking to another table of the office with the chips (one wallet): the stack leaves as chips cashed out,
+  // so the player's +/- here stays the same. Not while the player's cards are in a hand.
+  cashOut(id) {
+    const p = this.mustPlayer(id), i = this.seatOf(id);
+    let amount = p.pocket || 0;
+    if (i >= 0) {
+      const s = this.seats[i];
+      if (s.inHand && this.inHand()) throw new Error('Your cards are in this hand. Walk over when the hand ends.');
+      amount += s.stack + (this.pending[id] || 0);
+      p.totalIn += this.pending[id] || 0; delete this.pending[id];
+      this.seats[i] = null;
+    }
+    p.pocket = 0;
+    if (!amount) return 0;
+    p.totalIn -= amount;
+    this.addLog(`${p.name} walked to another table with ${amount}.`);
+    return amount;
+  }
+  // Chips a player brings from another table: on the stack, or kept for when they sit down.
+  carryIn(id, amount, fromName, cid) {
+    const p = this.mustPlayer(id), i = this.seatOf(id);
+    amount = Math.round(Number(amount));
+    if (!(amount > 0) || amount > MAX_CHIPS) return 0;
+    p.carried ||= [];
+    if (cid && p.carried.includes(cid)) return 0;
+    if (cid) { p.carried.push(String(cid).slice(0, 40)); if (p.carried.length > 8) p.carried.shift(); }
+    const from = String(fromName || 'another table').slice(0, 20);
+    if (i >= 0) { this.addChips(id, amount); this.addLog(`${p.name} brought ${amount} from ${from}.`); return amount; }
+    p.pocket = (p.pocket || 0) + amount; p.totalIn += amount;
+    this.addLog(`${p.name} brought ${amount} from ${from} and sits down with it.`);
+    return amount;
   }
   // The host sets a stack (to fix a mistake). The ledger counts the change as chips bought or taken out.
   setStack(id, amount) {
@@ -791,7 +826,7 @@ export class PokerTable {
     Object.assign(t, { hostId: myId, button: st.button, handNo: st.handNo, phase: st.phase, board: [...st.board], pot: st.pot, currentBet: st.currentBet,
       minRaise: st.minRaise ?? st.settings.bigBlind, turn: st.turn, bomb: !!st.bomb, plo: !!st.plo, dbl: !!st.dbl, board2: [...(st.board2 || [])], rabbit2: st.rabbit2 || null, bombNext: !!st.bombNext, result: st.result, rabbit: st.rabbit,
       awayVotes: st.awayVotes || {}, pending: { ...(st.pending || {}) }, log: [...(st.log || [])], hist: st.lastHand ? [st.lastHand] : [], moved: (st.moved || 0) + 1 });
-    for (const r of st.ledger || []) t.players[r.id] = { id: r.id, name: r.name, connected: r.id === myId, totalIn: r.totalIn, look: { skin: 2, hair: 0 }, stats: r.stats || undefined };
+    for (const r of st.ledger || []) t.players[r.id] = { id: r.id, name: r.name, connected: r.id === myId, totalIn: r.totalIn, pocket: r.pocket || 0, look: { skin: 2, hair: 0 }, stats: r.stats || undefined };
     st.seats.forEach((x, i) => {
       if (!x) return;
       if (t.players[x.id] && x.look) t.players[x.id].look = x.look;
@@ -908,7 +943,7 @@ export class PokerTable {
         best: done && x.show && x.hand ? x.hand.cards : null,
       }),
       players: Object.values(this.players).filter((p) => !p.kicked).map((p) => ({ id: p.id, name: p.name, connected: p.connected, seat: this.seatOf(p.id) })),
-      ledger: Object.values(this.players).map((p) => { const i = this.seatOf(p.id); const stack = i >= 0 ? this.seats[i].stack + this.seats[i].bet + (this.inHand() ? this.seats[i].total - this.seats[i].bet : 0) : 0; return { id: p.id, name: p.name, totalIn: p.totalIn, stack, net: stack - p.totalIn, stats: p.stats || null }; }),
+      ledger: Object.values(this.players).map((p) => { const i = this.seatOf(p.id); const stack = (i >= 0 ? this.seats[i].stack + this.seats[i].bet + (this.inHand() ? this.seats[i].total - this.seats[i].bet : 0) : 0) + (p.pocket || 0); return { id: p.id, name: p.name, totalIn: p.totalIn, stack, net: stack - p.totalIn, pocket: p.pocket || 0, stats: p.stats || null }; }),
       options: this.options(forId),
       fair: this.fairState(forId),
       lastHand: this.publicHand(this.hist[this.hist.length - 1]),

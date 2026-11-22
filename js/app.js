@@ -1,16 +1,16 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261122n';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122n';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122n';
-import { tickSound, winSound } from './fx.js?v=20261122n';
-import * as HX from './history.js?v=20261122n';
-import { webglOK, initRoom } from './room3d.js?v=20261122n';
-import { showDropped, watchOffice } from './common.js?v=20261122n';
-import { makeVault, makeOpener, cleanBox, cleanPiece } from './vault.js?v=20261122n';
-import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122n';
-import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122n';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261122o';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122o';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122o';
+import { tickSound, winSound } from './fx.js?v=20261122o';
+import * as HX from './history.js?v=20261122o';
+import { webglOK, initRoom } from './room3d.js?v=20261122o';
+import { showDropped, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261122o';
+import { makeVault, makeOpener, cleanBox, cleanPiece } from './vault.js?v=20261122o';
+import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122o';
+import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122o';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -232,6 +232,7 @@ function startHost(resume, taken = null) {
   }
   resume = resume || !!taken;
   S.table.join(S.myId, S.name, S.buyIn, S.look);
+  { const c = carryFor('blackjack', S.code); if (c) S.table.carryIn(S.myId, c.amount, c.from, c.cid); } // chips brought from another table (kept until this table is surely ours)
   S.table.hostId = S.myId;
   // The table's secret id for its hand history. It stays in this browser and is never sent to players.
   if (!S.table.created?.id) S.table.created = { id: HX.newTableId(), at: Date.now() };
@@ -267,7 +268,7 @@ function openHostPeer(attempt) {
   wireHostPeer(peer, attempt);
 }
 function wireHostPeer(peer, attempt) {
-  peer.on('open', () => { S.online = true; render(); });
+  peer.on('open', () => { S.online = true; carryDone('blackjack', S.code); render(); });
   peer.on('connection', (conn) => {
     conn.on('data', (msg) => onHostMessage(conn, msg));
     conn.on('close', () => connLost(conn));
@@ -466,7 +467,7 @@ function connLost(conn) {
 
 function onHostMessage(conn, msg) {
   // Someone at another table of the office asks who sits here.
-  if (msg && msg.t === 'peek') { try { conn.send({ t: 'people', list: (S.presence || []).slice(0, 12) }); } catch {} return; }
+  if (msg && msg.t === 'peek') { try { conn.send({ t: 'people', list: (S.presence || []).slice(0, 12), ledger: officeRows(S.state) }); } catch {} return; }
   if (!msg || typeof msg !== 'object') return;
   conn.lastSeen = Date.now();
   if (msg.t === 'pong') { conn.answers = true; return; }
@@ -481,6 +482,7 @@ function onHostMessage(conn, msg) {
     S.conns[id] = conn;
     clearTimeout(S.goneTimers[id]); delete S.goneTimers[id];
     S.table.join(id, msg.name, msg.buyIn, msg.look);
+    if (msg.carry && typeof msg.carry === 'object') { try { S.table.carryIn(id, msg.carry.amount, msg.carry.from, msg.carry.cid); } catch { /* not at this table */ } }
     if (S.hold && msg.piece) S.hold.add(cleanPiece(msg.piece));
     hostChanged();
     if (S.snapSent) { try { conn.send(snapMsg(conn)); } catch {} }
@@ -494,6 +496,14 @@ function onHostMessage(conn, msg) {
   if (msg.t === 'chat') { relayChat(conn.clientId, msg); return; }
   if (msg.t === 'voice') { voiceSet(conn.clientId, conn.peer, !!msg.on, !!msg.mic); return; }
   if (msg.t === 'keys') { gotNonce(msg, conn.clientId); return; }
+  // The player walks to another table of the office and takes their chips along (common.js walkTo).
+  if (msg.t === 'cashout') {
+    let amount = 0, err = null;
+    try { amount = S.table.cashOut(conn.clientId); } catch (e) { err = e.message; }
+    hostChanged();
+    try { conn.send({ t: 'cashed', rid: msg.rid, amount, err }); } catch {}
+    return;
+  }
   // Any player may read the finished rounds: cards that were dealt, bets and results. The unplayed
   // cards of the shoe and the shuffle secret are not part of a round and are never sent.
   if (msg.t === 'hist-get') {
@@ -956,7 +966,7 @@ function wireGuestConn(conn) {
     S.retry = 0; S.noHostAt = null; S.noReplyAt = 0; S.linkTries = 0; S.viaRelay = !!conn.relay;
     // This player's piece of the key goes only to a host that took the table over after the piece was made, and only on a direct link.
     const piece = S.piece && !conn.relay && (S.gen || 0) > (S.pieceGen ?? Infinity) ? S.piece : undefined;
-    conn.send({ t: 'join', clientId: S.myId, name: S.name, buyIn: S.buyIn, look: S.look, piece });
+    conn.send({ t: 'join', clientId: S.myId, name: S.name, buyIn: S.buyIn, look: S.look, piece, carry: carryFor('blackjack', S.code) || undefined });
   };
   conn.on('open', opened);
   if (conn.open && !conn.relay) opened(); // a link that opened before it was picked as the table's link
@@ -976,6 +986,7 @@ function wireGuestConn(conn) {
     else if (msg.t === 'fx' && msg.kind === 'hurry') showHurry(msg);
     else if (msg.t === 'fx') showThrow(msg);
     else if (msg.t === 'peek') showPeek(msg.card, msg.by);
+    else if (msg.t === 'cashed') gotCashed(msg);
     else if (msg.t === 'key-req') conn.send({ t: 'keys', rid: msg.rid, keys: serveKeys(msg) });
     else if (msg.t === 'kicked') { S.kicked = true; sessDel('bj-join-' + S.code); S.peer.destroy(); app.innerHTML = '<div class="center-msg"><h2>You were removed from the table.</h2></div>'; }
   });
@@ -1532,7 +1543,8 @@ function renderLedger(st) {
   const box = $('#ledger');
   if (!box || !st.ledger) return;
   const net = (r) => r.chips - r.totalIn - (r.houseNet || 0); // hands against the house are left out
-  { const mine = st.ledger.find((r) => r.id === S.myId); setProfit(mine ? net(mine) : null); }
+  { const mine = st.ledger.find((r) => r.id === S.myId); setProfit(mine ? net(mine) : null); if (mine && S.role !== 'host') carryDone('blackjack', S.code); }
+  officeSave(S.code, 'blackjack', officeRows(st));
   const rows = st.ledger.slice().sort((a, b) => net(b) - net(a));
   const sumIn = rows.reduce((a, r) => a + r.totalIn, 0);
   const sumChips = rows.reduce((a, r) => a + r.chips, 0);
@@ -1543,6 +1555,7 @@ function renderLedger(st) {
       ${rows.map((r) => `<tr class="${r.id === S.myId ? 'me' : ''}"><td>${r.id === st.hostId ? '♛ ' : ''}${esc(r.name)}${r.kicked ? ' (left)' : r.connected ? '' : ' (away)'}${st.banker?.id === r.id ? ' (dealer)' : ''}</td><td>${money(r.totalIn)}</td><td>${money(r.chips)}</td><td>${pl(net(r))}</td></tr>`).join('')}
       <tr class="tot"><td>Table</td><td>${money(sumIn)}</td><td>${money(sumChips)}</td><td>${pl(rows.reduce((a, r) => a + net(r), 0))}</td></tr>
     </table>
+    <button class="btn small office-btn" data-act="office">🏢 All tables</button>
     <div class="hint">Bought in counts starting chips, buy-ins and chips the host gives or takes. The +/- column counts only hands played with a player as the dealer, so it always adds up to zero. Hands against the house are practice and are left out.</div></div>`;
 }
 
@@ -3295,6 +3308,7 @@ function runAct(el) {
     case 'chat-close': toggleChat(false); break;
     case 'hints': safeSet('bj-hints2', hintsOn() ? '0' : '1'); el.textContent = hintsOn() ? '💡 Strategy hints: on' : '💡 Strategy hints: off'; render(); break;
     case 'buyin-open': openBuyIn(); break;
+    case 'office': showOffice(S.code, S.myId); break;
     case 'ledger-toggle': { const l = $('#ledger'); l.classList.toggle('closed'); safeSet('bj-ledger', l.classList.contains('closed') ? '0' : '1'); renderLedger(S.state); break; }
     case 'buyin-answer': hostDo((t) => t.answerBuyIn(Number(el.dataset.id), el.dataset.yes === '1')); break;
     case 'throw-open': openThrowPanel(el); break;
@@ -3919,12 +3933,27 @@ document.addEventListener('change', (e) => {
   if (e.target.id !== 'game-switch' || !['poker', 'baccarat', 'roulette'].includes(e.target.value)) return;
   goGame(e.target.value);
 });
+// This table's ledger lines for the office ledger (common.js officeLedgerHTML).
+function officeRows(st) {
+  return (st?.ledger || []).filter((r) => !r.kicked || r.chips !== r.totalIn).map((r) => ({ id: r.id, name: r.name, chips: r.chips, net: r.chips - r.totalIn - (r.houseNet || 0) }));
+}
+// Walking to another table takes this player's chips along (common.js walkTo). A host cashes out at its own table.
+setCashOut(async () => {
+  if (S.role === 'host' && S.table) {
+    const amount = S.table.cashOut(S.myId);
+    hostChanged();
+    await new Promise((r) => setTimeout(r, 700)); // the change reaches the players before this page goes
+    return amount;
+  }
+  if (S.role === 'player' && S.online) return askCashOut((m) => send(m));
+  return 0;
+});
 function goGame(game) {
   const q = new URLSearchParams();
   q.set('from', 'blackjack');
   if (S.code) { q.set('room', S.code); q.set('go', '1'); if (S.role === 'host') q.set('open', '1'); sessSet('games-from-bj', S.code); }
   for (const k of ['peerhost', 'peerport', 'peerpath', 'peersecure', '3d', 'flat', 'roomdebug']) if (params.get(k)) q.set(k, params.get(k));
-  location.href = game + '.html' + (q.toString() ? '?' + q : '');
+  walkTo('blackjack', game, game + '.html' + (q.toString() ? '?' + q : ''), S.code);
 }
 
 // The other tables of the office: who plays there is drawn at their table in the room.
