@@ -1741,3 +1741,6 @@ body.in-room #conn-pill { max-width: 104px; overflow: hidden; white-space: nowra
 .sn { display: inline-block; min-width: 1.45em; height: 1.45em; line-height: 1.45em; padding: 0 .2em; margin-right: .4em; border-radius: 999px; background: rgba(232,196,106,.92); color: #14110a; font-size: .82em; font-weight: 800; text-align: center; vertical-align: .08em; font-style: normal; }
 /* A seat on the right side of the table: its Sit out tab goes on the left of the name plate, inside the table. */
 .seat .who .seat-out-tag.tl { left: auto; right: calc(100% + 3px); padding: 5px 12px 5px 7px; clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 50%, calc(100% - 8px) 100%, 0 100%); }
+.fair-how { margin: 6px 0 10px; border: 1px solid rgba(232,196,106,.3); border-radius: 10px; padding: 6px 10px; }
+.fair-how > summary { cursor: pointer; font-weight: 700; color: var(--gold); }
+.fair-how .fair-p { margin: 6px 0 0; }

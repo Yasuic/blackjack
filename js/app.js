@@ -3248,6 +3248,11 @@ function fairHTML() {
   const tick = (b) => (b ? '✅' : '❌');
   let h = `<h3>🔐 Provably fair</h3>
     <p class="fair-p">One shuffle sets the whole shoe. The order comes from a hidden code in the host's browser mixed with hidden codes from the players' browsers, so no single person picked it and nobody can read it early. Each card can only be opened at the moment it is dealt. When a shoe is finished, your browser checks that the shuffle was the one promised at the start.</p>`;
+  h += `<details class="fair-how"><summary>How nobody sees the next cards</summary>
+    <p class="fair-p">Each card needs two things to be opened: the host's hidden code and a key from a seated guest's browser. The key is new for every card, and only the guest's browser can make it.</p>
+    <p class="fair-p">A guest's browser gives the host the key for the next card only, never for cards further ahead. If the host's browser asks for a later card, the guest's browser refuses and says so in the chat.</p>
+    <p class="fair-p">Every key a guest gives out has to be used for a card the table really deals within 5 seconds. If the host's browser takes a key and does not deal that card (to look at it first), the guest's browser warns its player and posts a ⚠️ line in the chat for the whole table.</p>
+    <p class="fair-p">With no guest seated, the host's browser makes the keys itself.</p></details>`;
   if (F.alert) h += `<div class="fair-box"><b>❌ ${typeof F.alert === 'string' ? esc(F.alert) : 'The host\'s browser asked for more card keys than the table needed.'}</b><div>A normal table never does this, so the host's copy of the game may have been changed to look at cards early.</div></div>`;
   if (f.current) {
     const c = f.current, mine = F.mine[c.commit];
