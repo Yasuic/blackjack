@@ -1,16 +1,16 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe } from './game.js?v=20261122u';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122u';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122u';
-import { tickSound, winSound } from './fx.js?v=20261122u';
-import * as HX from './history.js?v=20261122u';
-import { webglOK, initRoom } from './room3d.js?v=20261122u';
-import { showDropped, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261122u';
-import { makeVault, makeOpener, cleanBox, cleanPiece } from './vault.js?v=20261122u';
-import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122u';
-import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122u';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe } from './game.js?v=20261122v';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122v';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122v';
+import { tickSound, winSound } from './fx.js?v=20261122v';
+import * as HX from './history.js?v=20261122v';
+import { webglOK, initRoom } from './room3d.js?v=20261122v';
+import { showDropped, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261122v';
+import { makeVault, makeOpener, cleanBox, cleanPiece } from './vault.js?v=20261122v';
+import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122v';
+import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122v';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -627,7 +627,7 @@ function onHostMessage(conn, msg) {
     hostRounds().then((all) => { try { conn.send({ t: 'hist', n: (S.table.hist || []).length, total: all.length, rounds: all.slice(-80).map(({ events, table, backed, ...r }) => r) }); } catch {} });
     return;
   }
-  fresh(moveCount(msg), () => runAction(conn.clientId, msg, (err) => conn.open && conn.send({ t: 'error', msg: err, bet: msg.t === 'bet' })));
+  fresh(moveCount(msg, conn.clientId), () => runAction(conn.clientId, msg, (err) => conn.open && conn.send({ t: 'error', msg: err, bet: msg.t === 'bet' })));
 }
 
 // How long a player who dropped out may stay away before the dealer stands their hand. Their own
@@ -791,21 +791,49 @@ function fresh(countFn, fn) {
   })).catch(() => {});
 }
 function gotNonce(msg, from) { S.nonceWait?.[msg.rid]?.(msg.keys, from); }
-const moveCount = (msg) => (t) => (msg.t === 'action' ? { hit: 1, double: 1, split: 2 }[msg.a] || 0 : msg.t === 'buyin' ? { double: 1, split: 2 }[msg.then] || 0 : msg.t === 'peek' ? 1 : 0);
+// A move the table would refuse asks for no keys, so every key a guest gives out is used for a dealt card.
+const moveCount = (msg, id) => (t) => (msg.t === 'action' ? (id && !t.allowedActions(id).includes(msg.a) ? 0 : { hit: 1, double: 1, split: 2 }[msg.a] || 0) : msg.t === 'buyin' ? { double: 1, split: 2 }[msg.then] || 0 : msg.t === 'peek' ? 1 : 0);
 // The guest's side of the guard. A key is fixed by its card number, so sending one again tells the host
 // nothing new, and a jump forward only means this phone missed a few requests while it was asleep or
 // reconnecting. What a changed host could gain from is more keys than the step on the table can use:
 // a deal needs two cards per seat plus two for the dealer, a move needs one or two. That is refused.
+//
+// Since 22 November it is stricter, so a host cannot see cards before they are dealt:
+// 1. Only the next card numbers: a request may not start past the cards already opened (or past the last key
+//    this browser gave out) plus one. Asking for card 40 while card 12 is next is refused.
+// 2. Every key given out must be used for a card the table really deals within 5 seconds. A host that asks for
+//    keys and does not deal (to look at the cards first) is caught: this browser warns its player and tells the table.
+function keyAlarm(text) {
+  (S.fair ||= { mine: {}, cur: {}, checks: {} }).alert = text;
+  toast(text + ' Tap the badge at the top right.');
+  try { send({ t: 'chat', text: '⚠️ ' + text }); } catch {}
+  render();
+}
 function serveKeys(msg) {
   const from = Number(msg.from), count = Number(msg.count), st = S.state;
   const betting = !st || st.phase === 'betting' || st.phase === 'settled';
   const most = betting ? 2 * (st?.seats?.length || 7) + 2 : 2;
   if (!Number.isInteger(from) || from < 1 || !Number.isInteger(count) || count < 1 || count > most) {
-    (S.fair ||= { mine: {}, cur: {}, checks: {} }).alert = true;
-    toast('The host asked for too many card keys at once. Tap the badge at the top right.');
-    render();
+    keyAlarm('The host\'s browser asked for more card keys than the table needed. My browser refused.');
     return [];
   }
+  // The next card is always the card after the last one the table has opened. Keys given out before stay
+  // unused only if the host is looking ahead, so a request past the next card is refused even if it follows on.
+  const opened = Number(st?.fair?.cards);
+  const known = Number.isFinite(opened) ? opened : 0;
+  if (from > known + 1) {
+    keyAlarm(`The host's browser asked for card keys ahead of the game (card ${from} while card ${known + 1} is next). My browser refused.`);
+    return [];
+  }
+  const last = from + count - 1;
+  S.keyServed = Math.max(S.keyServed || 0, last);
+  // The cards these keys open have to be dealt now, every one of them.
+  const shoe = st?.fair?.current?.n;
+  setTimeout(() => {
+    const now = S.state?.fair;
+    if (!now || S.role !== 'player' || now.current?.n !== shoe) return; // a new shoe or a new host: nothing to compare
+    if ((Number(now.cards) || 0) < last) keyAlarm(`The host's browser opened ${last - (Number(now.cards) || 0)} card key(s) without dealing those cards.`);
+  }, 5000);
   return Array.from({ length: count }, (_, i) => myKey(from + i));
 }
 // A secret kept in this browser tab, and the key for card number k made from it.
@@ -906,7 +934,7 @@ function scheduleTimer() {
       hostDo((tb) => tb.forceInsurance());
       if (ids.length) tellAll({ kind: 'ins-timeout', ids });
     });
-    else fresh(() => 1, () => {
+    else fresh((tb) => tb.awayMoveCount(), () => {
       const t2 = S.table;
       if (t2.phase !== 'playing' || !t2.turn) return;
       const p = t2.players[t2.seats[t2.turn.seat].playerId];
@@ -1134,7 +1162,7 @@ function send(msg) {
   if (S.role === 'host' && msg.t === 'voice') { voiceSet(S.myId, S.peer?.id, !!msg.on, !!msg.mic); return; }
   if (S.role === 'host' && msg.t === 'hurry') { relayHurry(S.myId, msg.say); return; }
   if (S.role === 'host' && msg.t === 'throw') relayThrow(S.myId, msg);
-  else if (S.role === 'host') fresh(moveCount(msg), () => runAction(S.myId, msg, (err) => { toast(err); if (msg.t === 'bet') dropPend(); }));
+  else if (S.role === 'host') fresh(moveCount(msg, S.myId), () => runAction(S.myId, msg, (err) => { toast(err); if (msg.t === 'bet') dropPend(); }));
   else if (S.conn?.open) S.conn.send(msg);
   else toast('Not connected to the table.');
 }
@@ -3220,7 +3248,7 @@ function fairHTML() {
   const tick = (b) => (b ? '✅' : '❌');
   let h = `<h3>🔐 Provably fair</h3>
     <p class="fair-p">One shuffle sets the whole shoe. The order comes from a hidden code in the host's browser mixed with hidden codes from the players' browsers, so no single person picked it and nobody can read it early. Each card can only be opened at the moment it is dealt. When a shoe is finished, your browser checks that the shuffle was the one promised at the start.</p>`;
-  if (F.alert) h += `<div class="fair-box"><b>❌ The host's browser asked for more card keys than the table needed.</b><div>Your browser refused. A normal table never does this, so the host's copy of the game may have been changed.</div></div>`;
+  if (F.alert) h += `<div class="fair-box"><b>❌ ${typeof F.alert === 'string' ? esc(F.alert) : 'The host\'s browser asked for more card keys than the table needed.'}</b><div>A normal table never does this, so the host's copy of the game may have been changed to look at cards early.</div></div>`;
   if (f.current) {
     const c = f.current, mine = F.mine[c.commit];
     h += `<div class="fair-box"><b>Shoe ${c.n} (in play now)</b>

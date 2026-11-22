@@ -1422,6 +1422,12 @@ export class Table {
 
   // The table plays for a player who is away or let the clock run out: hit on 11 or less (no card can
   // bust that), stand on anything else. One step per call. Returns what it did.
+  // How many cards awayMove would take (0 or 1), so the host asks the guests for exactly that many keys.
+  awayMoveCount() {
+    if (this.phase !== 'playing' || !this.turn) return 0;
+    const seat = this.seats[this.turn.seat], h = seat?.hands[this.turn.hand];
+    return h && handTotal(h.cards).total <= 11 && this.allowedActions(seat.playerId).includes('hit') ? 1 : 0;
+  }
   awayMove() {
     if (this.phase !== 'playing' || !this.turn) return null;
     const seat = this.seats[this.turn.seat], h = seat.hands[this.turn.hand];
@@ -1669,6 +1675,7 @@ export class Table {
       buyIns: (this.buyIns || []).filter((b) => b.playerId === forClientId).map((b) => ({ id: b.id, amount: b.amount })),
       fair: this.fair && {
         nextCommit: this.fair.next.commit,
+        cards: this.fair.cards || 0, // how many cards have been opened with the guests' keys so far
         current: this.fair.current && { n: this.fair.current.n, commit: this.fair.current.commit, clientSeeds: this.fair.current.clientSeeds, decks: this.fair.current.decks, dealt: (this.fair.current.draws || []).length },
         last: this.fair.last,
       },
