@@ -210,7 +210,7 @@ function buildOffice(signText, midShift = 0, midScale = 1, skipRoom = null, live
     chrome: mk({ color: '#b9bec4', roughness: 0.25, metalness: 0.9 }),
     screen: mk({ color: '#0d0f12', roughness: 0.25, metalness: 0.2 }),
     // What the office screens show: the ARC Group logo, from the photo of it, lit like a screen that is on.
-    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261122x'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
+    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261122y'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
     dark: mk({ color: '#30353c', roughness: 0.6 }),
   };
   const group = new THREE.Group();
@@ -531,7 +531,10 @@ function buildOffice(signText, midShift = 0, midScale = 1, skipRoom = null, live
     return sp;
   };
   // Visits: who walks over to whom, what they say, and where they stand (plan x and y from the other person's chair).
-  const VISITS = { Nigel: { to: 'Allie', say: 'Allie, clean your f***ing table up!', off: [0.62, -0.62] }, Gordon: { to: 'Yuya', say: 'bla bla bla...', off: [-0.1, 0.95] }, Henry: { to: 'Felix', say: 'so anyway...', off: [-0.15, 1.1] } };
+  const VISITS = { Nigel: { to: 'Allie', say: 'Allie, clean your f***ing table up!', off: [0.62, -0.62] }, Gordon: { to: 'Yuya', say: 'bla bla bla...', off: [-0.1, 0.95] }, Henry: [{ to: 'David', say: 'im bored', off: [-0.15, 1.1] }, { to: 'Jeff', say: 'im bored', off: [-0.15, 1.1] }] };
+  // A visit of this person to somebody who is at their desk right now (Henry has two people he visits).
+  const visitOf = (name) => { const opts = [].concat(VISITS[name] || []).filter((v) => walkers.some((o) => o.name === v.to && o.state === 'sit')); return opts[Math.floor(Math.random() * opts.length)] || null; };
+  const NO_COFFEE = new Set(['Charlene']); // people who never go out for coffee
   const tags = [], talkers = [], coughs = [], glitch = [], snow = [];
   const tagSprite = (text, ink = '#f3e3b0') => {
     const t = canvasTexture(256, 72, (g, cw, ch) => { g.clearRect(0, 0, cw, ch); g.fillStyle = 'rgba(12,14,18,0.78)'; g.beginPath(); g.roundRect(4, 6, cw - 8, ch - 12, 28); g.fill(); g.fillStyle = ink; g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = `700 34px ${FONT}`; g.fillText(text, cw / 2, ch / 2 + 3, cw - 30); });
@@ -774,18 +777,18 @@ function buildOffice(signText, midShift = 0, midScale = 1, skipRoom = null, live
     for (const q of glitch) { const on = Math.random() < 0.3; q.m.position.x = q.x + (on ? (Math.random() - 0.5) * 0.03 : 0); q.m.position.y = q.y + (on ? (Math.random() - 0.5) * 0.02 : 0); q.m.visible = Math.random() > 0.06; q.m.material.color.set(on ? (Math.random() < 0.5 ? '#ff3df2' : '#3dfff2') : '#4aa3e8'); }
     { const dt = Math.min(0.2, (now - (snowAt || now)) / 1000); snowAt = now; for (const f of snow) { const a = f.pts.geometry.attributes.position; for (let i = 0; i < a.count; i++) { let y = a.getY(i) - (0.22 + (i % 5) * 0.05) * dt; if (y < 0) y = 2.6; a.setY(i, y); a.setX(i, a.getX(i) + Math.sin(now * 0.001 + i) * 0.03 * dt); } a.needsUpdate = true; } }
     // Now and then somebody gets up, walks out of the main door with a coffee, and comes back to their desk.
-    if (dbgTrip) { const [who, kind] = dbgTrip; dbgTrip = null; const free = walkers.filter((w) => w.state === 'sit' && w.name !== 'Jeff' && w.route), q = who === 'any' ? free[Math.floor(Math.random() * free.length)] : walkers.find((w) => w.name === who && w.state === 'sit'); if (q) { const v = VISITS[who], o = v && walkers.find((w) => w.name === v.to); q.sleep = kind === 'nap'; if (q.sleep) { q.path = q.nap.path; q.talk = null; } else if (kind === 'visit' && o) startVisit(q, v, o); else { q.path = q.route; q.talk = null; } q.state = 'go'; q.i = 0; q.d = 0; q.last = now; q.seat.visible = false; q.wg.visible = true; } }
+    if (dbgTrip) { const [who, kind] = dbgTrip; dbgTrip = null; const free = walkers.filter((w) => w.state === 'sit' && w.name !== 'Jeff' && w.route), q = who === 'any' ? free[Math.floor(Math.random() * free.length)] : walkers.find((w) => w.name === who && w.state === 'sit'); if (q) { const v = visitOf(who), o = v && walkers.find((w) => w.name === v.to); q.sleep = kind === 'nap'; if (q.sleep) { q.path = q.nap.path; q.talk = null; } else if (kind === 'visit' && o) startVisit(q, v, o); else { q.path = q.route; q.talk = null; } q.state = 'go'; q.i = 0; q.d = 0; q.last = now; q.seat.visible = false; q.wg.visible = true; } }
     if (!nextTrip) nextTrip = now + 6000 + Math.random() * 8000;
     if (now > nextTrip && walkers.filter((q) => q.state !== 'sit').length < 2) {
       const free = walkers.filter((q) => q.state === 'sit');
       // Half of the trips are a visit to a colleague's desk; the rest are coffee runs out of the door.
-      const callers = free.filter((q) => VISITS[q.name] && walkers.some((o) => o.name === VISITS[q.name].to && o.state === 'sit'));
-      const q = callers.length && Math.random() < 0.5 ? callers[Math.floor(Math.random() * callers.length)] : (() => { const cf = free.filter((w) => !w.nap); return cf[Math.floor(Math.random() * cf.length)]; })();
+      const callers = free.filter((q) => visitOf(q.name));
+      const q = callers.length && Math.random() < 0.5 ? callers[Math.floor(Math.random() * callers.length)] : (() => { const cf = free.filter((w) => !w.nap && !NO_COFFEE.has(w.name)); return cf[Math.floor(Math.random() * cf.length)]; })();
       const jeff = free.find((w) => w.nap);
       if (jeff && Math.random() < 0.18) { jeff.path = jeff.nap.path; jeff.talk = null; jeff.sleep = true; jeff.state = 'go'; jeff.i = 0; jeff.d = 0; jeff.last = now; jeff.seat.visible = false; jeff.wg.visible = true; }
       else if (q) {
         q.sleep = false;
-        const v = callers.includes(q) && VISITS[q.name], o = v && walkers.find((w) => w.name === v.to);
+        const v = callers.includes(q) && visitOf(q.name), o = v && walkers.find((w) => w.name === v.to);
         if (v) startVisit(q, v, o);
         else { q.path = q.route; q.talk = null; if (q.say) q.say.visible = false; }
         q.state = 'go'; q.i = 0; q.d = 0; q.last = now; q.seat.visible = false; q.wg.visible = true;
@@ -970,7 +973,7 @@ function buildStorefront() {
     lamp: lam('#c8161d', 0.6), bulb: lit('#ffe9a8'), red: lit('#c8161d'), gold: lit('#f4c542'), wood: lam('#7a5234', 0.35),
     glass: new THREE.MeshBasicMaterial({ color: '#dff3f7', transparent: true, opacity: 0.13, depthWrite: false }),
     awning: new THREE.MeshBasicMaterial({ map: canvasTexture(512, 64, (g, w, h) => { for (let i = 0; i < 16; i++) { g.fillStyle = i % 2 ? '#fff6e6' : '#f08a1c'; g.fillRect((i * w) / 16, 0, w / 16 + 1, h); } }), side: THREE.DoubleSide }),
-    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261122x') }),
+    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261122y') }),
     menu: new THREE.MeshBasicMaterial({ map: canvasTexture(256, 384, (g, w, h) => {
       g.fillStyle = '#c8161d'; g.fillRect(0, 0, w, h); g.fillStyle = '#f4c542'; g.fillRect(14, 14, w - 28, 44);
       const r = rng(11); g.fillStyle = '#fff3d6';

@@ -1,16 +1,16 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe } from './game.js?v=20261122x';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122x';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122x';
-import { tickSound, winSound } from './fx.js?v=20261122x';
-import * as HX from './history.js?v=20261122x';
-import { webglOK, initRoom } from './room3d.js?v=20261122x';
-import { showDropped, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261122x';
-import { makeVault, makeOpener, cleanBox, cleanPiece } from './vault.js?v=20261122x';
-import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122x';
-import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122x';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe } from './game.js?v=20261122y';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122y';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122y';
+import { tickSound, winSound } from './fx.js?v=20261122y';
+import * as HX from './history.js?v=20261122y';
+import { webglOK, initRoom } from './room3d.js?v=20261122y';
+import { showDropped, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261122y';
+import { makeVault, makeOpener, cleanBox, cleanPiece } from './vault.js?v=20261122y';
+import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122y';
+import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122y';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');

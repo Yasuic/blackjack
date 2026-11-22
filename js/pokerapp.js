@@ -1,15 +1,16 @@
 // The poker page: a Texas Hold'em table for up to 9 in the big meeting room. The host's browser runs
 // the table (js/poker.js); every other browser sends its moves there and is told only what it may see.
-import { PokerTable, POKER_SEATS, pokerDeck, cardText } from './poker.js?v=20261122x';
-import { sha256 } from './game.js?v=20261122x';
-import { botMove, isBot, BOT_NAMES } from './pokerbot.js?v=20261122x';
-import { chipSound, cardSound, hitSound, standSound, potSound, tickSound, turnSound, punchSound } from './fx.js?v=20261122x';
-import { webglOK, initRoom } from './room3d.js?v=20261122x';
-import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122x';
-import { showDropped, params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML } from './common.js?v=20261122x';
+import { PokerTable, POKER_SEATS, pokerDeck, cardText, mpClientMoves, mpMine, mpCheck, bestHand, bestOmaha } from './poker.js?v=20261122y';
+import { plainDeck, shufflePass, lockPass, checkDeck, keyFor } from './mental.js?v=20261122y';
+import { sha256 } from './game.js?v=20261122y';
+import { botMove, isBot, BOT_NAMES } from './pokerbot.js?v=20261122y';
+import { chipSound, cardSound, hitSound, standSound, potSound, tickSound, turnSound, punchSound } from './fx.js?v=20261122y';
+import { webglOK, initRoom } from './room3d.js?v=20261122y';
+import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122y';
+import { showDropped, params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML } from './common.js?v=20261122y';
 
-import { shareHidden, startHold } from './vault.js?v=20261122x';
-import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261122x';
+import { shareHidden, startHold } from './vault.js?v=20261122y';
+import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261122y';
 const PREFIX = 'bjt-pk-';
 // A settings change by vote (js/vote.js): any player at the table may ask, every other player at the table who is online has to say yes.
 const VOTE = {
@@ -234,7 +235,7 @@ function doMove(id, m) {
     case 'take': t.takeChips(id, m.amount); break;
     case 'vaway': t.voteAway(id, String(m.id), !!m.on); break;
     case 'fx': relayFx(id, m.e); break;
-    case 'show': t.showCards(id, m.which); break;
+    case 'show': if (t.mp && m.keys && m.sid === t.mp.sid) t.mpKeys(id, m.keys); t.showCards(id, m.which); break;
     case 'punch': t.punchWinner(id, !!m.test); break;
     case 'rabbit': t.rabbitHunt(id); break;
     case 'straddle': t.setStraddle(id, !!m.on); break;
@@ -242,8 +243,12 @@ function doMove(id, m) {
     case 'runpick': t.runPick(id, m.n); break;
     case 'runans': t.runAnswer(id, !!m.yes); break;
     case 'seed': t.setClientSeed(id, m.seed, m.commit); break;
+    case 'mp-step': { const w = S.mpWait; if (w && w.id === id && w.sid === m.sid && w.step === m.step && checkDeck(m.deck)) { S.mpWait = null; w.res(m.deck); } break; }
+    case 'mp-keys': if (t.mp && m.sid === t.mp.sid) t.mpKeys(id, m.keys); break;
+    case 'mp-muck': if (t.mp && m.sid === t.mp.sid) t.mpMuck(id); break;
     default: break;
   }
+  if (t.mp?.need) t.mpResume(); // keys or an answer may let the hand go on
 }
 const EMOJI = ['😂', '😭', '😡', '🤡', '🔥', '💀', '👏', '🙏', '🤑', '🐟', '🦈', '💩', '🫡', '🤯', '😴', '🍀'];
 // A reaction pops up over the seat of the player who sent it, on every screen.
@@ -295,6 +300,101 @@ function showPunch(st) {
   };
   setTimeout(hit, Math.round(ms * 0.26)); // the first hit comes when the walk round the table is over
 }
+// ---------- Locked cards (js/mental.js) ----------
+// This browser's secret locks, by hand: sid -> { sid, a, b }. Kept in the browser so a reload carries on.
+S.mpSec = (() => { try { return JSON.parse(safeGet('pk-mp') || '{}') || {}; } catch { return {}; } })();
+S.mpSent = new Set();
+function mpSave() {
+  const keep = Object.values(S.mpSec).sort((a, b) => (b.at || 0) - (a.at || 0)).slice(0, 3);
+  S.mpSec = Object.fromEntries(keep.map((x) => [x.sid, x]));
+  safeSet('pk-mp', JSON.stringify(S.mpSec));
+}
+// Runs on every browser, the host's too, each time the table changes: opens this browser's own cards,
+// checks the public cards against their locks, and gives the keys the table is waiting for.
+function mpLocal(st) {
+  const m = st?.mp;
+  if (!m) return;
+  const sec = S.mpSec[m.sid], me = st.seats.findIndex((x) => x && x.id === S.myId);
+  let mine = S.mpMine?.sid === m.sid ? S.mpMine.cards : null;
+  if (!mine) { const c = mpMine(st, S.myId, sec); if (c?.bad) mpAlarm(m.sid); else if (c) { mine = c; S.mpMine = { sid: m.sid, cards: c }; } }
+  if (me >= 0 && st.seats[me].inHand) {
+    const x = st.seats[me];
+    x.cards = mine ? mine.map((c) => ({ ...c })) : x.cards.map((c) => (c && c.h === undefined ? c : null));
+    if (mine && !x.hand && !x.folded && st.board.length >= 3) { const b = (bd) => (st.plo ? bestOmaha(mine, bd) : bestHand([...mine, ...bd])).name; x.hand = b(st.board) + (st.dbl ? ' | ' + b(st.board2 || []) : ''); }
+  }
+  if (mpCheck(st)) mpAlarm(m.sid);
+  for (const msg of mpClientMoves(st, S.myId, sec, mine, S.mpSent)) {
+    if (S.role === 'host') queueMicrotask(() => { try { doMove(S.myId, msg); } catch {} push(); });
+    else S.net?.send(msg);
+  }
+}
+function mpAlarm(sid) {
+  if (S.mpAlarmFor === sid) return;
+  S.mpAlarmFor = sid;
+  console.warn('[poker] a card did not match its locks');
+  toast('Network security breached: a card did not match its locks.');
+}
+// A guest's turn in the shuffle: lock every card and shuffle, or swap the lock for one per card.
+function mpStep(m) {
+  try {
+    if (m.step === 'shuf') {
+      if (m.first && JSON.stringify(m.deck) !== JSON.stringify(plainDeck())) return; // the first browser starts from the plain deck
+      const r = shufflePass(m.deck);
+      S.mpSec[m.sid] = { sid: m.sid, a: r.a, at: Date.now() };
+      S.net.send({ t: 'mp-step', sid: m.sid, step: 'shuf', deck: r.deck });
+    } else if (m.step === 'lock') {
+      const sec = S.mpSec[m.sid];
+      if (!sec?.a || sec.b) return;
+      const r = lockPass(m.deck, sec.a);
+      sec.b = r.b; delete sec.a; mpSave();
+      S.net.send({ t: 'mp-step', sid: m.sid, step: 'lock', deck: r.deck });
+    }
+  } catch { /* a bad deck: no answer, the host deals without this browser */ }
+}
+function mpAsk(id, sid, step, deck, first) {
+  return new Promise((res, rej) => {
+    S.mpWait = { id, sid, step, res };
+    S.net.send(id, { t: 'mp-step', sid, step, deck, first });
+    setTimeout(() => { if (S.mpWait && S.mpWait.sid === sid && S.mpWait.id === id && S.mpWait.step === step) { S.mpWait = null; rej(new Error('no answer')); } }, 7000);
+  });
+}
+// Before a hand: every player's browser in the hand locks and shuffles the deck in turn, the host's last.
+// A browser that does not answer sits this hand out.
+async function mpPrepare(t) {
+  const sid = randomHex(12), seats = t.eligible().filter((i) => !(S.mpSkip?.[t.seats[i].id] > Date.now()));
+  const guests = seats.map((i) => t.seats[i].id).filter((id) => id !== S.myId && !isBot(id) && t.players[id]?.connected !== false);
+  let deck = plainDeck(), first = true;
+  const done = [];
+  for (const g of guests) {
+    try { deck = await mpAsk(g, sid, 'shuf', deck, first); first = false; done.push(g); }
+    catch { (S.mpSkip ||= {})[g] = Date.now() + 15000; }
+  }
+  const r = shufflePass(deck); deck = r.deck;
+  S.mpSec[sid] = { sid, a: r.a, at: Date.now() };
+  for (const g of done) {
+    try { deck = await mpAsk(g, sid, 'lock', deck); }
+    catch { (S.mpSkip ||= {})[g] = Date.now() + 15000; return null; } // its lock is on every card now: shuffle again without it
+  }
+  const own = lockPass(deck, S.mpSec[sid].a);
+  S.mpSec[sid].b = own.b; delete S.mpSec[sid].a; mpSave();
+  const parts = [...done, S.myId];
+  const skip = t.eligible().filter((i) => !isBot(t.seats[i].id) && !parts.includes(t.seats[i].id));
+  return { mp: { sid, deck: own.deck, parts }, skip };
+}
+// Deals the next hand with locked cards. Runs once at a time; the table shows that the deck is being shuffled.
+async function dealHand() {
+  const t = S.table;
+  if (!t || S.mpBusy) return;
+  S.mpBusy = true; t.shuffling = true; push();
+  try {
+    let opts = null;
+    for (let n = 0; n < 3 && !opts; n++) opts = await mpPrepare(t);
+    if (!opts || S.table !== t || t.inHand() || !t.canStart()) return;
+    try { t.startHand(opts); } catch (e) { toast(e.message); return; }
+    S.doneAt = 0;
+  } catch (e) { console.warn('[poker] deal', e); }
+  finally { S.mpBusy = false; t.shuffling = false; push(); }
+}
 function push() {
   const t = S.table;
   if (!t) return;
@@ -302,6 +402,7 @@ function push() {
   // The deck and the cards nobody else may see go along locked, so the same deck goes on if this browser leaves.
   shareHidden(S, S.net, t.seats.filter((x) => x && x.id !== S.myId && !isBot(x.id) && t.players[x.id]?.connected).map((x) => x.id), t.hidden());
   S.st = { ...t.publicState(S.myId), vote: voteView(t, VOTE, S.myId) };
+  mpLocal(S.st);
   keepMine(S.st);
   S.at = Date.now();
   try { safeSet('pk-host', JSON.stringify({ code: S.code, table: { ...t, log: t.log.slice(-60), hist: t.hist.slice(-40) } })); } catch {}
@@ -316,6 +417,14 @@ function hostClock() {
     const miss = t.missingCards().map((i) => t.seats[i].id);
     if (!t.inHand() || now > S.waitUntil || !(S.waitFor || []).some((id) => miss.includes(id))) { t.waitCards = false; t.turnStarted = now; push(); }
     return;
+  }
+  if (S.mpBusy) return; // the players' browsers are locking and shuffling the next deck
+  // Locked cards: the hand waits for keys or for a player to show or muck. A browser that does not answer in time is passed over.
+  if (t.mp?.need) {
+    const n = t.mp.need, limit = n.kind === 'sd' ? 30000 : n.kind === 'rescue' ? 10000 : 25000;
+    if (t.mpResume()) { push(); return; }
+    if (now - n.at > limit) { t.mpTimeout(); push(); }
+    if (t.inHand()) return;
   }
   if (t.inHand()) {
     S.doneAt = 0;
@@ -333,6 +442,8 @@ function hostClock() {
       if (now - a.at > RUN_ASK_MS) { t.runTimeout(); push(); }
       return;
     }
+    // A computer player plays once its cards are open (the players' browsers send their keys at the deal).
+    if (t.turn !== null && isBot(t.seats[t.turn].id) && t.mp && !t.known(t.turn) && now - (t.turnStarted || now) < 10000) return;
     if (t.turn !== null && isBot(t.seats[t.turn].id)) {
       // A computer player's turn: it "thinks" for 0.9 to 1.7 seconds (after the beat, when it is first to act on a street), then plays from its own cards and the board.
       const id = t.seats[t.turn].id, think = (t.seats.some((x) => x && x.acted) ? 0 : BEAT_MS) + 900 + ((t.handNo * 7 + t.turn * 13 + t.board.length * 5 + Math.round(t.currentBet)) % 9) * 100;
@@ -395,7 +506,7 @@ function hostClock() {
   if (t.phase === 'done' && !t.canStart() && now - S.doneAt >= endWait(r) + 1500) { t.clearHand(); S.doneAt = 0; push(); return; }
   if (!S.started || S.paused || !t.settings.autoStart || !t.canStart()) return;
   const wait = t.phase === 'done' ? endWait(r) : 800;
-  if (now - (S.doneAt || 0) >= wait) { t.startHand(); S.doneAt = 0; push(); }
+  if (now - (S.doneAt || 0) >= wait) dealHand();
 }
 
 // ---------- Guest ----------
@@ -413,9 +524,10 @@ function startGuest(code, again) {
         const x = st.seats.find((q) => q && q.id === S.myId);
         if (x && x.inHand && x.cards.length === 2 && !x.cards[0]) { const k = myKept(st); if (k) { x.cards = k.cards; S.net.send({ t: 'cards', cards: k.cards, salt: k.salt }); } }
         if (S.st && st.hostId !== S.st.hostId) toast(`The table now runs in ${st.players.find((p) => p.id === st.hostId)?.name || 'another player'}'s browser.`);
-        S.st = st; keepMine(st); S.at = Date.now(); S.nohost = false; render(); sendSeed();
+        S.st = st; mpLocal(st); keepMine(st); S.at = Date.now(); S.nohost = false; render(); sendSeed();
       }
       else if (m.t === 'err') toast(m.msg);
+      else if (m.t === 'mp-step') mpStep(m);
       else if (m.t === 'cashed') gotCashed(m);
       else if (m.t === 'host-give') takeGiven(m);
       else if (m.t === 'fx') showFx(m.from, m.e);
@@ -802,6 +914,7 @@ function render() {
     else if (seat.hand && done && seat.shown) { bubble = esc(shortHand(seat.hand)); bcls = 'in'; }
     // Nothing stays over a name while a player is simply in the hand or has folded: the last move shows for two seconds,
     // a folded player's plate is dimmed with no cards, and the player to act has a glowing plate with a time bar.
+    else if (seat.inHand && seat.folded) { bubble = seat.mucked ? 'Mucked' : 'Folded'; bcls = 'fold out'; }
     else if (live && S.said?.[i] && S.said[i].until > Date.now()) { bubble = esc(S.said[i].text); bcls = S.said[i].text === 'Fold' ? 'fold say' : 'in say'; }
     if (votes[seat.id]?.length && !seat.out) bubble += ` · away vote ${votes[seat.id].length}`;
     // Your own cards are in the panel at the bottom, so in the 3D room they are not stood on the felt as well.
@@ -813,7 +926,7 @@ function render() {
       <div class="pk-cards${seat.folded ? ' dim' : ''}${seat.cards.length > 2 ? ' four' : ''}">${cards}</div>
       <button class="pk-plate" data-act="seat-menu" data-seat="${i}"><b>${R && st.button === i && st.handNo > 0 ? '<i class="pk-d" title="Dealer button">D</i>' : ''}${esc(seat.name)}${me ? ' <em>YOU</em>' : ''}</b><span>${amt(seat.stack - (showing ? seat.won || 0 : 0))}</span>${timer}</button>${me ? '<button class="pk-react" data-act="react" title="Reaction">😀</button>' : ''}
     </div>`;
-    h += `<div class="pk-spot${seat.bet ? ' has' : ''}" id="spot-${i}" style="left:${B.x}%;top:${B.y}%;--ds:${R ? R.bs.toFixed(2) : 1}">${seat.bet ? `<span class="pk-amt pk-stand">${amt(seat.bet)}</span>` : ''}</div>`;
+    h += `<div class="pk-spot${seat.bet ? ' has' : ''}" id="spot-${i}" style="left:${B.x}%;top:${B.y}%;--ds:${R ? R.bs.toFixed(2) : 1}">${seat.bet ? `<span class="pk-amt pk-stand${st.raiser === i && seat.bet === st.currentBet ? ' raise' : ''}">${amt(seat.bet)}</span>` : ''}</div>`;
     if (!R && st.button === i && st.handNo > 0) { h += `<div class="pk-dbtn" style="left:calc(${B.x}% + ${(P.y > 50 ? 1 : -1) * (phone() ? 30 : 52)}px);top:${B.y}%">D</div>`; }
     people.push({ id: seat.id, name: seat.name, look: seat.look || { skin: 2, hair: 0 }, seat: i, seats: POKER_SEATS, isMe: me, isDealer: false, x: P.x, y: P.y, bet: seat.bet });
     chips.push({ seat: i, main: seat.bet, balance: seat.stack - (showing ? seat.won || 0 : 0), mine: me });
@@ -896,7 +1009,13 @@ function drawHud(st, mySeat, showing) {
   const o = st.options, live = st.phase !== 'done' && st.phase !== 'waiting';
   const isHost = S.role === 'host';
   let status = '';
+  const nd = st.mp?.need;
   if (st.wait?.length) status = `The table moved to a new host. Waiting a moment for ${esc(st.wait.join(', '))}…`;
+  else if (st.shuffling && !live) status = 'Shuffling. Every player\'s browser locks the deck…';
+  else if (nd && nd.kind === 'sd') status = nd.seat === mySeat ? 'Showdown: your turn to show' : `Showdown: ${esc(st.seats[nd.seat]?.name || 'A player')} shows or mucks…`;
+  else if (nd && nd.kind === 'show') status = 'All in. The hands turn face up…';
+  else if (nd && (nd.kind === 'board' || nd.kind === 'rabbit')) status = nd.left < 20000 && nd.missing?.length ? `Waiting for ${esc(nd.missing.join(', '))} to open the next cards…` : 'Opening the next cards…';
+  else if (nd && nd.kind === 'rescue') status = 'A player\'s browser is gone. Dealing the rest of the hand from a fresh deck…';
   else if (mySeat < 0) status = 'Tap an empty seat to join the game.';
   else if (o) status = 'Your turn';
   else if (live && st.turn !== null) status = ''; // whose turn it is shows as the light on their name
@@ -1015,7 +1134,7 @@ function drawMenu(st) {
     <button class="menu-item" data-act="test-trip" data-who="Jeff" data-kind="nap" data-note="Jeff walks to the sofa for a nap.">😴 Jeff naps on the sofa</button>
     <button class="menu-item" data-act="test-trip" data-who="Nigel" data-kind="visit" data-note="Nigel walks over to Allie.">🧹 Nigel visits Allie</button>
     <button class="menu-item" data-act="test-trip" data-who="Gordon" data-kind="visit" data-note="Gordon walks over to Yuya.">🗣 Gordon visits Yuya</button>
-    <button class="menu-item" data-act="test-trip" data-who="Henry" data-kind="visit" data-note="Henry walks over to Felix.">🗣 Henry visits Felix</button>
+    <button class="menu-item" data-act="test-trip" data-who="Henry" data-kind="visit" data-note="Henry walks over to David or Jeff.">🗣 Henry visits David or Jeff</button>
     <button class="menu-item" data-act="test-trip" data-who="any" data-kind="coffee" data-note="Somebody leaves for a coffee.">☕ Coffee run</button>` : '<div class="menu-note">The office people show in the 3D room only.</div>'}` : ''}
     <button class="menu-item" data-act="bbview">👁 Amounts shown in: ${bbOn() ? 'big blinds' : 'chips'}</button>
     ${isHost || st.seats.some((x) => x && x.id === S.myId) ? `<button class="menu-item" data-act="settings" data-note="${isHost ? '' : 'Everyone else at the table votes on your change.'}">⚙️ Table settings</button>` : ''}
@@ -1086,18 +1205,13 @@ function checkHand(hd) {
 }
 function fairHTML(st) {
   const f = st.fair, isHost = S.role === 'host';
-  const rows = [...f.hands].reverse().slice(0, 25).map((hd) => {
-    const c = checkHand(hd);
-    const res = !c ? '<span class="muted">Seeds closed</span>' : c.ok ? `<span class="up">Checked ✓</span> <button class="btn small" data-act="fair-hand" data-h="${hd.hand}">See the deal</button>` : `<span class="down">${esc(c.why)}</span>`;
-    return `<tr><td>${hd.hand}</td><td><code>${hd.commit ? esc(hd.commit.slice(0, 10)) + '…' : 'table moved'}</code></td><td>${hd.board.map(cardText).join(' ') || 'no flop'}</td><td>${res}</td></tr>`;
-  }).join('');
+  const rows = [...f.hands].reverse().slice(0, 25).map((hd) => `<tr><td>${hd.hand}</td><td>${hd.board.map(cardText).join(' ') || 'no flop'}</td><td><span class="up">Locked ✓</span></td></tr>`).join('');
+  void isHost;
   return `<h3>🔐 Fair deck</h3><div class="pk-fair">
-    <p>Before each hand the host's browser locks in a hidden seed and shows its code (a fingerprint of the seed). Then each player's browser adds a seed of its own. The order of the 52 cards comes from all of these together, so nobody can choose it, the host included.</p>
-    <p>Code for the next hand: <code>${esc(f.nextCommit.slice(0, 16))}…</code> · player seeds received: ${f.seeds}</p>
-    <p>A seed opens 20 hands after its hand, because an opened seed shows every card of that hand, folded cards too. Your browser then deals the hand again and compares.</p>
-    ${isHost ? '<button class="btn small" data-act="reveal-all">Open all seeds now (shows folded cards)</button>' : ''}
-    <table class="pk-table"><tr><th>Hand</th><th>Code</th><th>Board</th><th>Check</th></tr>${rows || '<tr><td colspan="4">No hands yet.</td></tr>'}</table>
-    <p class="hint">Limit: the host's browser deals the cards, so a host who opens the browser's developer tools could read them. Play with a host you trust.</p></div>`;
+    <p>Locked cards: before each hand every player's browser puts its own lock on all 52 cards and shuffles them, one browser after the other. Nobody knows the order of the deck, the host included.</p>
+    <p>Your two cards open only in your browser: every other browser gives you its key for them, and your own key opens them last. A board card opens only when every browser has given its key for it, and only once the betting before it is over. Cards you fold or muck are never opened by anyone. Each card that is shown is checked in every browser against its locks.</p>
+    <table class="pk-table"><tr><th>Hand</th><th>Board</th><th>Cards</th></tr>${rows || '<tr><td colspan="3">No hands yet.</td></tr>'}</table>
+</div>`;
 }
 function fairHandHTML(st, n) {
   const hd = st.fair.hands.find((x) => x.hand === n), c = hd && checkHand(hd);
@@ -1150,7 +1264,10 @@ document.addEventListener('click', (e) => {
       if (S.raiseOpen !== S.raiseFor) { S.raiseOpen = S.raiseFor; render(); if (!phone()) { const n = $('#raise-num'); if (n) { n.focus(); n.select(); } } break; } const to = Math.max(o.minTo, Math.min(o.maxTo, Math.round(Number($('#raise-num')?.value ?? S.raiseTo)))); send({ t: 'act', a: o.isBet ? 'bet' : 'raise', amount: to }); break; }
     case 'preset': setRaise(el.dataset.v); break;
     case 'raise-step': { const o = st.options; if (o?.canRaise) setRaise(Math.max(o.minTo, Math.min(o.maxTo, Math.max(o.minTo, Math.min(o.maxTo, S.raiseTo)) + Number(el.dataset.d) * (st.settings.bigBlind || 1)))); break; }
-    case 'show': send({ t: 'show', which: el.dataset.w === undefined ? 'both' : Number(el.dataset.w) }); break;
+    case 'show': { const which = el.dataset.w === undefined ? 'both' : Number(el.dataset.w), m = st.mp, sec = m && S.mpSec[m.sid], me = st.seats.findIndex((x) => x && x.id === S.myId);
+      // Locked cards: showing is giving the key to your own cards.
+      const keys = {}; if (sec?.b && me >= 0) (m.hole[me] || []).forEach((k, n) => { if (which === 'both' || which === n) keys[k] = keyFor(sec.b[k]); });
+      send({ t: 'show', which, sid: m?.sid, keys }); break; }
     case 'punch': send({ t: 'punch' }); break;
     case 'test-mode': S.testMode = !S.testMode; try { localStorage.setItem('pk-test', S.testMode ? '1' : '0'); } catch {} drawMenu(S.st); break;
     case 'test-punch': closeMenu(); send({ t: 'punch', test: true }); break;
@@ -1185,8 +1302,8 @@ document.addEventListener('click', (e) => {
     case 'stand-go': $('#modal').close(); send({ t: 'stand' }); break;
     case 'leave-later': send({ t: 'leave-later', on: el.dataset.on !== '1' }); break;
     case 'stand-no': $('#modal').close(); break;
-    case 'start': if (t) { S.started = true; S.paused = false; try { t.startHand(); } catch (er) { toast(er.message); } push(); } break;
-    case 'hostrun': if (S.role !== 'host') break; if (S.started && !S.paused) { S.paused = true; toast('Stopped. The hand in play finishes, then no new hand is dealt.'); push(); } else if (t) { S.started = true; S.paused = false; if (!t.inHand()) { try { t.startHand(); S.doneAt = 0; } catch (er) { toast(er.message); } } push(); } break;
+    case 'start': if (t) { S.started = true; S.paused = false; if (!t.canStart()) toast('Two players with chips are needed.'); else dealHand(); push(); } break;
+    case 'hostrun': if (S.role !== 'host') break; if (S.started && !S.paused) { S.paused = true; toast('Stopped. The hand in play finishes, then no new hand is dealt.'); push(); } else if (t) { S.started = true; S.paused = false; if (!t.inHand() && t.canStart()) dealHand(); push(); } break;
     case 'pause': S.paused = !S.paused; if (!S.paused) S.started = true; closeMenu(); push(); break;
     case 'bomb': if (t) { t.setBombNext(!t.bombNext); push(); } break;
     case 'ledger': closeMenu(); modal(ledgerHTML(st)); break;
@@ -1196,7 +1313,6 @@ document.addEventListener('click', (e) => {
     case 'rules': closeMenu(); modal(rulesHTML(st)); break;
     case 'fair': closeMenu(); modal(fairHTML(st)); break;
     case 'fair-hand': modal(fairHandHTML(st, Number(el.dataset.h))); break;
-    case 'reveal-all': if (t) { t.revealAll = true; push(); modal(fairHTML(S.st)); } break;
     case 'settings': closeMenu(); modal(settingsHTML(st)); break;
     case 'save-settings': {
       const patch = {};

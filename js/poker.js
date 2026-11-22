@@ -1,6 +1,7 @@
 // No-limit Texas Hold'em for up to 9 players. Pure rules: the host's browser owns one PokerTable and
 // every action goes through it. Nothing here touches the page or the network.
-import { SUITS, RANKS, sha256, fairSeed, fairShoe, MAX_CHIPS } from './game.js?v=20261122x';
+import { SUITS, RANKS, sha256, fairSeed, fairShoe, MAX_CHIPS } from './game.js?v=20261122y';
+import { openCard, keyFor } from './mental.js?v=20261122y';
 
 export const POKER_SEATS = 9;
 export const POKER_DEFAULTS = {
@@ -153,6 +154,7 @@ export class PokerTable {
     this.bombNext = false;
     this.pending = {};     // id -> chips to add when the player is not in a hand
     this.fair = { next: newCommit(), seeds: {}, last: null };
+    this.mp = null;      // locked cards of the hand in play (js/mental.js), or null for a plain deck
     this.updateSettings(settings, true);
   }
 
@@ -340,7 +342,117 @@ export class PokerTable {
   eligible() { return this.seats.map((x, i) => (x && !x.out && x.stack > 0 ? i : -1)).filter((i) => i >= 0); }
   canStart() { return !this.inHand() && this.eligible().length >= 2; }
   nextFrom(i, ok) { for (let k = 1; k <= POKER_SEATS; k++) { const j = (i + k) % POKER_SEATS; if (ok(j)) return j; } return -1; }
-  draw() { const c = this.deck.shift(); this.dealt.push(c); return c; }
+  draw(pub = false) {
+    const m = this.mp;
+    if (m && !m.clear) {
+      // Locked cards: a card is a place in the locked deck. It is known only once every lock on it is off.
+      const k = m.pos++, o = m.open[k], c = o ? { ...o } : { h: k };
+      if (pub) m.pub.push(k);
+      this.dealt.push(c); return c;
+    }
+    const c = this.deck.shift(); this.dealt.push(c); return c;
+  }
+  // ---- locked cards (js/mental.js) ----
+  // A card nobody has opened yet is { h: place in the locked deck }.
+  static hid(c) { return !!c && c.h !== undefined; }
+  known(i) { const x = this.seats[i]; return !!x && x.cards.length === this.holeN && !x.cards.some(PokerTable.hid); }
+  holePos(i) { return (this.seats[i]?.cards || []).filter(PokerTable.hid).map((c) => c.h); }
+  // True when every place is open; otherwise the hand waits for the keys (need), and the caller stops.
+  mpNeed(pos, kind, cont, extra = {}) {
+    const m = this.mp;
+    if (!m || m.clear || pos.every((k) => m.open[k])) return true;
+    if (!m.need || m.need.kind !== kind) m.need = { kind, pos, cont, at: Date.now(), ...extra };
+    return false;
+  }
+  // Keys from one player's browser: place -> the key that takes that browser's lock off the card there.
+  mpKeys(id, keys) {
+    const m = this.mp;
+    if (!m || !m.parts.includes(id) || !keys || typeof keys !== 'object') return false;
+    let got = false;
+    for (const [kk, v] of Object.entries(keys)) {
+      const k = Number(kk);
+      if (!Number.isInteger(k) || k < 0 || k >= 52 || typeof v !== 'string' || !/^[0-9a-f]{64}$/.test(v)) continue;
+      const box = (m.keys[k] ||= {});
+      if (box[id]) continue;
+      box[id] = v; got = true;
+    }
+    if (got) this.mpUpdate();
+    return got;
+  }
+  // Opens every place that has all its keys and puts the card where the placeholder was.
+  mpUpdate() {
+    const m = this.mp;
+    if (!m) return;
+    for (const [kk, box] of Object.entries(m.keys)) {
+      const k = Number(kk);
+      if (m.open[k] || !m.parts.every((id) => box[id])) continue;
+      const c = openCard(m.deck[k], m.parts.map((id) => box[id]));
+      if (!c) { m.bad = (m.bad || 0) + 1; continue; }
+      m.open[k] = c;
+      for (const x of this.seats) if (x) x.cards = x.cards.map((q) => (PokerTable.hid(q) && q.h === k ? { ...c } : q));
+    }
+  }
+  // Carries on with the hand once the cards it waits for are open (or a showdown answer came).
+  mpResume() {
+    const m = this.mp, n = m?.need;
+    if (!n) return false;
+    if (this.phase === 'done' && n.kind !== 'rabbit') { m.need = null; return false; }
+    if (n.kind === 'sd') { const x = this.seats[n.seat]; if (x && !x.folded && !this.known(n.seat)) return false; }
+    else if (n.kind === 'rescue') return false;
+    else if (!m.clear && !n.pos.every((k) => m.open[k])) return false;
+    m.need = null;
+    if (n.cont === 'street') this.streetGo();
+    else if (n.cont === 'run') this.runGo();
+    else if (n.cont === 'finish') this.finishHand();
+    else if (n.cont === 'rabbit') { try { this.rabbitHunt(n.by); } catch { /* the player left */ } }
+    return true;
+  }
+  // A player whose turn it is at the showdown throws the hand away face down.
+  mpMuck(id) {
+    const n = this.mp?.need, i = this.seatOf(id);
+    if (!n || n.kind !== 'sd' || n.seat !== i || n.mode === 'must') return false;
+    this.muckSeat(i, `${this.name(i)} mucks.`); (this.mp.shownOrder ||= []).push(-1 - i);
+    return true;
+  }
+  muckSeat(i, line) {
+    const x = this.seats[i];
+    if (!x || x.folded) return;
+    x.folded = true; x.mucked = true; x.show = false;
+    this.addLog(line);
+  }
+  // The keys did not all come in time.
+  mpTimeout() {
+    const m = this.mp, n = m?.need;
+    if (!n) return false;
+    if (n.kind === 'sd') { this.muckSeat(n.seat, `${this.name(n.seat)} did not show in time, so the hand is thrown away.`); this.mpResume(); return true; }
+    if (n.kind === 'show') {
+      for (const i of n.seats || []) if (this.seats[i] && !this.seats[i].folded && !this.known(i)) this.muckSeat(i, `${this.name(i)} could not show the cards in time, so the hand is thrown away.`);
+      m.need = null; this.streetGo(); return true;
+    }
+    if (n.kind === 'rabbit') { m.need = null; this.rabbitTried = true; this.addLog('The cards that would have come cannot be opened: a player\'s browser is gone.'); return true; }
+    if (n.kind === 'board') { m.need = { kind: 'rescue', cont: n.cont, pos: n.pos, at: Date.now(), was: n }; this.addLog('A player\'s browser is gone, so its lock cannot come off the next cards.'); return true; }
+    if (n.kind === 'rescue') { this.mpFallback(); return true; }
+    return false;
+  }
+  // Last way out when a lock can never come off: the players still here gave their own cards to the host's
+  // browser (rescue), which deals the rest of this hand from a fresh shuffle of the cards nobody holds.
+  mpFallback() {
+    const m = this.mp, n = m.need;
+    for (let i = 0; i < this.seats.length; i++) {
+      const x = this.seats[i];
+      if (x && x.inHand && !x.folded && !this.known(i)) this.muckSeat(i, `${this.name(i)}'s cards could not be opened, so the hand is thrown away.`);
+    }
+    const seen = new Set();
+    for (const c of [...this.board, ...(this.board2 || []), ...Object.values(m.open), ...this.seats.flatMap((x) => (x ? x.cards : []))]) if (c && !PokerTable.hid(c)) seen.add(cardText(c));
+    this.deck = pokerDeck(randomSeed(), { rescue: randomSeed() }).filter((c) => !seen.has(cardText(c)));
+    m.clear = true; m.need = null;
+    this.addLog('The rest of this hand is dealt by the host\'s browser from a fresh shuffle of the cards nobody has.');
+    if (this.phase !== 'done') { if (n.cont === 'run') this.runGo(); else if (n.cont === 'finish') this.finishHand(); else this.streetGo(); }
+  }
+  // At the showdown a hand can be thrown away when a shown hand that is in every pot of this player beats it on every board.
+  static beaten(myCards, myTotal, shown, boards, best) {
+    return shown.some((o) => o.total >= myTotal && boards.every((b) => best(o.cards, b).score > best(myCards, b).score));
+  }
 
   // Collects the cards of a finished hand and goes back to waiting. Used when too few players can play the next hand.
   clearHand() {
@@ -351,11 +463,14 @@ export class PokerTable {
     return true;
   }
 
-  startHand() {
+  // opts.mp: the locked deck made by the players' browsers ({ sid, deck, parts }); opts.skip: seats left out of this hand.
+  startHand(opts = {}) {
     if (!this.canStart()) throw new Error('Two players with chips are needed.');
+    const skip = opts.skip || [];
+    if (this.eligible().filter((i) => !skip.includes(i)).length < 2) throw new Error('Two players with chips are needed.');
     // Leftovers of the hand before.
     for (let i = 0; i < POKER_SEATS; i++) { const x = this.seats[i]; if (x) Object.assign(x, { bet: 0, total: 0, cards: [], folded: false, allIn: false, acted: false, inHand: false, show: false, mask: null, cc: null, salt: null, vp: false, pf: false, redrawn: false, won: 0, hand: null }); }
-    const inIdx = this.eligible();
+    const inIdx = this.eligible().filter((i) => !skip.includes(i));
     const live = (j) => inIdx.includes(j);
     this.handNo++;
     this.button = this.nextFrom(this.button < 0 ? inIdx[inIdx.length - 1] : this.button, live);
@@ -371,6 +486,9 @@ export class PokerTable {
     this.cur = { hand: this.handNo, commit: f.next.commit, serverSeed: f.next.seed, clientSeeds: seeds, lines: [], bomb, time: Date.now() };
     this.deck = pokerDeck(f.next.seed, seeds);
     this.dealt = [];
+    this.mp = opts.mp ? { sid: String(opts.mp.sid), deck: [...opts.mp.deck], parts: [...opts.mp.parts], keys: {}, open: {}, pub: [], hole: {}, pos: 0, need: null, sd: null, bad: 0 } : null;
+    if (this.mp) this.deck = [];
+    this.rabbitTried = false; this.riverAgg = -1;
     f.next = newCommit();
     const game = bomb && s.bombGame !== 'same' ? s.bombGame : s.game;
     this.plo = game === 'plo';
@@ -390,7 +508,7 @@ export class PokerTable {
       // Bomb pot: everyone puts in the same amount, there is no betting before the flop.
       for (const i of inIdx) post(i, s.bombPotAnte * s.bigBlind, 'the bomb pot');
       this.dealHole(inIdx);
-      this.phase = 'preflop'; this.currentBet = 0; this.minRaise = s.bigBlind; this.turn = null;
+      this.phase = 'preflop'; this.currentBet = 0; this.raiser = -1; this.minRaise = s.bigBlind; this.turn = null;
       this.endStreet();
       return;
     }
@@ -403,7 +521,7 @@ export class PokerTable {
     const bb = this.nextFrom(sb, live);
     if (!this.seats[sb].allIn) post(sb, s.smallBlind, 'the small blind');
     if (!this.seats[bb].allIn) post(bb, s.bigBlind, 'the big blind');
-    this.currentBet = s.bigBlind; this.minRaise = s.bigBlind;
+    this.currentBet = s.bigBlind; this.minRaise = s.bigBlind; this.raiser = -1;
     let first = this.nextFrom(bb, live);
     // Straddle: the player after the big blind posts two big blinds blind and acts last before the flop.
     if (s.straddle && inIdx.length >= 3 && this.seats[first].straddle && this.seats[first].stack >= 2 * s.bigBlind) {
@@ -428,6 +546,7 @@ export class PokerTable {
     for (let r = 0; r < this.holeN; r++) for (const i of order) this.seats[i].cards.push(this.draw());
     // A sealed note of each player's cards, open to all. If the table moves to another browser mid hand,
     // each player hands in their cards with the secret word and the new host checks them against the note.
+    if (this.mp) { for (const i of order) this.mp.hole[i] = this.holePos(i); return; } // locked cards: nobody, the host included, knows the cards to seal them
     for (const i of order) { const x = this.seats[i]; x.salt = randomSeed(); x.cc = sha256(x.cards.map(cardText).join('') + x.salt); }
   }
 
@@ -495,7 +614,8 @@ export class PokerTable {
       if (this.phase === 'preflop' && !this.bomb) { x.vp = true; x.pf = true; }
       if (this.phase !== 'preflop') x.agg = true;
       this.addLog(`${nm} ${o.isBet ? 'bets' : 'raises to'} ${to}${x.allIn ? ' and is all in' : ''}.`);
-      this.currentBet = to;
+      this.currentBet = to; this.raiser = i;
+      if (this.phase === 'river') this.riverAgg = i;
     } else throw new Error('Unknown move.');
     this.seekTurn(i);
   }
@@ -521,7 +641,7 @@ export class PokerTable {
       this.swept = { seq: (this.swept?.seq || 0) + 1, hand: this.handNo, board: this.board.length, pot: this.pot, potTotal: this.potTotal(),
         seats: this.seats.map((x) => (x ? { bet: x.bet, stack: x.stack, total: x.total, folded: !!x.folded, allIn: !!x.allIn, acted: !!x.acted } : null)) };
     }
-    for (const x of this.seats) if (x) { this.pot += x.bet; x.bet = 0; x.acted = false; } this.currentBet = 0; this.minRaise = this.settings.bigBlind;
+    for (const x of this.seats) if (x) { this.pot += x.bet; x.bet = 0; x.acted = false; } this.currentBet = 0; this.raiser = -1; this.minRaise = this.settings.bigBlind;
   }
   // Chips nobody matched go back before the next card, so the pot only holds called money.
   refundUncalled() {
@@ -536,6 +656,10 @@ export class PokerTable {
   endStreet() {
     this.refundUncalled();
     this.collect(true);
+    this.streetGo();
+  }
+  // The rest of the end of a betting round. With locked cards it may wait for keys and run again when they come.
+  streetGo() {
     const live = this.liveSeats();
 
     if (live.length <= 1) { this.finishHand(); return; }
@@ -546,8 +670,13 @@ export class PokerTable {
       // Before each new card the chances of every hand are worked out, for the display.
       if (!this.allInRun) {
         for (const i of live) if (this.seats[i].cards.length !== this.holeN) this.redraw(i); // only after a table move
+        // Locked cards: every hand still in turns face up, so each player's browser opens its own cards for all.
+        if (this.mp && !this.mp.clear) {
+          const hidden = live.filter((i) => !this.known(i));
+          if (hidden.length) { this.mpNeed(hidden.flatMap((i) => this.holePos(i)), 'show', 'street', { seats: hidden }); this.turn = null; return; }
+        }
         this.allInRun = true; this.runout = [];
-        for (const i of live) this.seats[i].show = true;
+        for (const i of live) { this.seats[i].show = true; this.pubSeat(i); }
         // Run it more than once: as many runs as the table asks for and the deck has cards for.
         // The first run burns a card before each street as usual; later runs deal straight from the deck.
         const need = 5 - this.board.length, first = need + (need === 5 ? 3 : need === 2 ? 2 : 1);
@@ -569,14 +698,14 @@ export class PokerTable {
       this.runGo();
       return;
     }
-    this.nextStreet();
+    if (!this.nextStreet('street')) { this.turn = null; return; }
     this.seekTurn(this.button);
   }
   // Deals the rest of the board once the number of runs is settled.
   runGo() {
     const live = this.liveSeats();
-    if (!PokerTable.noChances) this.runout.push(this.chances(live));
-    this.nextStreet();
+    if (!PokerTable.noChances && this.runout.at(-1)?.n !== this.board.length) this.runout.push(this.chances(live));
+    if (!this.nextStreet('run')) return;
     this.endStreet();
   }
   runSettle(n, why) {
@@ -605,14 +734,19 @@ export class PokerTable {
   }
   // Nobody answered in time: the board is dealt once.
   runTimeout() { this.runSettle(1, 'No answer in time. The board is dealt once.'); }
-  nextStreet() {
+  nextStreet(cont = 'street') {
+    if (this.mp && !this.mp.clear) {
+      const n = (this.phase === 'preflop' ? 3 : 1) * (this.dbl ? 2 : 1), p0 = this.mp.pos + 1;
+      if (!this.mpNeed(Array.from({ length: n }, (_, k) => p0 + k), 'board', cont)) return false;
+    }
     this.draw(); // burn
     // With two boards the first board gets its cards, then the second.
-    const give = (n) => { for (let k = 0; k < n; k++) this.board.push(this.draw()); if (this.dbl) for (let k = 0; k < n; k++) this.board2.push(this.draw()); };
+    const give = (n) => { for (let k = 0; k < n; k++) this.board.push(this.draw(true)); if (this.dbl) for (let k = 0; k < n; k++) this.board2.push(this.draw(true)); };
     if (this.phase === 'preflop') { give(3); this.phase = 'flop'; }
     else if (this.phase === 'flop') { give(1); this.phase = 'turn'; }
     else if (this.phase === 'turn') { give(1); this.phase = 'river'; }
     this.addLog(`${this.phase[0].toUpperCase() + this.phase.slice(1)}: ${this.board.map(cardText).join(' ')}${this.dbl ? ' | second board: ' + this.board2.map(cardText).join(' ') : ''}.`);
+    return true;
   }
 
   // Each live hand's chance to win from here, in percent, and its outs: the cards of the next street that
@@ -672,6 +806,7 @@ export class PokerTable {
     this.refundUncalled();
     this.collect();
     this.turn = null;
+    if (this.mp && !this.mp.clear && !this.mpShowdown()) return; // waits for keys or for a player to show or muck
     const live = this.liveSeats();
     const showdown = live.length > 1;
     if (showdown) for (const i of live) if (this.seats[i].cards.length !== this.holeN) this.redraw(i); // only after a table move
@@ -687,7 +822,7 @@ export class PokerTable {
     // The boards: one, or one per run when the all in is run more than once.
     const boards = this.dbl && showdown ? [this.board, this.board2] : [this.board];
     if (!this.dbl && showdown && this.allInRun && this.runs > 1 && this.runBase) {
-      for (let r = 1; r < this.runs; r++) { const b = [...this.runBase]; while (b.length < 5) b.push(this.draw()); boards.push(b); }
+      for (let r = 1; r < this.runs; r++) { const b = [...this.runBase]; while (b.length < 5) b.push(this.draw(true)); boards.push(b); }
       this.boards = boards;
     }
     const R = boards.length;
@@ -788,6 +923,46 @@ export class PokerTable {
       if (x.leaving) { this.players[x.id].totalIn -= x.stack; this.addLog(`${this.name(i)} left the seat with ${x.stack}.`); this.seats[i] = null; }
     }
   }
+  // Locked cards at the end of a hand, the way a cash game does it. The last player who bet or raised on the
+  // river shows first (with no bet on the river, the first player left of the button). Then, in turn, each
+  // player shows, or throws the hand away face down when a shown hand already beats it. Nobody else's
+  // browser, the host's included, ever opens a hand that was thrown away. Returns true when the hand can be paid.
+  mpShowdown() {
+    const m = this.mp;
+    let live = this.liveSeats();
+    // Extra runs of the board (run it twice or more): their places must be open before they are dealt.
+    if (live.length > 1 && this.allInRun && !this.dbl && this.runs > 1 && this.runBase) {
+      const need = (this.runs - 1) * (5 - this.runBase.length);
+      if (need > 0 && !this.mpNeed(Array.from({ length: need }, (_, k) => m.pos + k), 'board', 'finish')) return false;
+    }
+    if (live.length <= 1 || this.allInRun) return true;
+    if (!m.sd) {
+      const first = this.riverAgg >= 0 && live.includes(this.riverAgg) ? this.riverAgg : this.nextFrom(this.button, (q) => live.includes(q));
+      const order = [first];
+      for (let k = 1; k < POKER_SEATS; k++) { const q = (first + k) % POKER_SEATS; if (live.includes(q)) order.push(q); }
+      m.sd = { order, idx: 0 };
+    }
+    const boards = this.dbl ? [this.board, this.board2] : [this.board];
+    while (m.sd.idx < m.sd.order.length) {
+      const i = m.sd.order[m.sd.idx], x = this.seats[i];
+      if (!x || x.folded || !x.inHand) { m.sd.idx++; continue; }
+      const shown = this.liveSeats().filter((q) => q !== i && this.seats[q].show && this.known(q)).map((q) => ({ cards: this.seats[q].cards, total: this.seats[q].total }));
+      const must = !shown.length;
+      if (this.known(i)) { // a computer player's cards (it shows or mucks by the same rule), or cards a player opened to show
+        if (!must && !m.parts.includes(x.id) && PokerTable.beaten(x.cards, x.total, shown, boards, (c, b) => this.best(c, b))) { this.muckSeat(i, `${this.name(i)} mucks.`); (m.shownOrder ||= []).push(-1 - i); }
+        else { x.show = true; this.pubSeat(i); (m.shownOrder ||= []).push(i); }
+        m.sd.idx++; continue;
+      }
+      if (!m.need || m.need.kind !== 'sd' || m.need.seat !== i) m.need = { kind: 'sd', seat: i, mode: must ? 'must' : 'may', pos: this.holePos(i), cont: 'finish', at: Date.now() };
+      return false;
+    }
+    m.sd = null;
+    const left = this.liveSeats();
+    if (left.length === 1 && this.seats[left[0]].show) this.addLog(`${this.name(left[0])} shows ${this.seats[left[0]].cards.map(cardText).join(' ')}.`);
+    return true;
+  }
+  // The places of a seat's shown cards join the public list that every browser checks against the locks.
+  pubSeat(i, which = null) { const m = this.mp; if (!m) return; (m.hole[i] || []).forEach((k, n) => { if ((which === null || which === n) && m.open[k] && !m.pub.includes(k)) m.pub.push(k); }); }
   // Show your own cards after the hand (a bluff shown, or a fold you want seen).
   // which: 0 or 1 for one card, anything else for both. A card once shown stays shown.
   showCards(id, which) {
@@ -796,6 +971,8 @@ export class PokerTable {
     const x = this.seats[i];
     if (!x.inHand || x.show || x.cards.length !== this.holeN) return;
     const one = Number.isInteger(which) && which >= 0 && which < x.cards.length;
+    if (one ? PokerTable.hid(x.cards[which]) : !this.known(i)) return; // locked: the owner's key opens the card first
+    this.pubSeat(i, one ? which : null);
     if (one) {
       const m = x.mask || x.cards.map(() => false);
       if (m[which]) return;
@@ -808,6 +985,18 @@ export class PokerTable {
     }
     const rec = this.hist[this.hist.length - 1], mine = rec && rec.hand === this.handNo && rec.seats.find((q) => q.seat === i);
     if (mine) mine.cards = this.shownCards(i);
+    // With locked cards nobody knew a winner's seven-two until it was shown: the bounty is paid when it is.
+    if (x.show && this.mp && this.result && !this.result.bounty?.some((b) => b.seat === i) && this.result.wins?.some((w) => w.seat === i)) this.payBounty(i, rec);
+  }
+  payBounty(w, rec) {
+    if (!(this.settings.sevenDeuce > 0) || this.plo) return;
+    const v = this.seats[w].cards.map(rankVal).sort((a, b) => a - b);
+    if (v.length !== 2 || v[0] !== 2 || v[1] !== 7) return;
+    let got = 0;
+    for (const q of rec?.seats || []) { if (q.seat === w || !this.seats[q.seat]) continue; const pay = Math.min(this.seats[q.seat].stack, this.settings.sevenDeuce); this.seats[q.seat].stack -= pay; this.seats[w].stack += pay; got += pay; }
+    (this.result.bounty ||= []).push({ seat: w, amount: got });
+    if (rec) rec.bounty = this.result.bounty;
+    this.addLog(`${this.name(w)} won with seven-two and collects a bounty of ${got}.`);
   }
   // The cards of a seat that everyone may see: both, one (the other is null), or none (null).
   shownCards(i) {
@@ -823,7 +1012,7 @@ export class PokerTable {
   // from a fresh shuffle of the cards nobody has been shown, which is the same chance as the old deck.
   static fromPublic(st, myId, mine) {
     const t = new PokerTable(st.settings);
-    Object.assign(t, { hostId: myId, button: st.button, handNo: st.handNo, phase: st.phase, board: [...st.board], pot: st.pot, currentBet: st.currentBet,
+    Object.assign(t, { hostId: myId, button: st.button, handNo: st.handNo, phase: st.phase, board: [...st.board], pot: st.pot, currentBet: st.currentBet, raiser: st.raiser ?? -1,
       minRaise: st.minRaise ?? st.settings.bigBlind, turn: st.turn, bomb: !!st.bomb, plo: !!st.plo, dbl: !!st.dbl, board2: [...(st.board2 || [])], rabbit2: st.rabbit2 || null, bombNext: !!st.bombNext, result: st.result, rabbit: st.rabbit,
       awayVotes: st.awayVotes || {}, pending: { ...(st.pending || {}) }, log: [...(st.log || [])], hist: st.lastHand ? [st.lastHand] : [], moved: (st.moved || 0) + 1 });
     for (const r of st.ledger || []) t.players[r.id] = { id: r.id, name: r.name, connected: r.id === myId, totalIn: r.totalIn, pocket: r.pocket || 0, look: { skin: 2, hair: 0 }, stats: r.stats || undefined };
@@ -914,9 +1103,21 @@ export class PokerTable {
     if (this.phase !== 'done' || !this.result?.early || this.rabbit) return;
     const i = this.seatOf(id);
     if (i < 0 || !this.seats[i].inHand) throw new Error('Only players dealt into the hand can look.');
-    const deck = [...this.deck], out = [], out2 = [];
-    let n = this.board.length;
-    while (n < 5) { deck.shift(); const take = n === 0 ? 3 : 1; for (let k = 0; k < take; k++) out.push(deck.shift()); if (this.dbl) for (let k = 0; k < take; k++) out2.push(deck.shift()); n += take; }
+    if (this.rabbitTried) throw new Error('Those cards cannot be opened.');
+    const m = this.mp && !this.mp.clear ? this.mp : null;
+    // Locked cards: the places of the cards that would have come, past each burn card.
+    const take = (from) => { const pl = [], p2 = []; let p = from, n = this.board.length; while (n < 5) { p++; const t = n === 0 ? 3 : 1; for (let k = 0; k < t; k++) pl.push(p++); if (this.dbl) for (let k = 0; k < t; k++) p2.push(p++); n += t; } return [pl, p2]; };
+    let out = [], out2 = [];
+    if (m) {
+      const [pl, p2] = take(m.pos);
+      if (!this.mpNeed([...pl, ...p2], 'rabbit', 'rabbit', { by: id })) return;
+      out = pl.map((k) => ({ ...m.open[k] })); out2 = p2.map((k) => ({ ...m.open[k] }));
+      m.pub.push(...pl, ...p2);
+    } else {
+      const deck = [...this.deck];
+      let n = this.board.length;
+      while (n < 5) { deck.shift(); const t = n === 0 ? 3 : 1; for (let k = 0; k < t; k++) out.push(deck.shift()); if (this.dbl) for (let k = 0; k < t; k++) out2.push(deck.shift()); n += t; }
+    }
     this.rabbit = out; this.rabbit2 = this.dbl ? out2 : null;
     this.addLog(`${this.name(i)} looked at what would have come: ${out.map(cardText).join(' ')}${this.dbl ? ' | second board: ' + out2.map(cardText).join(' ') : ''}.`);
   }
@@ -931,24 +1132,38 @@ export class PokerTable {
     const me = this.seatOf(forId);
     return {
       game: 'poker', settings: this.settings, phase: this.phase, handNo: this.handNo, button: this.button, board: this.board, board2: this.dbl ? this.board2 || [] : null, plo: !!this.plo, dbl: !!this.dbl, rabbit2: this.rabbit2 || null, bomb: !!this.bomb,
-      pot: this.pot, minRaise: this.minRaise, pending: this.pending, moved: this.moved || 0, mySalt: me >= 0 ? this.seats[me].salt || null : null, wait: this.waitCards ? this.missingCards().map((i) => this.name(i)) : undefined, potTotal: this.potTotal(), swept: this.swept || null, canPunch: done && me >= 0 && this.beats?.[me] && !this.punch ? { to: this.beats[me].by, pct: this.beats[me].pct } : null, punch: !this.inHand() && this.punch && this.seats[this.punch.from] && this.seats[this.punch.to] ? { from: this.punch.from, to: this.punch.to, hand: this.punch.hand, at: this.punch.at, left: Math.max(0, 5000 - (Date.now() - this.punch.at)) } : null, pots: this.inHand() || done ? this.potsNow() : [], currentBet: this.currentBet, turn: this.turn,
+      pot: this.pot, minRaise: this.minRaise, pending: this.pending, moved: this.moved || 0, mySalt: me >= 0 ? this.seats[me].salt || null : null, wait: this.waitCards ? this.missingCards().map((i) => this.name(i)) : undefined, potTotal: this.potTotal(), swept: this.swept || null, canPunch: done && me >= 0 && this.beats?.[me] && !this.punch ? { to: this.beats[me].by, pct: this.beats[me].pct } : null, punch: !this.inHand() && this.punch && this.seats[this.punch.from] && this.seats[this.punch.to] ? { from: this.punch.from, to: this.punch.to, hand: this.punch.hand, at: this.punch.at, left: Math.max(0, 5000 - (Date.now() - this.punch.at)) } : null, pots: this.inHand() || done ? this.potsNow() : [], currentBet: this.currentBet, raiser: this.raiser ?? -1, turn: this.turn,
       turnLeft: this.turn !== null && this.settings.turnTimer ? Math.max(0, this.settings.turnTimer * 1000 - (Date.now() - (this.turnStarted || Date.now()))) : null,
       hostId: this.hostId, awayVotes: this.awayVotes || {}, canStart: this.canStart(), bombNext: this.bombNext, result: this.result, rabbit: this.rabbit, allInRun: !!this.allInRun && !done ? true : undefined,
       runAsk: this.runAsk && !this.runAsk.done ? { by: this.runAsk.by, max: this.runAsk.max, n: this.runAsk.n, yes: this.runAsk.yes, need: this.runAsk.need, left: Math.max(0, 20000 - (Date.now() - this.runAsk.at)) } : undefined,
       seats: this.seats.map((x, i) => x && {
         id: x.id, name: this.players[x.id]?.name, look: this.players[x.id]?.look, connected: this.players[x.id]?.connected !== false,
-        stack: x.stack, bet: x.bet, total: x.total, bank: x.bank || 0, runs: x.runs || 2, shown: !!x.show, mask: x.mask || null, acted: !!x.acted, leaving: !!x.leaving, cc: x.cc || null, vp: !!x.vp, pf: !!x.pf, stats: this.players[x.id]?.stats || null, folded: x.folded, allIn: x.allIn, inHand: x.inHand, out: x.out, won: done ? x.won || 0 : 0, straddle: !!x.straddle,
+        stack: x.stack, bet: x.bet, total: x.total, bank: x.bank || 0, runs: x.runs || 2, shown: !!x.show, mask: x.mask || null, acted: !!x.acted, leaving: !!x.leaving, mucked: !!x.mucked, cc: x.cc || null, vp: !!x.vp, pf: !!x.pf, stats: this.players[x.id]?.stats || null, folded: x.folded, allIn: x.allIn, inHand: x.inHand, out: x.out, won: done ? x.won || 0 : 0, straddle: !!x.straddle,
         cards: x.inHand ? (x.cards.length === this.holeN ? x.cards : Array(this.holeN).fill(null)).map((c, k) => (i === me || x.show || (x.mask && x.mask[k]) ? c : null)) : [],
-        hand: x.show && x.hand ? x.hand.name : i === me && x.inHand && !x.folded && x.cards.length === this.holeN && this.board.length >= 3 ? this.best(x.cards, this.board).name + (this.dbl ? ' | ' + this.best(x.cards, this.board2).name : '') : null,
+        hand: x.show && x.hand ? x.hand.name : i === me && x.inHand && !x.folded && this.known(i) && this.board.length >= 3 ? this.best(x.cards, this.board).name + (this.dbl ? ' | ' + this.best(x.cards, this.board2).name : '') : null,
         best: done && x.show && x.hand ? x.hand.cards : null,
       }),
       players: Object.values(this.players).filter((p) => !p.kicked).map((p) => ({ id: p.id, name: p.name, connected: p.connected, seat: this.seatOf(p.id) })),
       ledger: Object.values(this.players).map((p) => { const i = this.seatOf(p.id); const stack = (i >= 0 ? this.seats[i].stack + this.seats[i].bet + (this.inHand() ? this.seats[i].total - this.seats[i].bet : 0) : 0) + (p.pocket || 0); return { id: p.id, name: p.name, totalIn: p.totalIn, stack, net: stack - p.totalIn, pocket: p.pocket || 0, stats: p.stats || null }; }),
       options: this.options(forId),
       fair: this.fairState(forId),
+      mp: this.mpState(forId), shuffling: !!this.shuffling,
       lastHand: this.publicHand(this.hist[this.hist.length - 1]),
       log: this.log.slice(-40),
     };
+  }
+  // What a player's browser needs for the locked cards: who holds locks, where each seat's cards are, what the
+  // hand waits for, its own cards with the other browsers' keys, and every public card with all its keys (to check).
+  mpState(forId) {
+    const m = this.mp;
+    if (!m) return null;
+    const me = this.seatOf(forId), mine = {};
+    if (me >= 0) for (const k of m.hole[me] || []) mine[k] = { pt: m.deck[k], keys: m.parts.filter((id) => id !== forId).map((id) => m.keys[k]?.[id] || null) };
+    const proof = [...new Set(m.pub)].filter((k) => m.open[k]).map((k) => ({ k, pt: m.deck[k], keys: m.parts.map((id) => m.keys[k][id]), c: m.open[k] }));
+    const n = m.need;
+    return { sid: m.sid, parts: m.parts, hole: m.hole, pos: m.pos, clear: !!m.clear, bad: m.bad || 0, mine, proof,
+      need: n ? { kind: n.kind, pos: n.kind === 'sd' && n.seat !== me ? [] : n.pos, seat: n.seat ?? null, seats: n.seats || null, mode: n.mode || null, left: Math.max(0, (n.kind === 'sd' ? 30000 : 25000) - (Date.now() - n.at)),
+        missing: n.kind === 'sd' || n.kind === 'show' ? [] : m.parts.filter((id) => (n.pos || []).some((k) => !m.keys[k]?.[id])).map((id) => this.players[id]?.name || '?') } : null };
   }
   // A finished hand as everyone may keep it: no seeds, no deck, and only the cards that were shown.
   publicHand(h) {
@@ -957,11 +1172,10 @@ export class PokerTable {
     void serverSeed; void clientSeeds; void dealt;
     return rest;
   }
-  // The promise for the coming hand, the promises of past hands, and the seeds of hands old enough to open.
-  // Opening a seed shows every card of that hand, folded ones too, so seeds stay shut for 20 hands
-  // unless the host opens them all (at the end of a session).
+  // The promise for the coming hand and the promises of past hands. Seeds never open: an opened seed
+  // would show every card of that hand, folded ones too, and nobody may see another player's folded cards.
   fairState(forId) {
-    const open = (h) => this.revealAll || h.hand <= this.handNo - 20;
+    const open = () => false;
     return {
       nextCommit: this.fair.next.commit, mySeed: !!this.fair.seeds[forId], seeds: Object.keys(this.fair.seeds).filter((id) => id !== this.hostId).length,
       hands: this.hist.slice(-40).map((h) => ({ hand: h.hand, commit: h.commit, board: h.board, board2: h.board2, plo: !!h.plo, dbl: !!h.dbl, button: h.button, seats: h.seats.map((x) => ({ seat: x.seat, name: x.name, cards: x.cards })),
@@ -981,5 +1195,67 @@ export class PokerTable {
     if (extra) { if (out.length) out[out.length - 1].amount += extra; else out.push({ amount: extra, who: [] }); }
     return out;
   }
+}
+// What one player's browser sends for the locked cards, from what it is told (st) and its own secret locks (sec).
+// mine: its own cards, once opened. sent: a Set of what it already sent, so nothing goes twice.
+// It never gives the key to its own cards unless it shows them, and gives keys to board cards only when the table
+// is waiting for exactly those cards.
+export function mpClientMoves(st, myId, sec, mine, sent) {
+  const m = st?.mp;
+  if (!m || !sec || sec.sid !== m.sid || !m.parts.includes(myId)) return [];
+  const out = [], keys = {}, me = st.seats.findIndex((x) => x && x.id === myId), seat = me >= 0 ? st.seats[me] : null;
+  const myHole = me >= 0 ? (m.hole[me] || []) : [];
+  const allHole = Object.values(m.hole).flat(), topHole = allHole.length ? Math.max(...allHole) : -1;
+  const give = (k, tag) => { if (sent.has(`${m.sid}:${k}`) || !sec.b[k]) return; if (myHole.includes(k) && tag !== 'own') return; keys[k] = keyFor(sec.b[k]); sent.add(`${m.sid}:${k}`); };
+  // The keys to everyone else's cards: each player then opens their own cards with their own key.
+  for (const [i, ks] of Object.entries(m.hole)) if (Number(i) !== me) for (const k of ks) give(k, 'hole');
+  // Folded: nothing left to guard but the own cards. (A browser that was not dealt in keeps its locks until asked.)
+  if (seat && seat.inHand && seat.folded) for (let k = 0; k < 52; k++) if (!myHole.includes(k)) give(k, 'out');
+  const n = m.need;
+  if (n) {
+    const pos = n.pos || [];
+    if ((n.kind === 'board' && st.turn === null && st.phase !== 'done') || (n.kind === 'rabbit' && st.phase === 'done')) {
+      if (pos.length <= 12 && pos.every((k) => Number.isInteger(k) && k > topHole && k < 52)) for (const k of pos) give(k, 'board');
+    } else if (n.kind === 'show' && (n.seats || []).includes(me)) for (const k of myHole) give(k, 'own');
+    else if (n.kind === 'rescue' && seat && seat.inHand) for (const k of myHole) give(k, 'own');
+    else if (n.kind === 'sd' && n.seat === me && !sent.has(`${m.sid}:sd`)) {
+      let muck = false;
+      if (n.mode !== 'must' && mine && mine.length === myHole.length) {
+        const boards = st.dbl ? [st.board, st.board2 || []] : [st.board];
+        const best = (c, b) => (st.plo ? bestOmaha(c, b) : bestHand([...c, ...b]));
+        const shown = st.seats.filter((x, i) => x && i !== me && x.inHand && !x.folded && x.shown && x.cards.every(Boolean)).map((x) => ({ cards: x.cards, total: x.total }));
+        muck = PokerTable.beaten(mine, seat.total, shown, boards, best);
+      }
+      sent.add(`${m.sid}:sd`);
+      if (muck) out.push({ t: 'mp-muck', sid: m.sid });
+      else for (const k of myHole) give(k, 'own');
+    }
+  }
+  if (Object.keys(keys).length) out.unshift({ t: 'mp-keys', sid: m.sid, keys });
+  return out;
+}
+// A player's own cards from the keys the other browsers gave and its own key; null until all keys are in.
+export function mpMine(st, myId, sec) {
+  const m = st?.mp;
+  if (!m || !sec || sec.sid !== m.sid) return null;
+  const me = st.seats.findIndex((x) => x && x.id === myId);
+  if (me < 0) return null;
+  const cards = [];
+  for (const k of m.hole[me] || []) {
+    const e = m.mine[k];
+    if (!e || e.keys.some((v) => !v) || !sec.b[k]) return null;
+    const c = openCard(e.pt, [...e.keys, keyFor(sec.b[k])]);
+    if (!c) return { bad: true };
+    cards.push(c);
+  }
+  return cards.length ? cards : null;
+}
+// Checks every public card against its locks. Returns the number of cards that do not match.
+export function mpCheck(st) {
+  const m = st?.mp;
+  if (!m) return 0;
+  let bad = 0;
+  for (const p of m.proof || []) { const c = p.keys.every(Boolean) ? openCard(p.pt, p.keys) : null; if (!c || cardText(c) !== cardText(p.c)) bad++; }
+  return bad;
 }
 export { SUITS, RANKS };
