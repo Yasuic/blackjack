@@ -1,16 +1,16 @@
 // The poker page: a Texas Hold'em table for up to 9 in the big meeting room. The host's browser runs
 // the table (js/poker.js); every other browser sends its moves there and is told only what it may see.
-import { PokerTable, POKER_SEATS, pokerDeck, cardText, mpClientMoves, mpMine, mpCheck, bestHand, bestOmaha } from './poker.js?v=20261122y';
-import { plainDeck, shufflePass, lockPass, checkDeck, keyFor } from './mental.js?v=20261122y';
-import { sha256 } from './game.js?v=20261122y';
-import { botMove, isBot, BOT_NAMES } from './pokerbot.js?v=20261122y';
-import { chipSound, cardSound, hitSound, standSound, potSound, tickSound, turnSound, punchSound } from './fx.js?v=20261122y';
-import { webglOK, initRoom } from './room3d.js?v=20261122y';
-import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122y';
-import { showDropped, params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML } from './common.js?v=20261122y';
+import { PokerTable, POKER_SEATS, pokerDeck, cardText, mpClientMoves, mpMine, mpCheck, bestHand, bestOmaha } from './poker.js?v=20261122z';
+import { plainDeck, shufflePass, lockPass, checkDeck, keyFor } from './mental.js?v=20261122z';
+import { sha256 } from './game.js?v=20261122z';
+import { botMove, isBot, BOT_NAMES } from './pokerbot.js?v=20261122z';
+import { chipSound, cardSound, hitSound, standSound, potSound, tickSound, turnSound, punchSound } from './fx.js?v=20261122z';
+import { webglOK, initRoom } from './room3d.js?v=20261122z';
+import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122z';
+import { showDropped, params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML } from './common.js?v=20261122z';
 
-import { shareHidden, startHold } from './vault.js?v=20261122y';
-import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261122y';
+import { shareHidden, startHold } from './vault.js?v=20261122z';
+import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261122z';
 const PREFIX = 'bjt-pk-';
 // A settings change by vote (js/vote.js): any player at the table may ask, every other player at the table who is online has to say yes.
 const VOTE = {
@@ -928,7 +928,7 @@ function render() {
     </div>`;
     h += `<div class="pk-spot${seat.bet ? ' has' : ''}" id="spot-${i}" style="left:${B.x}%;top:${B.y}%;--ds:${R ? R.bs.toFixed(2) : 1}">${seat.bet ? `<span class="pk-amt pk-stand${st.raiser === i && seat.bet === st.currentBet ? ' raise' : ''}">${amt(seat.bet)}</span>` : ''}</div>`;
     if (!R && st.button === i && st.handNo > 0) { h += `<div class="pk-dbtn" style="left:calc(${B.x}% + ${(P.y > 50 ? 1 : -1) * (phone() ? 30 : 52)}px);top:${B.y}%">D</div>`; }
-    people.push({ id: seat.id, name: seat.name, look: seat.look || { skin: 2, hair: 0 }, seat: i, seats: POKER_SEATS, isMe: me, isDealer: false, x: P.x, y: P.y, bet: seat.bet });
+    people.push({ id: seat.id, name: seat.name, look: seat.look || { skin: 2, hair: 0 }, seat: i, seats: POKER_SEATS, isMe: me, isDealer: false, x: P.x, y: P.y, bet: seat.bet, cards: !me && seat.inHand && st.phase !== 'waiting' ? (seat.folded ? 'down' : 'up') : null }); // your own cards are the big ones at the bottom
     chips.push({ seat: i, main: seat.bet, balance: seat.stack - (showing ? seat.won || 0 : 0), mine: me });
   }
   const potChips = st.phase === 'done' ? (showing ? potNow : 0) : st.pot;

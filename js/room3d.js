@@ -8,11 +8,18 @@
 import * as THREE from '../lib/three.module.js';
 import { CSS3DRenderer, CSS3DObject } from '../lib/CSS3DRenderer.js';
 
+// Asked once per page and remembered. Each test made a new WebGL context, and the page asks often (every menu
+// redraw): past about 16 contexts the browser drops the oldest one, which was the 3D room, leaving a blank page.
+let glOK = null;
 export function webglOK() {
+  if (glOK !== null) return glOK;
   try {
     const c = document.createElement('canvas');
-    return !!(window.WebGLRenderingContext && (c.getContext('webgl2') || c.getContext('webgl')));
-  } catch { return false; }
+    const ctx = window.WebGLRenderingContext && (c.getContext('webgl2') || c.getContext('webgl'));
+    glOK = !!ctx;
+    ctx?.getExtension('WEBGL_lose_context')?.loseContext(); // give the test context back at once
+  } catch { glOK = false; }
+  return glOK;
 }
 
 // The same display font as the office model. It falls back to the system font until the page has loaded it.
@@ -210,7 +217,7 @@ function buildOffice(signText, midShift = 0, midScale = 1, skipRoom = null, live
     chrome: mk({ color: '#b9bec4', roughness: 0.25, metalness: 0.9 }),
     screen: mk({ color: '#0d0f12', roughness: 0.25, metalness: 0.2 }),
     // What the office screens show: the ARC Group logo, from the photo of it, lit like a screen that is on.
-    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261122y'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
+    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261122z'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
     dark: mk({ color: '#30353c', roughness: 0.6 }),
   };
   const group = new THREE.Group();
@@ -973,7 +980,7 @@ function buildStorefront() {
     lamp: lam('#c8161d', 0.6), bulb: lit('#ffe9a8'), red: lit('#c8161d'), gold: lit('#f4c542'), wood: lam('#7a5234', 0.35),
     glass: new THREE.MeshBasicMaterial({ color: '#dff3f7', transparent: true, opacity: 0.13, depthWrite: false }),
     awning: new THREE.MeshBasicMaterial({ map: canvasTexture(512, 64, (g, w, h) => { for (let i = 0; i < 16; i++) { g.fillStyle = i % 2 ? '#fff6e6' : '#f08a1c'; g.fillRect((i * w) / 16, 0, w / 16 + 1, h); } }), side: THREE.DoubleSide }),
-    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261122y') }),
+    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261122z') }),
     menu: new THREE.MeshBasicMaterial({ map: canvasTexture(256, 384, (g, w, h) => {
       g.fillStyle = '#c8161d'; g.fillRect(0, 0, w, h); g.fillStyle = '#f4c542'; g.fillRect(14, 14, w - 28, 44);
       const r = rng(11); g.fillStyle = '#fff3d6';
@@ -1220,6 +1227,7 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
   const people = new THREE.Group();
   scene.add(people);
   const trousers = lam({ color: 0x30353c, flatShading: true });
+  const cardWhite = lam({ color: 0xf4f1ea }), cardRed = lam({ color: 0xc0182a }); // the backs of the cards the players hold
   const stoolLeather = lam({ color: 0x8c1d24, flatShading: true });
   const geoCache = {};
   const cyl = (rt, rb, seg) => (geoCache[`c${rt},${rb},${seg}`] ||= new THREE.CylinderGeometry(rt, rb, 1, seg));
@@ -1303,8 +1311,11 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     const cap = new THREE.Mesh(hairGeo, hair); cap.position.set(0, 174 + up, -4); cap.rotation.x = -0.42; cap.scale.set(0.97, 1.02, 1.04);
     g.add(torso, neck, head, cap);
     const arms = [];
+    // Poker: a player in the hand holds two big cards up in front of the chest, backs out, so everyone sees who is
+    // still in. A player who folded has put them down flat on the felt.
+    const holding = p.cards === 'up';
     for (const s of [-1, 1]) {
-      const sh = [s * 92, 66 + up, 0], el = [s * 112, 4 + up * 0.4, 52], ha = [s * 82, 44, reach];
+      const sh = [s * 92, 66 + up, 0], el = holding ? [s * 110, 18 + up * 0.4, 46] : [s * 112, 4 + up * 0.4, 52], ha = holding ? [s * 44, 104, reach * 0.66] : [s * 82, 44, reach];
       const arm = new THREE.Group();
       arm.position.set(...sh);
       const rel = (v) => [v[0] - sh[0], v[1] - sh[1], v[2] - sh[2]];
@@ -1326,6 +1337,20 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
         const shoe = new THREE.Mesh(new THREE.BoxGeometry(50, 28, 96), trousers); shoe.position.set(s * 44, -342, 118); g.add(shoe);
       }
     }
+    if (p.cards === 'up' || p.cards === 'down') {
+      const held = new THREE.Group();
+      for (const k of [-1, 1]) {
+        const card = new THREE.Group();
+        const face = new THREE.Mesh(new THREE.BoxGeometry(60, 86, 2), cardWhite); card.add(face);
+        const back = new THREE.Mesh(new THREE.BoxGeometry(50, 76, 2.4), cardRed); back.position.z = 0.4; card.add(back);
+        if (p.cards === 'up') { card.position.set(k * 17, 0, k * 1.5); card.rotation.z = -k * 0.2; }
+        else { card.position.set(k * 30, 0, 0); card.rotation.z = -k * 0.08; }
+        held.add(card);
+      }
+      if (p.cards === 'up') { held.position.set(0, 132, reach * 0.7); held.rotation.x = -0.32; }
+      else { held.position.set(-110, 46, reach + 20); held.rotation.x = -Math.PI / 2; held.rotation.z = 0.5; } // put down to the side, clear of the name plate
+      g.add(held);
+    }
     const label = makeLabel(((look.flag ? look.flag + ' ' : '') + (p.name || 'Player')).slice(0, 22));
     label.position.y = 290 + up;
     g.add(label);
@@ -1333,7 +1358,7 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     return g;
   }
   function disposeTree(o) {
-    o.traverse((c) => { if (c.isSprite) { c.material.map?.dispose(); c.material.dispose(); } else if (c.geometry?.type === 'TorusGeometry') c.geometry.dispose(); else if (c.material && c.material !== trousers && c.material !== stoolLeather && c.material !== brass) c.material.dispose?.(); });
+    o.traverse((c) => { if (c.isSprite) { c.material.map?.dispose(); c.material.dispose(); } else if (c.geometry?.type === 'TorusGeometry') c.geometry.dispose(); else if (c.material && c.material !== trousers && c.material !== stoolLeather && c.material !== brass && c.material !== cardWhite && c.material !== cardRed) c.material.dispose?.(); });
   }
 
   // People playing at the other tables of the office: map of game -> [{ id, name, look, seat, seats }].
@@ -1399,7 +1424,7 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     lastPeople = [list, stools];
     const n = list[0]?.seats || stools?.length || 0;
     const spotsOf = stools || Array.from({ length: n }, (_, i) => ({ seat: i }));
-    const key = JSON.stringify([flipped, list.map((p) => [p.id, p.seat, p.look?.skin, p.look?.hair, p.look?.flag, p.name, !!p.isMe, !!p.isDealer, p.x, p.y]), spotsOf.map((s) => [s.seat, s.x, s.y])]);
+    const key = JSON.stringify([flipped, list.map((p) => [p.id, p.seat, p.look?.skin, p.look?.hair, p.look?.flag, p.name, !!p.isMe, !!p.isDealer, p.x, p.y, p.cards || '']), spotsOf.map((s) => [s.seat, s.x, s.y])]);
     if (key !== peopleKey) {
       peopleKey = key; peopleRev++;
       const oldBets = new Map([...figs].map(([id, f]) => [id, f.userData.bet]));
