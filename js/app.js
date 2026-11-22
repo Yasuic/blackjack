@@ -8,7 +8,7 @@ import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './s
 import { tickSound, winSound } from './fx.js?v=20261122zd';
 import * as HX from './history.js?v=20261122zd';
 import { webglOK, initRoom } from './room3d.js?v=20261122zd';
-import { showDropped, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261122zd';
+import { showDropped, onOfficeBack, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261122zd';
 import { makeVault, makeOpener, cleanBox, cleanPiece } from './vault.js?v=20261122zd';
 import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122zd';
 import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122zd';
@@ -582,7 +582,7 @@ function connLost(conn) {
 
 function onHostMessage(conn, msg) {
   // Someone at another table of the office asks who sits here.
-  if (msg && msg.t === 'peek') { try { conn.send({ t: 'people', list: (S.presence || []).slice(0, 12), ledger: officeRows(S.state) }); } catch {} return; }
+  if (msg && msg.t === 'peek') { try { conn.send({ t: 'people', list: (S.presence || []).slice(0, 12), ledger: officeRows(S.state), view: S.table ? officeView('blackjack', S.table.publicState('~office')) : null }); } catch {} return; }
   if (!msg || typeof msg !== 'object') return;
   conn.lastSeen = Date.now();
   if (msg.t === 'pong') { conn.answers = true; return; }
@@ -616,6 +616,7 @@ function onHostMessage(conn, msg) {
   // A guest's browser found card keys taken that were not used for dealt cards: the game pauses for everyone.
   if (msg.t === 'breach') { hostDo((t) => t.halt()); return; }
   // The player walks to another table of the office and takes their chips along (common.js walkTo).
+  if (msg.t === 'carry') { if (msg.carry && typeof msg.carry === 'object') { try { S.table.carryIn(conn.clientId, msg.carry.amount, msg.carry.from, msg.carry.cid); } catch { /* not at this table */ } hostChanged(); } return; } // chips brought back to a table that stayed open
   if (msg.t === 'cashout') {
     let amount = 0, err = null;
     try { amount = S.table.cashOut(conn.clientId); } catch (e) { err = e.message; }
@@ -1808,7 +1809,7 @@ function render(note) {
   if (S.room) {
     $('#hud-top').innerHTML = `<div class="status">${esc(statusText(st))} <span id="timer" class="timer" hidden></span></div>${dealMeInHTML(st)}`;
     S.room.setPeople(...roomPeople(st));
-    S.room.setOthers(S.others);
+    S.room.setOthers(S.others, S.views);
     S.room.setChips(st.seats.map((seat, i) => { const pl = seat && st.players.find((x) => x.seat === i); return seat ? { seat: i, main: seat.bet?.main || 0, balance: pl ? Math.max(0, pl.chips - betTotal(seat.bet)) : 0, mine: seat.playerId === S.myId,
         sides: Object.entries(seat.bet?.sides || {}).filter(([, v]) => v > 0).map(([k, v]) => [k === 'friendBust' ? `#seat-${i} .pvp-tag.mine` : `#sb-${i}-${k}`, v]) } : null; }).filter(Boolean));
   }
@@ -4177,6 +4178,7 @@ function officeRows(st) {
   return (st?.ledger || []).filter((r) => !r.kicked || r.chips !== r.totalIn).map((r) => ({ id: r.id, name: r.name, chips: r.chips, net: r.chips - r.totalIn - (r.houseNet || 0) }));
 }
 // Walking to another table takes this player's chips along (common.js walkTo). A host cashes out at its own table.
+onOfficeBack('blackjack', () => S.code, () => S.role === 'host', (c) => { S.table?.carryIn(S.myId, c.amount, c.from, c.cid); hostChanged(); }, (m) => { if (S.conn?.open) S.conn.send(m); });
 setCashOut(async () => {
   if (S.role === 'host' && S.table) {
     const amount = S.table.cashOut(S.myId);
@@ -4197,7 +4199,7 @@ function goGame(game) {
 
 // The other tables of the office: who plays there is drawn at their table in the room.
 S.others = {};
-watchOffice('blackjack', () => S.code, (g, list) => { S.others[g] = list.filter((p) => p.id.split('#')[0] !== S.myId); S.room?.setOthers(S.others); });
+watchOffice('blackjack', () => S.code, (g, list, view) => { (S.views ||= {})[g] = view; S.others[g] = list.filter((p) => p.id.split('#')[0] !== S.myId); S.room?.setOthers(S.others, S.views); });
 
 // "Connection dropped" notice and blocked buttons while this browser has no link to the table (common.js showDropped).
 setInterval(() => showDropped(S.role === 'player' && !S.online && !!S.state && !S.kicked, 'Your moves are not being sent. The table waits for the host. If the host is gone, you can take over.', askBecomeHost), 400);

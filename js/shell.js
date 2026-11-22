@@ -54,24 +54,33 @@ export function boot(game, start) {
   document.body.innerHTML = '';
   document.body.style.cssText = 'margin:0;background:#0b0d10;overflow:hidden';
   const css = document.createElement('style');
-  css.textContent = '.office-frame{position:fixed;inset:0;width:100%;height:100%;border:0;display:block;background:#0b0d10;transition:opacity .45s ease}.office-frame.loading{opacity:0;pointer-events:none;z-index:0}.office-frame.on{opacity:1;z-index:1}';
+  css.textContent = '.office-frame{position:fixed;inset:0;width:100%;height:100%;border:0;display:block;background:#0b0d10;transition:opacity .45s ease}.office-frame.loading{opacity:0;pointer-events:none;z-index:0}.office-frame.on{opacity:1;z-index:1}.office-frame.away{opacity:0;pointer-events:none;z-index:0;visibility:hidden}';
   document.head.appendChild(css);
+  // Every table you have been to stays open behind the one you look at, so a table you host keeps dealing for
+  // the others and you stay in that world. Walking back shows it again at once; it is not loaded a second time.
   let cur = null, next = null;
+  const kept = {}; // page path -> frame
+  const pageOf = (src) => { try { return new URL(src, location.href).pathname.replace(/index\.html$/, ''); } catch { return src; } }; // one frame per game
   const make = (src) => {
     const f = document.createElement('iframe');
     f.className = 'office-frame loading';
     f.allow = 'autoplay; fullscreen; clipboard-write; microphone; camera';
     f.src = src;
+    f.dataset.page = pageOf(src);
     document.body.appendChild(f);
     return f;
   };
+  const away = (f, on) => { try { f.contentWindow.__officeAway = on; } catch { /* fine */ } };
   const show = (f) => {
     if (f !== next && cur) return;
-    f.classList.remove('loading'); f.classList.add('on');
+    f.classList.remove('loading', 'away'); f.classList.add('on');
     const old = cur; cur = f; next = null;
+    away(f, false);
+    kept[f.dataset.page] = f;
     try { f.contentWindow.focus(); } catch { /* fine */ }
     try { f.contentWindow.__officeShown?.(); } catch { /* fine */ }
-    if (old) setTimeout(() => old.remove(), 500);
+    // The table you left stays open out of sight: it draws nothing and makes no sound while you are away.
+    if (old && old !== f) setTimeout(() => { if (cur !== old) { old.classList.remove('on'); old.classList.add('away'); away(old, true); } }, 500);
   };
   // A table is ready once its page has drawn something; the 3D room needs a little longer to settle.
   const whenReady = (f) => {
@@ -92,7 +101,15 @@ export function boot(game, start) {
   };
   window.__office = {
     go(url) {
-      if (next) next.remove();
+      if (next && !Object.values(kept).includes(next)) next.remove();
+      const k = kept[pageOf(url)];
+      if (k && k !== cur) {
+        // Back to a table that is still open: it takes the walk on from where it stopped and picks up the chips you carry.
+        next = k; away(k, false);
+        try { k.contentWindow.__officeBack?.(); } catch { /* fine */ }
+        setTimeout(() => show(k), 60);
+        return;
+      }
       next = make(url);
       whenReady(next);
     },

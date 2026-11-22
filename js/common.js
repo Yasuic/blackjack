@@ -112,6 +112,17 @@ export async function walkTo(current, g, url, code) {
   if (walk3d) { try { await window.__roomWalk(g); } catch { /* fine */ } openTable(url); return; }
   setTimeout(() => openTable(url), amount > 0 ? 250 : 120);
 }
+// Inside the office every table you visited stays open. Coming back to one: the walk is over, the room takes you
+// to your chair, and the chips you carry are added here (a host adds them itself, a player asks the host).
+export function onOfficeBack(game, getCode, isHost, hostCarry, guestSend) {
+  window.__officeBack = () => {
+    walking = false; walkCover(null);
+    try { window.__roomBack?.(); } catch { /* fine */ }
+    const c = carryFor(game, getCode());
+    if (!c) return;
+    try { if (isHost()) { hostCarry(c); carryDone(game, getCode()); } else guestSend({ t: 'carry', carry: c }); } catch { /* fine */ }
+  };
+}
 // The chips this browser carries to this table, if any (they are kept for 10 minutes).
 export function carryFor(game, code) {
   try {
@@ -302,7 +313,7 @@ export function createHost(peerId, on) {
       conn.rx = Date.now();
       if (m.t === 'ping') { conn.pings = true; return; }
       // Someone at another table of the office asks who sits here.
-      if (m.t === 'peek') { try { conn.send({ t: 'people', list: (on.people?.() || []).slice(0, 12), ledger: on.ledger?.() || null }); } catch {} return; }
+      if (m.t === 'peek') { try { conn.send({ t: 'people', list: (on.people?.() || []).slice(0, 12), ledger: on.ledger?.() || null, view: on.view?.() || null }); } catch {} return; }
       if (m.t === 'hello') {
         const id = String(m.id || '').slice(0, 24);
         if (!id) return;
@@ -347,6 +358,45 @@ export function createHost(peerId, on) {
 // other three who sits there, every few seconds, so their people can be drawn at their table in the room.
 // onPeople(game, list) gets [{ id, name, look, seat, seats }], or [] when that table is not open.
 export const GAME_PREFIX = { blackjack: 'bjt-', poker: 'bjt-pk-', baccarat: 'bjt-bc-', roulette: 'bjt-ro-' };
+// What people at the other tables of the office may see of this table: only what lies face up on it.
+// st is the table's public state for somebody who does not play here, so no hidden card is ever in it.
+const cc = (c) => (c && c.r && c.s ? String(c.r) + String(c.s) : '?');
+export function officeView(game, st) {
+  if (!st) return null;
+  try {
+    if (game === 'blackjack') return { g: game, ph: st.phase, n: st.seats.length, d: (st.dealer?.cards || []).map(cc),
+      s: st.seats.map((x) => x && { b: x.bet || 0, r: x.net || 0, h: (x.hands || []).map((h) => ({ c: (h.cards || []).map(cc), b: h.bet || 0 })) }) };
+    if (game === 'poker') return { g: game, ph: st.phase, n: st.seats.length, hn: st.handNo, btn: st.button, pot: st.pot || 0, b: (st.board || []).map(cc),
+      s: st.seats.map((x) => x && { b: x.bet || 0, w: x.won || 0, f: !!x.folded, in: !!x.inHand, c: x.inHand && !x.folded ? (x.cards || []).map(cc) : [] }) };
+    if (game === 'baccarat') {
+      const seat = {}; for (const p of st.players || []) if (Number.isInteger(p.seat)) seat[p.id] = p.seat;
+      const h = st.hand || {};
+      return { g: game, ph: st.phase, n: 10, P: (h.P || []).map(cc), B: (h.B || []).map(cc), win: st.phase === 'done' ? h.winner || h.result || null : null,
+        bets: Object.entries(st.bets || {}).filter(([id]) => id in seat).map(([id, b]) => ({ s: seat[id], p: b.player || 0, k: b.banker || 0, t: (b.tie || 0) + (b.ppair || 0) + (b.bpair || 0), w: Number((st.pays || {})[id]?.net) || 0 })),
+        res: Object.entries(st.pays || {}).filter(([id, x]) => id in seat && x && !x.bank).map(([id, x]) => ({ s: seat[id], w: Number(x.net) || 0, a: Number(x.staked) || 0 })) };
+    }
+    if (game === 'roulette') {
+      const seat = {}; for (const p of st.players || []) if (Number.isInteger(p.seat)) seat[p.id] = p.seat;
+      return { g: game, ph: st.phase, r: st.round, n: st.phase === 'done' && st.spin ? st.spin.n : null,
+        bets: Object.entries(st.bets || {}).filter(([id]) => id in seat).map(([id, b]) => ({ s: seat[id], a: Object.values(b).reduce((x, v) => x + (Number(v) || 0), 0), k: Object.keys(b).slice(0, 4), w: 0 })),
+        res: Object.entries(st.pays || {}).filter(([id, x]) => id in seat && x && !x.bank).map(([id, x]) => ({ s: seat[id], w: Number(x.net) || 0, a: Number(x.staked) || 0 })) };
+    }
+  } catch { /* nothing to show */ }
+  return null;
+}
+// A view that came from another table, cut down to the fields above with sane sizes.
+function cleanView(v) {
+  if (!v || typeof v !== 'object' || typeof v.g !== 'string') return null;
+  const card = (c) => String(c || '?').slice(0, 4), cards = (a, n = 12) => (Array.isArray(a) ? a.slice(0, n).map(card) : []), num = (x) => (Number.isFinite(Number(x)) ? Number(x) : 0);
+  const res = (a) => (Array.isArray(a) ? a.slice(0, 12) : []).map((x) => ({ s: num(x?.s), w: num(x?.w), a: num(x?.a) }));
+  const out = { g: v.g.slice(0, 10), ph: String(v.ph || '').slice(0, 12), n: Math.max(1, Math.min(12, num(v.n) || 9)) };
+  if (out.g === 'blackjack') { out.d = cards(v.d); out.s = (Array.isArray(v.s) ? v.s.slice(0, 12) : []).map((x) => x && { b: num(x.b), r: num(x.r), h: (Array.isArray(x.h) ? x.h.slice(0, 8) : []).map((h) => ({ c: cards(h?.c), b: num(h?.b) })) }); }
+  else if (out.g === 'poker') { out.hn = num(v.hn); out.btn = num(v.btn); out.pot = num(v.pot); out.b = cards(v.b, 5); out.s = (Array.isArray(v.s) ? v.s.slice(0, 12) : []).map((x) => x && { b: num(x.b), w: num(x.w), f: !!x.f, in: !!x.in, c: cards(x.c, 6) }); }
+  else if (out.g === 'baccarat') { out.P = cards(v.P, 3); out.B = cards(v.B, 3); out.win = typeof v.win === 'string' ? v.win.slice(0, 8) : null; out.bets = (Array.isArray(v.bets) ? v.bets.slice(0, 12) : []).map((b) => ({ s: num(b?.s), p: num(b?.p), k: num(b?.k), t: num(b?.t) })); out.res = res(v.res); }
+  else if (out.g === 'roulette') { out.r = num(v.r); out.n = Number.isInteger(v.n) && v.n >= 0 && v.n <= 37 ? v.n : null; out.bets = (Array.isArray(v.bets) ? v.bets.slice(0, 12) : []).map((b) => ({ s: num(b?.s), a: num(b?.a), w: num(b?.w), k: (Array.isArray(b?.k) ? b.k.slice(0, 4) : []).map((x) => String(x).slice(0, 12)) })); out.res = res(v.res); }
+  else return null;
+  return out;
+}
 export function watchOffice(current, getCode, onPeople, onLedger = null) {
   let peer = null, dead = false;
   const conns = {}, nextTry = {};
@@ -358,9 +408,9 @@ export function watchOffice(current, getCode, onPeople, onLedger = null) {
     if (dead || !code || !peer || peer.destroyed || peer.disconnected || conns[g]) return;
     const c = peer.connect(GAME_PREFIX[g] + code, { reliable: true });
     conns[g] = c; c.game = g;
-    const drop = () => { if (conns[g] === c) { delete conns[g]; nextTry[g] = Date.now() + 7000; onPeople(g, []); } };
+    const drop = () => { if (conns[g] === c) { delete conns[g]; nextTry[g] = Date.now() + 7000; onPeople(g, [], null); } };
     c.on('open', () => { try { c.send({ t: 'peek' }); } catch {} });
-    c.on('data', (m) => { if (m && m.t === 'people') { onPeople(g, clean(m.list)); if (m.ledger) officeSave(getCode(), g, m.ledger); onLedger?.(g); } });
+    c.on('data', (m) => { if (m && m.t === 'people') { onPeople(g, clean(m.list), cleanView(m.view)); if (m.ledger) officeSave(getCode(), g, m.ledger); onLedger?.(g); } });
     c.on('close', drop); c.on('error', drop);
     setTimeout(() => { if (!c.open) { try { c.close(); } catch {} drop(); } }, 9000);
   };
@@ -374,11 +424,13 @@ export function watchOffice(current, getCode, onPeople, onLedger = null) {
     }
     for (const g of games) {
       const c = conns[g];
-      if (c && c.open) { try { c.send({ t: 'peek' }); } catch {} }
+      if (c && c.open) { if (fast || Date.now() - (c.peekAt || 0) > 3800) { c.peekAt = Date.now(); try { c.send({ t: 'peek' }); } catch {} } }
       else if (!c && Date.now() >= (nextTry[g] || 0)) link(g);
     }
   };
-  const timer = setInterval(tick, 4000);
+  // The other tables are asked about once a second while this table is on screen, so their cards and chips move live.
+  let fast = false;
+  const timer = setInterval(() => { fast = !window.__officeAway && !document.hidden; tick(); }, 1000);
   setTimeout(tick, 600); setTimeout(tick, 2200);
   return { close() { dead = true; clearInterval(timer); try { peer?.destroy(); } catch {} } };
 }

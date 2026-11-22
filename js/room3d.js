@@ -371,12 +371,9 @@ function buildOffice(signText, midShift = 0, midScale = 1, skipRoom = null, live
     const X = -f.cx, Z = -f.cy;
     if (f.kind === 'tvh') { // a wall screen: wide, with the logo on the side that faces its room
       const face = f.id === 'tv4' ? -1 : 1, zc = Z + 0.03 * face;
-      box(1.3, 0.76, 0.05, M.screen, X, 1.45, zc); box(1.24, 0.7, 0.003, f.id === 'tv4' ? (M.news ||= new THREE.MeshBasicMaterial({ map: canvasTexture(640, 360, (g, cw, ch) => { // a business news channel, always on
-        g.fillStyle = '#05070a'; g.fillRect(0, 0, cw, ch); g.fillStyle = '#111'; g.fillRect(0, 0, cw, 46); g.fillStyle = '#ff9b1a'; g.textBaseline = 'middle'; g.font = `700 30px ${FONT}`; g.fillText('BLOOMBERG', 14, 24); g.fillStyle = '#fff'; g.font = `700 18px ${FONT}`; g.fillText('MARKETS LIVE', cw - 160, 24);
-        g.strokeStyle = '#2bd66b'; g.lineWidth = 4; g.beginPath(); let y = 220; for (let x = 20; x < 400; x += 12) { y += Math.sin(x * 0.7) * 14 - 2.2; g.lineTo(x, y); } g.stroke();
-        [['HSI', '+1.2%', 1], ['SPX', '-0.4%', 0], ['NKY', '+0.8%', 1], ['USDHKD', '7.78', 1], ['GOLD', '-0.3%', 0]].forEach(([n2, v, upq], q) => { g.fillStyle = '#fff'; g.font = `700 22px ${FONT}`; g.fillText(n2, 430, 80 + q * 44); g.fillStyle = upq ? '#2bd66b' : '#ff4d4d'; g.fillText(v, 540, 80 + q * 44); });
-        g.fillStyle = '#ff9b1a'; g.fillRect(0, ch - 46, cw, 46); g.fillStyle = '#111'; g.font = `700 22px ${FONT}`; g.fillText('BREAKING: ANALYSTS STILL IN THE OFFICE AT 3AM', 14, ch - 22);
-      }) })) : f.id === 'tv1' ? (M.pokerTv ||= new THREE.MeshBasicMaterial({ map: canvasTexture(640, 360, (g, cw, ch) => { // the poker room's tournament screen
+      box(1.3, 0.76, 0.05, M.screen, X, 1.45, zc); box(1.24, 0.7, 0.003, f.id === 'tv4' ? (M.news ||= Object.assign(new THREE.MeshBasicMaterial({ map: canvasTexture(960, 540, (g, cw, ch) => { // the office winnings, drawn live (see drawWinTv)
+        g.fillStyle = '#05070a'; g.fillRect(0, 0, cw, ch);
+      }) }), { userData: { winTv: true } })) : f.id === 'tv1' ? (M.pokerTv ||= new THREE.MeshBasicMaterial({ map: canvasTexture(640, 360, (g, cw, ch) => { // the poker room's tournament screen
         g.fillStyle = '#07130d'; g.fillRect(0, 0, cw, ch); g.fillStyle = '#0f6b3f'; g.fillRect(0, 0, cw, 76); g.textBaseline = 'middle'; g.textAlign = 'center';
         g.fillStyle = '#f1c76a'; g.font = `700 36px ${FONT}`; g.fillText('WE ARE DA BEST', cw / 2, 28); g.fillStyle = '#d8dde4'; g.font = `italic 600 20px ${FONT}`; g.fillText('- Sergio', cw / 2, 58);
         g.fillStyle = '#ffffff'; g.font = `800 86px ${FONT}`; g.fillText('ARC', cw / 2, 150);
@@ -396,12 +393,9 @@ function buildOffice(signText, midShift = 0, midScale = 1, skipRoom = null, live
       const rg = new THREE.ExtrudeGeometry(ring, { depth: 0.07, bevelEnabled: false, curveSegments: 10 }); rg.rotateX(-Math.PI / 2); emit(rg, G.rail, at(cx, top - 0.045, cz), true);
       const fg = new THREE.ExtrudeGeometry(roundRect(w, d, rad), { depth: 0.04, bevelEnabled: false, curveSegments: 10 }); fg.rotateX(-Math.PI / 2); emit(fg, G.felt, at(cx, top - 0.04, cz), true);
       [-1, 1].forEach((sg) => { cyl(0.08, 0.11, top - 0.04, 12, G.rail, cx, (top - 0.04) / 2, cz + sg * d * 0.27); cyl(0.26, 0.28, 0.03, 16, M.leg, cx, 0.015, cz + sg * d * 0.27, false); });
-      if (rou) { // the number layout as a striped strip, and the wheel at one end
-        for (let i = 0; i < 12; i++) for (let j = 0; j < 3; j++) box(0.085, 0.002, 0.085, (i + j) % 2 ? G.red : G.dark, cx - 0.1 + j * 0.1, top + 0.001, cz - 0.75 + i * 0.1, false);
+      if (rou) { // the wheel at one end; the number layout is drawn on the cloth (see drawCloth)
         cyl(0.3, 0.32, 0.07, 28, G.rail, cx, top + 0.035, cz + 0.62); cyl(0.25, 0.25, 0.012, 28, G.dark, cx, top + 0.074, cz + 0.62, false); cyl(0.17, 0.17, 0.014, 28, G.red, cx, top + 0.076, cz + 0.62, false); cyl(0.05, 0.03, 0.06, 12, G.line, cx, top + 0.1, cz + 0.62, false);
-      } else { // two hands of cards in the middle and the betting line
-        box(0.012, 0.002, d - 0.5, G.line, cx + 0.2, top + 0.001, cz, false);
-        for (let k = 0; k < 2; k++) for (let i = 0; i < 2; i++) box(0.089, 0.002, 0.064, G.card, cx - 0.12, top + 0.0015, cz + (k ? 0.22 : -0.22) + (i - 0.5) * 0.08, false);
+      } else { // the shoe; the cards and chips of the round are drawn live on the cloth (see setLive)
         box(0.1, 0.05, 0.14, G.dark, cx - 0.3, top + 0.025, cz + 0.6, false); // the shoe
       }
       return;
@@ -415,20 +409,8 @@ function buildOffice(signText, midShift = 0, midScale = 1, skipRoom = null, live
       const rg = new THREE.ExtrudeGeometry(ring, { depth: 0.07, bevelEnabled: false, curveSegments: 14 }); rg.rotateX(-Math.PI / 2); emit(rg, P.rail, at(X, top - 0.045, Z), true);
       const fg = new THREE.ExtrudeGeometry(roundRect(f.w, f.d, rad), { depth: 0.04, bevelEnabled: false, curveSegments: 14 }); fg.rotateX(-Math.PI / 2); emit(fg, P.felt, at(X, top - 0.04, Z), true);
       [-1, 1].forEach((s) => { cyl(0.09, 0.12, top - 0.04, 14, P.rail, X, (top - 0.04) / 2, Z + s * f.d * 0.27); cyl(0.3, 0.32, 0.03, 18, M.leg, X, 0.015, Z + s * f.d * 0.27, false); });
-      // Five shared cards face up in the middle, the deck and the dealer button beside them.
-      const cw = 0.064, chh = 0.089, y = top + 0.0015;
-      for (let i = 0; i < 5; i++) box(chh, 0.002, cw, P.card, X, y, Z + (i - 2) * (cw + 0.012), false);
-      for (let i = 0; i < 5; i++) box(chh * 0.5, 0.0005, cw * 0.5, i % 2 ? P.back : P.rail, X + 0.012, y + 0.0013, Z + (i - 2) * (cw + 0.012), false); // the pips, as a small mark
-      box(chh, 0.012, cw, P.back, X - 0.2, top + 0.006, Z - 0.02, false, 0.3);
-      cyl(0.026, 0.026, 0.008, 16, P.card, X + 0.22, top + 0.004, Z + 0.3, false);
-      // A pot of chips in the middle and a stack row with two face down cards at every chair.
-      const stack = (x, z, n, m) => cyl(0.02, 0.02, 0.0034 * n, 12, P.chips[m % 5], x, top + 0.0017 * n, z, false);
-      [[0.16, 0.2, 9, 1], [0.2, 0.25, 6, 2], [0.13, 0.26, 4, 0], [0.18, 0.31, 7, 3], [0.23, 0.2, 3, 4]].forEach(([dx, dz, n, m]) => stack(X - dx, Z - dz, n, m));
-      D.chairs.filter((c) => c.room === 'bigBoard').forEach((c, k) => {
-        const side = Math.sign(-c.cx - X) || 1, ex = X + side * (f.w / 2 - 0.16), cz = -c.cy;
-        for (let j = 0; j < 4; j++) stack(ex, cz - 0.09 + j * 0.045, 4 + ((k * 3 + j * 5) % 9), k + j);
-        box(chh, 0.002, cw, P.back, ex - side * 0.11, y, cz + 0.02, false, 0.18); box(chh, 0.002, cw, P.back, ex - side * 0.11, y + 0.002, cz + 0.06, false, -0.12);
-      });
+      // The deck. The cards and chips of the hand in play are drawn live on the cloth (see setLive).
+      box(0.089, 0.012, 0.064, P.back, X - 0.2, top + 0.006, Z - 0.02, false, 0.3);
       return;
     }
     if (f.kind === 'rrect') {
@@ -857,11 +839,10 @@ function buildOffice(signText, midShift = 0, midScale = 1, skipRoom = null, live
     const fg = new THREE.ExtrudeGeometry(half(R), { depth: 0.04, bevelEnabled: false, curveSegments: 20 }); fg.rotateX(-Math.PI / 2); emit(fg, G.felt, at(-B.x, top - 0.015, -B.y), true);
     [-1, 1].forEach((sg) => { cyl(0.07, 0.1, top - 0.05, 12, G.rail, -B.x + 0.3, (top - 0.05) / 2, -B.y + sg * R * 0.5); cyl(0.2, 0.22, 0.03, 14, M.leg, -B.x + 0.3, 0.015, -B.y + sg * R * 0.5, false); });
     box(0.1, 0.05, 0.14, G.dark, -B.x - 0.02, top + 0.05, -B.y - R * 0.6, false); // the shoe by the dealer
-    for (let i = 0; i < 2; i++) box(0.089, 0.002, 0.064, G.card, -B.x + 0.1, top + 0.027, -B.y + (i - 0.5) * 0.08, false);
   }
   { // A dark bottle of hand sanitizer with a pump, on the round table.
     const t = D.furniture.find((f) => f.id === 't3');
-    if (t) { const x = -(t.cx - 0.12), z = -(t.cy + 0.08), y = Hh.desk; cyl(0.032, 0.034, 0.13, 14, col('#2a1a12', 0.35), x, y + 0.065, z); cyl(0.014, 0.02, 0.025, 10, col('#111316', 0.5), x, y + 0.1425, z, false); cyl(0.005, 0.005, 0.04, 6, col('#111316', 0.5), x, y + 0.175, z, false); box(0.045, 0.012, 0.016, col('#111316', 0.5), x + 0.015, y + 0.198, z, false); box(0.04, 0.05, 0.002, col('#e9e6df', 0.8), x, y + 0.06, z + 0.034, false); }
+    if (t) { const x = -(t.cx + 0.265), z = -(t.cy + 0.95), y = Hh.desk; /* in a corner of the cloth, off the number layout */ cyl(0.032, 0.034, 0.13, 14, col('#2a1a12', 0.35), x, y + 0.065, z); cyl(0.014, 0.02, 0.025, 10, col('#111316', 0.5), x, y + 0.1425, z, false); cyl(0.005, 0.005, 0.04, 6, col('#111316', 0.5), x, y + 0.175, z, false); box(0.045, 0.012, 0.016, col('#111316', 0.5), x + 0.015, y + 0.198, z, false); box(0.04, 0.05, 0.002, col('#e9e6df', 0.8), x, y + 0.06, z + 0.034, false); }
   }
   [].forEach((id) => { // snow removed at the person's request (2026-11-21)
     const r = D.rooms.find((q) => q.id === id); if (!r) return;
@@ -1401,7 +1382,267 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
   // People playing at the other tables of the office: map of game -> [{ id, name, look, seat, seats }].
   const otherGroup = new THREE.Group(); scene.add(otherGroup);
   let otherKey = '';
-  function setOthers(map = {}) {
+  // ---------- The office winnings on the TV in the roulette room ----------
+  // Every player's +/- over all tables, as lines over time, from what this browser sees of every table (common.js
+  // keeps it in 'office-series'). It is redrawn every few seconds while something changed.
+  let winTv = null, winKey = '';
+  office.traverse((o) => { if (!winTv && o.material?.userData?.winTv) winTv = o.material; });
+  const WIN_COLS = ['#3fe6d6', '#ffb347', '#e05cff', '#45e88a', '#ff6b6b', '#6aa8ff', '#f1d27a', '#ff8ad8', '#b0f05a', '#c9c9c9'];
+  function drawWinTv() {
+    if (!winTv?.map?.image || window.__officeAway) return;
+    let raw = null; try { raw = localStorage.getItem('office-series'); } catch { raw = null; }
+    if ((raw || '') === winKey) return;
+    winKey = raw || '';
+    let o = null; try { o = JSON.parse(raw || 'null'); } catch { o = null; }
+    // One line per player: at each moment the sum of their latest +/- at every table.
+    const people = {};
+    for (const [g, ids] of Object.entries(o?.s || {})) for (const [id, l] of Object.entries(ids || {})) {
+      const P = (people[id] ||= { name: l.name, ev: [] }); P.name = l.name || P.name;
+      for (const [t, net] of l.pts || []) P.ev.push([t, g, Number(net) || 0]);
+    }
+    const lines = Object.values(people).map((P) => {
+      P.ev.sort((a, b) => a[0] - b[0]);
+      const cur = {}, pts = [];
+      for (const [t, g, net] of P.ev) { cur[g] = net; pts.push([t, Object.values(cur).reduce((a, b) => a + b, 0)]); }
+      return { name: String(P.name || 'Player'), pts, total: pts.length ? pts[pts.length - 1][1] : 0 };
+    }).filter((l) => l.pts.length).sort((a, b) => b.total - a.total).slice(0, 10);
+    const cv = winTv.map.image, g = cv.getContext('2d'), W = cv.width, H = cv.height;
+    g.fillStyle = '#05070a'; g.fillRect(0, 0, W, H);
+    g.fillStyle = '#0d1117'; g.fillRect(0, 0, W, 64);
+    g.textBaseline = 'middle'; g.textAlign = 'left'; g.fillStyle = '#f1d27a'; g.font = `800 34px ${FONT}`; g.fillText('OFFICE WINNINGS', 22, 33);
+    g.fillStyle = '#ff4d4d'; g.beginPath(); g.arc(W - 96, 33, 8, 0, Math.PI * 2); g.fill(); g.fillStyle = '#fff'; g.font = `700 22px ${FONT}`; g.fillText('LIVE', W - 80, 34);
+    const X0 = 70, X1 = W - 290, Y0 = 92, Y1 = H - 40;
+    if (!lines.length) { g.fillStyle = '#8b95a3'; g.font = `600 26px ${FONT}`; g.textAlign = 'center'; g.fillText('No hands played yet', W / 2, H / 2); winTv.map.needsUpdate = true; touch(); return; }
+    let t0 = Infinity, t1 = -Infinity, lo = 0, hi = 0;
+    for (const l of lines) for (const [t, v] of l.pts) { t0 = Math.min(t0, t); t1 = Math.max(t1, t); lo = Math.min(lo, v); hi = Math.max(hi, v); }
+    t1 = Math.max(t1, Date.now()); if (t1 - t0 < 60000) t0 = t1 - 60000;
+    const pad = Math.max(10, (hi - lo) * 0.1); lo -= pad; hi += pad;
+    const px = (t) => X0 + ((t - t0) / (t1 - t0)) * (X1 - X0), py = (v) => Y1 - ((v - lo) / (hi - lo)) * (Y1 - Y0);
+    g.strokeStyle = '#1f2630'; g.lineWidth = 1; for (let k = 0; k <= 4; k++) { const y = Y0 + (k / 4) * (Y1 - Y0); g.beginPath(); g.moveTo(X0, y); g.lineTo(X1, y); g.stroke(); }
+    g.strokeStyle = '#5b6573'; g.lineWidth = 2; g.setLineDash([6, 6]); g.beginPath(); g.moveTo(X0, py(0)); g.lineTo(X1, py(0)); g.stroke(); g.setLineDash([]);
+    g.fillStyle = '#8b95a3'; g.font = `600 18px ${FONT}`; g.textAlign = 'right';
+    for (const v of [hi - pad, 0, lo + pad]) g.fillText((v > 0 ? '+' : '') + Math.round(v), X0 - 8, py(v));
+    lines.forEach((l, k) => {
+      g.strokeStyle = WIN_COLS[k % WIN_COLS.length]; g.lineWidth = 4; g.lineJoin = 'round'; g.beginPath();
+      let prev = null;
+      for (const [t, v] of l.pts) { const x = px(t), y = py(v); if (!prev) g.moveTo(x, y); else { g.lineTo(x, prev[1]); g.lineTo(x, y); } prev = [x, y]; } // steps: a +/- holds until the next hand changes it
+      g.lineTo(px(t1), prev[1]); g.stroke();
+      // The legend, best first.
+      const ly = 104 + k * 42;
+      g.fillStyle = WIN_COLS[k % WIN_COLS.length]; g.fillRect(X1 + 24, ly - 8, 18, 16);
+      g.textAlign = 'left'; g.fillStyle = '#e9edf2'; g.font = `700 22px ${FONT}`; g.fillText(l.name.slice(0, 11), X1 + 52, ly);
+      g.textAlign = 'right'; g.fillStyle = l.total > 0 ? '#45e88a' : l.total < 0 ? '#ff6b6b' : '#c9c9c9'; g.fillText((l.total > 0 ? '+' : '') + Math.round(l.total).toLocaleString(), W - 18, ly);
+    });
+    winTv.map.needsUpdate = true;
+    touch();
+  }
+  setTimeout(drawWinTv, 500);
+  setInterval(drawWinTv, 2500);
+  // ---------- Live action at the other tables ----------
+  // Each other table has a cloth drawn on a canvas, with the cards that lie face up there and the chips of every
+  // bet. The view comes from that table's host every second (common.js officeView: face up cards only). Chips
+  // slide: a new bet comes from the player's seat, a lost bet goes to the dealer or the pot, a win goes to the player.
+  const PPM = 400, RED_N = new Set([1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]);
+  const CHIP_COL = (a) => (a >= 500 ? '#6a3fc4' : a >= 100 ? '#16181c' : a >= 25 ? '#1f8a4c' : a >= 5 ? '#c62828' : '#f4f4f0');
+  const liveT = {};
+  const easeOut = (k) => 1 - (1 - k) ** 3;
+  function liveTable(g) {
+    if (liveT[g]) return liveT[g];
+    const T = OTHER_TABLES[g], bj = g === 'blackjack';
+    const W = bj ? 2 * T.r : T.w, D = bj ? 2 * T.r : T.d;
+    const cv = document.createElement('canvas'); cv.width = Math.round(W * PPM); cv.height = Math.round(D * PPM);
+    const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
+    const geo = new THREE.PlaneGeometry(W, D); geo.rotateX(-Math.PI / 2);
+    const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: tex, transparent: true, roughness: 0.92, metalness: 0 }));
+    mesh.position.set(-T.x, (bj ? 0.774 : 0.749) + 0.0025, -T.y);
+    mesh.renderOrder = 1;
+    office.add(mesh);
+    return (liveT[g] = { g, T, W, D, cv, x: cv.getContext('2d'), tex, view: null, n: 9, piles: new Map(), anim: 0, reveal: null, key: '' });
+  }
+  // Where seat i sits, in canvas pixels; in: how far in from the edge of the cloth (metres).
+  function seatPx(L, i, n, inn) {
+    const { T, cv } = L, cx = cv.width / 2, cy = cv.height / 2;
+    if (L.g === 'blackjack') { const t = ((i + 0.5) / n - 0.5) * 2.7, r = (T.r - inn) * PPM; return { x: cx + r * Math.cos(t), y: cy - r * Math.sin(t) }; }
+    const a = ((i + 0.5) / n) * Math.PI * 2, c = Math.cos(a), sn = Math.sin(a), k = 1 / Math.max(Math.abs(c) / (T.w / 2 - inn), Math.abs(sn) / (T.d / 2 - inn));
+    return { x: cx - c * k * PPM, y: cy - sn * k * PPM };
+  }
+  function dealerPx(L) {
+    const { cv, g } = L, cx = cv.width / 2, cy = cv.height / 2;
+    if (g === 'blackjack') return { x: cx + 0.08 * PPM, y: cy };
+    if (g === 'roulette') return { x: cx, y: cv.height * 0.8 };
+    return { x: cx, y: cy };
+  }
+  function rr(x, X, Y, w, h, r) { x.beginPath(); x.moveTo(X + r, Y); x.arcTo(X + w, Y, X + w, Y + h, r); x.arcTo(X + w, Y + h, X, Y + h, r); x.arcTo(X, Y + h, X, Y, r); x.arcTo(X, Y, X + w, Y, r); x.closePath(); }
+  // A card lying flat, turned to face the point (fx, fy).
+  function drawCard(x, cx, cy, code, ang, sc = 1) {
+    const w = 0.05 * PPM * sc, h = 0.07 * PPM * sc;
+    x.save(); x.translate(cx, cy); x.rotate(ang);
+    x.shadowColor = 'rgba(0,0,0,0.35)'; x.shadowBlur = 4; x.shadowOffsetY = 1.5;
+    rr(x, -w / 2, -h / 2, w, h, 3);
+    if (code === '?') { x.fillStyle = '#b3202a'; x.fill(); x.shadowColor = 'transparent'; x.strokeStyle = '#f4f2ec'; x.lineWidth = 1.6; rr(x, -w / 2 + 2.5, -h / 2 + 2.5, w - 5, h - 5, 2); x.stroke(); }
+    else {
+      x.fillStyle = '#fbfaf6'; x.fill(); x.shadowColor = 'transparent';
+      const suit = code.slice(-1), rank = code.slice(0, -1), red = suit === '♥' || suit === '♦';
+      x.fillStyle = red ? '#c8202d' : '#16181c'; x.textAlign = 'center'; x.textBaseline = 'middle';
+      x.font = `700 ${Math.round(h * 0.36)}px ${FONT}`; x.fillText(rank === 'T' ? '10' : rank, 0, -h * 0.17);
+      x.font = `${Math.round(h * 0.36)}px ${FONT}`; x.fillText(suit, 0, h * 0.2);
+    }
+    x.restore();
+  }
+  function drawPile(x, p, alpha = 1) {
+    const n = Math.max(1, Math.min(6, Math.ceil(Math.log2(1 + p.a / 4)))), r = 0.016 * PPM;
+    x.save(); x.globalAlpha = alpha;
+    for (let k = 0; k < n; k++) {
+      const y = p.y - k * 2.2;
+      x.beginPath(); x.arc(p.x, y, r, 0, Math.PI * 2); x.fillStyle = CHIP_COL(p.a); x.shadowColor = 'rgba(0,0,0,0.35)'; x.shadowBlur = 3; x.fill(); x.shadowColor = 'transparent';
+      x.setLineDash([3, 3]); x.strokeStyle = 'rgba(255,255,255,0.85)'; x.lineWidth = 2; x.beginPath(); x.arc(p.x, y, r - 2, 0, Math.PI * 2); x.stroke(); x.setLineDash([]);
+    }
+    x.restore();
+  }
+  // The cloth of each game, as on the real tables.
+  function drawCloth(L) {
+    const { x, cv, g } = L, W = cv.width, H = cv.height;
+    x.clearRect(0, 0, W, H);
+    x.textAlign = 'center'; x.textBaseline = 'middle';
+    if (g === 'blackjack') {
+      const cx = W / 2, cy = H / 2, R = L.T.r * PPM;
+      x.beginPath(); x.moveTo(cx - 0.12 * PPM, cy - R); x.lineTo(cx, cy - R); x.arc(cx, cy, R, -Math.PI / 2, Math.PI / 2); x.lineTo(cx - 0.12 * PPM, cy + R); x.closePath();
+      x.fillStyle = '#0f6b3f'; x.fill();
+      x.strokeStyle = '#d9c27a'; x.lineWidth = 3; x.beginPath(); x.arc(cx, cy, R * 0.62, -1.25, 1.25); x.stroke();
+      x.save(); x.translate(cx + R * 0.45, cy); x.rotate(-Math.PI / 2); x.fillStyle = '#e9d58f'; x.font = `700 ${0.05 * PPM}px ${FONT}`; x.fillText('BLACKJACK PAYS 3 TO 2', 0, 0); x.font = `600 ${0.03 * PPM}px ${FONT}`; x.fillText('Dealer stands on all 17s', 0, 0.045 * PPM); x.restore();
+      for (let i = 0; i < L.n; i++) { const p = seatPx(L, i, L.n, 0.2); x.strokeStyle = 'rgba(233,213,143,0.7)'; x.lineWidth = 2.5; x.beginPath(); x.arc(p.x, p.y, 0.034 * PPM, 0, Math.PI * 2); x.stroke(); }
+      return;
+    }
+    if (g === 'poker') {
+      x.fillStyle = '#0f6b3f'; rr(x, 0, 0, W, H, W * 0.48); x.fill();
+      x.strokeStyle = 'rgba(217,194,122,0.75)'; x.lineWidth = 3; rr(x, W * 0.12, H * 0.06, W * 0.76, H * 0.88, W * 0.36); x.stroke();
+      x.save(); x.translate(W / 2, H / 2); x.rotate(Math.PI / 2); x.fillStyle = 'rgba(241,199,106,0.35)'; x.font = `800 ${0.11 * PPM}px ${FONT}`; x.fillText('ARC', 0.6 * PPM, 0); x.restore();
+      return;
+    }
+    if (g === 'baccarat') {
+      x.fillStyle = '#4b1f6b'; rr(x, 0, 0, W, H, 0.3 * PPM); x.fill();
+      x.strokeStyle = '#e8cf86'; x.lineWidth = 3; rr(x, W * 0.08, H * 0.05, W * 0.84, H * 0.9, 0.24 * PPM); x.stroke();
+      const box = (y, label, col) => { x.strokeStyle = col; x.lineWidth = 3; rr(x, W * 0.2, y - 0.11 * PPM, W * 0.6, 0.22 * PPM, 10); x.stroke(); x.save(); x.translate(W * 0.13, y); x.rotate(-Math.PI / 2); x.fillStyle = col; x.font = `800 ${0.045 * PPM}px ${FONT}`; x.fillText(label, 0, 0); x.restore(); };
+      box(H * 0.36, 'PLAYER', '#7fb3ff'); box(H * 0.64, 'BANKER', '#ff8a7a');
+      x.save(); x.translate(W / 2, H / 2); x.rotate(Math.PI / 2); x.fillStyle = '#f1d27a'; x.font = `700 ${0.04 * PPM}px ${FONT}`; x.fillText('TIE 8 TO 1', 0, 0); x.restore();
+      return;
+    }
+    // Roulette: the number layout from 0 next to the wheel up to 36, and the outside bets beside it.
+    x.fillStyle = '#0f6b3f'; rr(x, 0, 0, W, H, 0.16 * PPM); x.fill();
+    const gx = W * 0.3, gw = W * 0.42, cw = gw / 3, top = H * 0.06, rh = (H * 0.54) / 13;
+    const cell = (X, Y, w, h, fill, text) => { x.fillStyle = fill; x.fillRect(X, Y, w, h); x.strokeStyle = '#e9e4d6'; x.lineWidth = 1.5; x.strokeRect(X, Y, w, h); if (text !== undefined) { x.save(); x.translate(X + w / 2, Y + h / 2); x.rotate(Math.PI / 2); x.fillStyle = '#fff'; x.font = `700 ${Math.round(Math.min(w, h) * 0.5)}px ${FONT}`; x.fillText(String(text), 0, 0); x.restore(); } };
+    L.cell = {};
+    for (let r = 0; r < 12; r++) for (let c = 0; c < 3; c++) { const num = (11 - r) * 3 + c + 1, X = gx + c * cw, Y = top + r * rh; cell(X, Y, cw, rh, RED_N.has(num) ? '#b82a2a' : '#16181c', num); L.cell[num] = { x: X + cw / 2, y: Y + rh / 2 }; }
+    cell(gx, top + 12 * rh, gw, rh, '#1f8a4c', 0); L.cell[0] = { x: gx + gw / 2, y: top + 12.5 * rh };
+    const sx = gx - cw * 0.9;
+    ['1-18', 'EVEN', 'RED', 'BLACK', 'ODD', '19-36'].forEach((t, k) => cell(sx, top + k * 2 * rh, cw * 0.9, rh * 2, t === 'RED' ? '#b82a2a' : t === 'BLACK' ? '#16181c' : '#0f6b3f', t));
+  }
+  // The piles of chips a view puts on the table: { key: { x, y, a, from, to } }.
+  function pilesOf(L, v) {
+    const out = new Map(), n = L.n, D = dealerPx(L);
+    const edge = (i) => seatPx(L, i, n, 0.03), spot = (i, inn = 0.2) => seatPx(L, i, n, inn);
+    const add = (key, p, a, from, to) => { if (a > 0) out.set(key, { x: p.x, y: p.y, a, from, to }); };
+    if (v.g === 'blackjack') (v.s || []).forEach((x, i) => {
+      if (!x) return;
+      const a = x.h.length ? x.h.reduce((s, h) => s + h.b, 0) : x.b;
+      add('b' + i, spot(i, 0.2), a, edge(i), v.ph === 'settled' && x.r >= 0 ? edge(i) : D);
+      if (v.ph === 'settled' && x.r > 0) { const p = spot(i, 0.2); add('w' + i, { x: p.x + 14, y: p.y + 6 }, x.r, D, edge(i)); }
+    });
+    if (v.g === 'poker') {
+      const done = (v.s || []).some((x) => x && x.w > 0);
+      (v.s || []).forEach((x, i) => { if (x) { add('b' + i, spot(i, 0.24), x.b, edge(i), D); if (x.w > 0) add('w' + v.hn + ':' + i, spot(i, 0.3), x.w, D, edge(i)); } });
+      if (!done) add('pot', { x: D.x + 0.1 * PPM, y: D.y }, v.pot, D, D);
+    }
+    if (v.g === 'baccarat') {
+      const res = new Map((v.res || []).map((r) => [r.s, r]));
+      for (const b of v.bets || []) { const p = spot(b.s, 0.18); [['p', b.p, -10], ['k', b.k, 10], ['t', b.t, 0]].forEach(([k, a, dx]) => add(k + b.s, { x: p.x + dx, y: p.y + (k === 't' ? -12 : 0) }, a, edge(b.s), D)); }
+      for (const r of res.values()) if (r.w > 0) add('w' + r.s, spot(r.s, 0.18), r.a + r.w, D, edge(r.s));
+    }
+    if (v.g === 'roulette') {
+      for (const b of v.bets || []) add('b' + b.s, spot(b.s, 0.16), b.a, edge(b.s), D);
+      for (const r of v.res || []) if (r.w > 0) add('w' + v.r + ':' + r.s, spot(r.s, 0.16), r.a + r.w, D, edge(r.s));
+    }
+    return out;
+  }
+  function drawLive(L, now) {
+    const { x, cv } = L, v = L.view;
+    drawCloth(L);
+    if (v) {
+      const cx = cv.width / 2, cy = cv.height / 2;
+      if (v.g === 'blackjack') {
+        const D = dealerPx(L);
+        v.d.forEach((c, k) => drawCard(x, D.x + 0.02 * PPM, D.y + (k - (v.d.length - 1) / 2) * 0.04 * PPM, c, Math.PI / 2));
+        (v.s || []).forEach((s, i) => { if (!s) return; const p = seatPx(L, i, L.n, 0.33), ang = Math.atan2(cy - p.y, cx - p.x) + Math.PI / 2;
+          s.h.forEach((h, hi) => h.c.forEach((c, k) => drawCard(x, p.x + (hi - (s.h.length - 1) / 2) * 0.06 * PPM * Math.cos(ang) + k * 7, p.y + (hi - (s.h.length - 1) / 2) * 0.06 * PPM * Math.sin(ang) - k * 9, c, ang, 0.9))); });
+      }
+      if (v.g === 'poker') {
+        v.b.forEach((c, k) => drawCard(x, cx - 0.04 * PPM, cy + (k - 2) * 0.058 * PPM, c, Math.PI / 2));
+        (v.s || []).forEach((s, i) => { if (!s || !s.c.length) return; const p = seatPx(L, i, L.n, 0.14), ang = Math.atan2(cy - p.y, cx - p.x) - Math.PI / 2;
+          s.c.forEach((c, k) => drawCard(x, p.x + (k - (s.c.length - 1) / 2) * 0.03 * PPM * Math.cos(ang), p.y + (k - (s.c.length - 1) / 2) * 0.03 * PPM * Math.sin(ang), c, ang, 0.85)); });
+        if (v.s?.[v.btn]) { const p = seatPx(L, v.btn, L.n, 0.33); x.beginPath(); x.arc(p.x, p.y, 0.018 * PPM, 0, Math.PI * 2); x.fillStyle = '#fbfaf6'; x.fill(); x.fillStyle = '#16181c'; x.font = `800 ${0.018 * PPM}px ${FONT}`; x.fillText('D', p.x, p.y + 1); }
+      }
+      if (v.g === 'baccarat') {
+        v.P.forEach((c, k) => drawCard(x, cx + (k - 1) * 0.06 * PPM, cv.height * 0.36, c, Math.PI / 2));
+        v.B.forEach((c, k) => drawCard(x, cx + (k - 1) * 0.06 * PPM, cv.height * 0.64, c, Math.PI / 2));
+        if (v.win) { x.save(); x.translate(cx, cy); x.rotate(Math.PI / 2); x.fillStyle = 'rgba(0,0,0,0.55)'; rr(x, -0.16 * PPM, -0.03 * PPM, 0.32 * PPM, 0.06 * PPM, 8); x.fill(); x.fillStyle = '#f1d27a'; x.font = `800 ${0.035 * PPM}px ${FONT}`; x.fillText(v.win === 'tie' ? 'TIE' : v.win.toUpperCase() + ' WINS', 0, 1); x.restore(); }
+      }
+      if (v.g === 'roulette' && v.n !== null) {
+        const shown = L.reveal && L.reveal.r === v.r && now >= L.reveal.at;
+        const W = cv.width, H = cv.height, bx = W * 0.85, by = H * 0.4;
+        x.save(); x.translate(bx, by); x.rotate(Math.PI / 2);
+        x.beginPath(); x.arc(0, 0, 0.06 * PPM, 0, Math.PI * 2); x.fillStyle = shown ? (v.n === 0 ? '#1f8a4c' : RED_N.has(v.n) ? '#b82a2a' : '#16181c') : 'rgba(0,0,0,0.5)'; x.fill(); x.strokeStyle = '#f1d27a'; x.lineWidth = 3; x.stroke();
+        x.fillStyle = '#fff'; x.font = `800 ${(shown ? 0.06 : 0.025) * PPM}px ${FONT}`; x.fillText(shown ? String(v.n) : 'Spinning', 0, 2);
+        x.restore();
+        if (shown && L.cell?.[v.n]) { const c = L.cell[v.n]; x.beginPath(); x.arc(c.x, c.y, 0.017 * PPM, 0, Math.PI * 2); x.fillStyle = '#f4f2ec'; x.fill(); x.strokeStyle = '#c9a227'; x.lineWidth = 3; x.stroke(); }
+      }
+    }
+    // Chips, where they are on their way.
+    const k = L.anim ? Math.min(1, (now - L.anim) / 650) : 1, e = easeOut(k);
+    for (const p of L.piles.values()) {
+      if (p.gone) { drawPile(x, { x: p.sx + (p.to.x - p.sx) * e, y: p.sy + (p.to.y - p.sy) * e, a: p.a }, 1 - e * 0.6); continue; }
+      drawPile(x, { x: p.sx + (p.x - p.sx) * e, y: p.sy + (p.y - p.sy) * e, a: p.a });
+    }
+    if (k >= 1) { for (const [key, p] of L.piles) { if (p.gone) L.piles.delete(key); else { p.sx = p.x; p.sy = p.y; } } L.anim = 0; }
+    L.tex.needsUpdate = true;
+  }
+  function setLive(views = {}, map = {}) {
+    const now = performance.now();
+    for (const g of Object.keys(OTHER_TABLES)) {
+      if (g === game) continue;
+      const L = liveTable(g), v = views[g] && views[g].g === g ? views[g] : null;
+      const n = (Array.isArray(map[g]) && map[g][0]?.seats) || v?.n || L.n;
+      const key = JSON.stringify([v, n]);
+      if (key === L.key) continue;
+      L.key = key; L.n = n; L.view = v;
+      if (v && v.g === 'roulette' && v.n !== null && (!L.reveal || L.reveal.r !== v.r)) L.reveal = { r: v.r, at: now + (L.seenFirst ? 4500 : 0) };
+      L.seenFirst = true;
+      // Settle any slide still running, then start the new one from where the chips are now.
+      if (L.anim) drawLive(L, L.anim + 10000);
+      const next = v ? pilesOf(L, v) : new Map();
+      for (const [kk, p] of L.piles) if (!next.has(kk)) { p.gone = true; p.sx = p.x; p.sy = p.y; }
+      for (const [kk, q] of next) {
+        const old = L.piles.get(kk);
+        if (old && !old.gone) { old.sx = old.x; old.sy = old.y; old.x = q.x; old.y = q.y; old.a = q.a; old.to = q.to; }
+        else L.piles.set(kk, { ...q, sx: q.from.x, sy: q.from.y });
+      }
+      // A pile that leaves goes where its last view said (a lost bet to the dealer, a win to the player).
+      for (const p of L.piles.values()) if (p.gone && !p.to) p.to = dealerPx(L);
+      L.anim = now;
+      drawLive(L, now);
+    }
+    touch();
+  }
+  // Called every frame: keeps sliding chips moving and shows a roulette number once the wheel has had time to spin.
+  function liveTick(now) {
+    let busy = false;
+    for (const L of Object.values(liveT)) {
+      if (L.anim) { drawLive(L, now); busy = true; }
+      else if (L.reveal && !L.reveal.done && now >= L.reveal.at) { L.reveal.done = true; drawLive(L, now); busy = true; }
+    }
+    return busy;
+  }
+  function setOthers(map = {}, views = null) {
+    if (views) setLive(views, map);
     const key = JSON.stringify(map);
     if (key === otherKey) return;
     otherKey = key;
@@ -1434,7 +1675,7 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     }
     touch();
   }
-  setTimeout(() => setOthers({ boot: 1 }), 0); // the name tags show even before anyone is found at those tables
+  setTimeout(() => { setOthers({ boot: 1 }); setLive({}, {}); }, 0); // the name tags show even before anyone is found at those tables
   // A tap on another table (or its name tag) goes there. Taps on the live felt and on buttons never count.
   container.addEventListener('click', (e) => {
     if (!onGo || container.classList.contains('was-drag') || feltEl.contains(e.target) || e.target.closest('button, a, input, select, textarea, label, [data-act]')) return;
@@ -1982,9 +2223,11 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
   const loop = (now) => {
     if (!running) return;
     requestAnimationFrame(loop);
+    if (window.__officeAway) { last = now; return; } // this table is open out of sight in the office frame: nothing to draw
     const dt = Math.min(0.05, (now - last) / 1000); last = now;
     frames++;
     // The office is alive: redraw every frame while somebody walks, and about 12 times a second otherwise.
+    if (liveTick(now)) dirty = Math.max(dirty, 1);
     if (office.userData.tick?.(now) || now - ambAt > 80) { ambAt = now; dirty = Math.max(dirty, 1); }
     if (now - fpsAt >= 1000) { fps = Math.round((frames * 1000) / (now - fpsAt)); frames = 0; fpsAt = now; }
     if (moveKeys.size) {
@@ -2130,6 +2373,13 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
 
   // The game pages ask the room to walk you over to another table before the next table is opened.
   window.__roomWalk = (g) => window.__roomApi?.leave(g) || Promise.resolve(false);
+  // Walking back to this table while it stayed open: carry on from where the walk stopped, on to the chair.
+  window.__roomBack = () => {
+    walkOut = null;
+    let from = null; try { from = JSON.parse(sessionStorage.getItem(WALK_KEY) || 'null')?.from; } catch { from = null; }
+    dirty = 2;
+    if (!window.__roomApi?.tour(2000, from)) home(true);
+  };
   return window.__roomApi = {
     // The dealer stands on the far side. The page lays the felt out for them (dealer's cards nearest,
     // players across the top) and here it is turned half way round so it reads the right way up from there.
@@ -2177,7 +2427,7 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
       const T0 = cur.t.clone();
       return new Promise((res) => {
         walkOut = { t0: performance.now(), ms, P0, P1, T0, T1, res: () => {
-          try { sessionStorage.setItem(WALK_KEY, JSON.stringify({ to: toGame, at: Date.now(), p: office.worldToLocal(P1.clone()).toArray(), t: office.worldToLocal(T1.clone()).toArray() })); } catch { /* fine */ }
+          try { sessionStorage.setItem(WALK_KEY, JSON.stringify({ to: toGame, from: game, at: Date.now(), p: office.worldToLocal(P1.clone()).toArray(), t: office.worldToLocal(T1.clone()).toArray() })); } catch { /* fine */ }
           res(true);
         } };
         touch();
