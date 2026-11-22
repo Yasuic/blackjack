@@ -1,17 +1,17 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { outerLink } from './shell.js?v=20261122ze';
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe } from './game.js?v=20261122ze';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122ze';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122ze';
-import { tickSound, winSound } from './fx.js?v=20261122ze';
-import * as HX from './history.js?v=20261122ze';
-import { webglOK, initRoom } from './room3d.js?v=20261122ze';
-import { showDropped, onOfficeBack, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261122ze';
-import { makeVault, makeOpener, cleanBox, cleanPiece } from './vault.js?v=20261122ze';
-import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122ze';
-import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122ze';
+import { outerLink } from './shell.js?v=20261122zf';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe } from './game.js?v=20261122zf';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122zf';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122zf';
+import { tickSound, winSound } from './fx.js?v=20261122zf';
+import * as HX from './history.js?v=20261122zf';
+import { webglOK, initRoom } from './room3d.js?v=20261122zf';
+import { showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261122zf';
+import { makeVault, makeOpener, cleanBox, cleanPiece } from './vault.js?v=20261122zf';
+import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122zf';
+import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122zf';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -1424,7 +1424,7 @@ function buildLayout() {
   applyZoom();
   if (use3D()) {
     document.body.classList.add('room3d');
-    try { S.room = initRoom($('#room'), $('#felt'), { phone: innerWidth < 700, pixel: pixelOn(), hud: $('#hud3d'), size: innerWidth < 700 ? { W: Math.max(320, Math.min(460, innerWidth - 16)), H: 600 } : FELT, onGo: (g) => { if (!['poker', 'baccarat', 'roulette'].includes(g)) return; if (S.goAsk?.g !== g || Date.now() - S.goAsk.t > 4000) { S.goAsk = { g, t: Date.now() }; toast(`Tap again to walk over to ${g[0].toUpperCase() + g.slice(1)}.`); return; } goGame(g); } }); }
+    try { S.room = initRoom($('#room'), $('#felt'), { phone: innerWidth < 700, pixel: pixelOn(), hud: $('#hud3d'), size: innerWidth < 700 ? { W: Math.max(320, Math.min(460, innerWidth - 16)), H: 600 } : FELT, onGo: (g, now) => { if (!['poker', 'baccarat', 'roulette'].includes(g)) return; if (!now && (S.goAsk?.g !== g || Date.now() - S.goAsk.t > 4000)) { S.goAsk = { g, t: Date.now() }; toast(`Tap again to walk over to ${g[0].toUpperCase() + g.slice(1)}.`); return; } goGame(g); } }); }
     catch (e) { console.error(e); safeSet('bj-3d', '0'); toast('The 3D room could not start on this device.'); }
     // The first time you get to a table: a short walk round the office before your chair.
     if (S.room && S.code && S.tourFor !== S.code) { S.tourFor = S.code; S.room.tour(params.get('from') ? 1500 : 2000, params.get('from')); }
@@ -4179,6 +4179,7 @@ function officeRows(st) {
 }
 // Walking to another table takes this player's chips along (common.js walkTo). A host cashes out at its own table.
 onOfficeBack('blackjack', () => S.code, () => S.role === 'host', (c) => { S.table?.carryIn(S.myId, c.amount, c.from, c.cid); hostChanged(); }, (m) => { if (S.conn?.open) S.conn.send(m); });
+setSeated(() => !!S.state?.seats?.some((x) => x && x.playerId === S.myId));
 setCashOut(async () => {
   if (S.role === 'host' && S.table) {
     const amount = S.table.cashOut(S.myId);
@@ -4199,7 +4200,7 @@ function goGame(game) {
 
 // The other tables of the office: who plays there is drawn at their table in the room.
 S.others = {};
-watchOffice('blackjack', () => S.code, (g, list, view) => { (S.views ||= {})[g] = view; S.others[g] = list.filter((p) => p.id.split('#')[0] !== S.myId); S.room?.setOthers(S.others, S.views); });
+watchOffice('blackjack', () => S.code, (g, list, view) => { (S.views ||= {})[g] = markMyTurn(g, view, S.myId); S.others[g] = list.filter((p) => p.id.split('#')[0] !== S.myId); S.room?.setOthers(S.others, S.views); });
 
 // "Connection dropped" notice and blocked buttons while this browser has no link to the table (common.js showDropped).
 setInterval(() => showDropped(S.role === 'player' && !S.online && !!S.state && !S.kicked, 'Your moves are not being sent. The table waits for the host. If the host is gone, you can take over.', askBecomeHost), 400);

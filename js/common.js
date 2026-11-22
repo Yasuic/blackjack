@@ -1,8 +1,8 @@
 // Shared by the poker and baccarat pages: small helpers, the playing card picture, the game switch at the
 // top left, and the link between the host's browser and the players' browsers.
-import { openTable } from './shell.js?v=20261122ze';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122ze';
-import { cleanBox, cleanPiece } from './vault.js?v=20261122ze';
+import { office, openTable } from './shell.js?v=20261122zf';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122zf';
+import { cleanBox, cleanPiece } from './vault.js?v=20261122zf';
 export const params = new URLSearchParams(location.search);
 export const $ = (sel, el = document) => el.querySelector(sel);
 export function safeGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
@@ -66,9 +66,9 @@ export function wireGameSwitch(current, getCode, getIsHost) {
 // The same move, started by a tap on that game's table in the room.
 // The first tap only asks, so a stray tap during a hand never takes you away from your table.
 let goAsk = null;
-export function goToGame(current, g, code, isHost) {
+export function goToGame(current, g, code, isHost, now = false) {
   if (g === current || !GAMES[g]) return;
-  if (!goAsk || goAsk.g !== g || Date.now() - goAsk.t > 4000) { goAsk = { g, t: Date.now() }; toast(`Tap again to walk over to ${GAMES[g].name}.`); return; }
+  if (!now && (!goAsk || goAsk.g !== g || Date.now() - goAsk.t > 4000)) { goAsk = { g, t: Date.now() }; toast(`Tap again to walk over to ${GAMES[g].name}.`); return; }
   walkTo(current, g, gameUrl(g, code, isHost, current), code);
 }
 
@@ -78,8 +78,11 @@ export function goToGame(current, g, code, isHost) {
 // hand, bet or deal of yours is still in play you stay here until it is over. Only when the table cannot be
 // reached does a second tap walk over without the chips.
 const CARRY_KEY = 'office-carry';
-let cashOutFn = null, walking = false, walkAnyway = null;
+let cashOutFn = null, walking = false, walkAnyway = null, seatedFn = null;
 export function setCashOut(fn) { cashOutFn = fn; }
+// Inside the office every table stays open, so a player who has a seat keeps it, with its chips, when walking
+// to another table: the hand there plays on (your turn timer runs as usual) and you can walk back to it any time.
+export function setSeated(fn) { seatedFn = fn; }
 function walkCover(text) {
   let el = document.getElementById('walk-cover');
   if (!text) { el?.remove(); return; }
@@ -96,9 +99,10 @@ export async function walkTo(current, g, url, code) {
   if (!walk3d) walkCover(`Walking over to ${name}…`);
   let amount = 0;
   const anyway = walkAnyway && walkAnyway.g === g && Date.now() - walkAnyway.t < 8000;
-  if (cashOutFn && code && !anyway) {
+  let keep = false; try { keep = !!office() && !!seatedFn?.(); } catch { keep = false; }
+  if (cashOutFn && code && !anyway && !keep) {
     try { amount = Number(await cashOutFn()) || 0; } catch (e) {
-      walking = false; walkCover(null);
+      walking = false; walkCover(null); window.__roomNear = false;
       // A hand, bet or deal of yours still in play: you stay at this table until it is over.
       if (!e.net) { walkAnyway = null; toast(e.message || 'Your hand is still in play. Walk over when it is over.'); return; }
       walkAnyway = { g, t: Date.now() };
@@ -109,7 +113,7 @@ export async function walkTo(current, g, url, code) {
   walkAnyway = null;
   if (amount > 0) safeSet(CARRY_KEY, JSON.stringify({ code, to: g, from: current, amount, cid: randomHex(6), t: Date.now() }));
   // Inside the office frame the new table is loaded behind this one and shown when ready; the link stays the same.
-  if (walk3d) { try { await window.__roomWalk(g); } catch { /* fine */ } openTable(url); return; }
+  if (walk3d) { if (!window.__roomNear) { try { await window.__roomWalk(g); } catch { /* fine */ } } window.__roomNear = false; openTable(url); return; }
   setTimeout(() => openTable(url), amount > 0 ? 250 : 120);
 }
 // Inside the office every table you visited stays open. Coming back to one: the walk is over, the room takes you
@@ -382,9 +386,9 @@ const cc = (c) => (c && c.r && c.s ? String(c.r) + String(c.s) : '?');
 export function officeView(game, st) {
   if (!st) return null;
   try {
-    if (game === 'blackjack') return { g: game, ph: st.phase, n: st.seats.length, d: (st.dealer?.cards || []).map(cc),
+    if (game === 'blackjack') return { g: game, ph: st.phase, n: st.seats.length, tid: st.turn && st.seats[st.turn.seat] ? String(st.seats[st.turn.seat].playerId).slice(0, 40) : null, d: (st.dealer?.cards || []).map(cc),
       s: st.seats.map((x) => x && { b: x.bet || 0, r: x.net || 0, h: (x.hands || []).map((h) => ({ c: (h.cards || []).map(cc), b: h.bet || 0 })) }) };
-    if (game === 'poker') return { g: game, ph: st.phase, n: st.seats.length, hn: st.handNo, btn: st.button, pot: st.pot || 0, b: (st.board || []).map(cc),
+    if (game === 'poker') return { g: game, ph: st.phase, n: st.seats.length, tid: Number.isInteger(st.turn) && st.seats[st.turn] ? String(st.seats[st.turn].id).slice(0, 40) : null, hn: st.handNo, btn: st.button, pot: st.pot || 0, b: (st.board || []).map(cc),
       s: st.seats.map((x) => x && { b: x.bet || 0, w: x.won || 0, f: !!x.folded, in: !!x.inHand, c: x.inHand && !x.folded ? (x.cards || []).map(cc) : [] }) };
     if (game === 'baccarat') {
       const seat = {}; for (const p of st.players || []) if (Number.isInteger(p.seat)) seat[p.id] = p.seat;
@@ -407,13 +411,23 @@ function cleanView(v) {
   if (!v || typeof v !== 'object' || typeof v.g !== 'string') return null;
   const card = (c) => String(c || '?').slice(0, 4), cards = (a, n = 12) => (Array.isArray(a) ? a.slice(0, n).map(card) : []), num = (x) => (Number.isFinite(Number(x)) ? Number(x) : 0);
   const res = (a) => (Array.isArray(a) ? a.slice(0, 12) : []).map((x) => ({ s: num(x?.s), w: num(x?.w), a: num(x?.a) }));
-  const out = { g: v.g.slice(0, 10), ph: String(v.ph || '').slice(0, 12), n: Math.max(1, Math.min(12, num(v.n) || 9)) };
+  const out = { g: v.g.slice(0, 10), ph: String(v.ph || '').slice(0, 12), n: Math.max(1, Math.min(12, num(v.n) || 9)), tid: typeof v.tid === 'string' ? v.tid.slice(0, 40) : null };
   if (out.g === 'blackjack') { out.d = cards(v.d); out.s = (Array.isArray(v.s) ? v.s.slice(0, 12) : []).map((x) => x && { b: num(x.b), r: num(x.r), h: (Array.isArray(x.h) ? x.h.slice(0, 8) : []).map((h) => ({ c: cards(h?.c), b: num(h?.b) })) }); }
   else if (out.g === 'poker') { out.hn = num(v.hn); out.btn = num(v.btn); out.pot = num(v.pot); out.b = cards(v.b, 5); out.s = (Array.isArray(v.s) ? v.s.slice(0, 12) : []).map((x) => x && { b: num(x.b), w: num(x.w), f: !!x.f, in: !!x.in, c: cards(x.c, 6) }); }
   else if (out.g === 'baccarat') { out.P = cards(v.P, 3); out.B = cards(v.B, 3); out.win = typeof v.win === 'string' ? v.win.slice(0, 8) : null; out.bets = (Array.isArray(v.bets) ? v.bets.slice(0, 12) : []).map((b) => ({ s: num(b?.s), p: num(b?.p), k: num(b?.k), t: num(b?.t) })); out.res = res(v.res); }
   else if (out.g === 'roulette') { out.r = num(v.r); out.n = Number.isInteger(v.n) && v.n >= 0 && v.n <= 37 ? v.n : null; out.bets = (Array.isArray(v.bets) ? v.bets.slice(0, 12) : []).map((b) => ({ s: num(b?.s), a: num(b?.a), w: num(b?.w), k: (Array.isArray(b?.k) ? b.k.slice(0, 4) : []).map((x) => String(x).slice(0, 12)) })); out.res = res(v.res); }
   else return null;
   return out;
+}
+// Your turn at another table you sit at: the view is marked, and a note says so once per turn.
+const turnSeen = {};
+export function markMyTurn(g, view, myId) {
+  if (!view) return view;
+  const mine = !!view.tid && view.tid.split('#')[0] === myId;
+  const key = mine ? `${view.ph}:${view.hn || ''}:${view.d?.length || 0}:${(view.b || []).length}` : '';
+  if (mine && turnSeen[g] !== key && !window.__officeAway) { turnSeen[g] = key; toast(`Your turn at ${GAMES[g]?.name || g}. Walk over to play it.`); }
+  if (!mine) turnSeen[g] = '';
+  return { ...view, mine };
 }
 export function watchOffice(current, getCode, onPeople, onLedger = null) {
   let peer = null, dead = false;

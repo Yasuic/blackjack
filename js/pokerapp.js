@@ -1,17 +1,17 @@
 // The poker page: a Texas Hold'em table for up to 9 in the big meeting room. The host's browser runs
 // the table (js/poker.js); every other browser sends its moves there and is told only what it may see.
-import { outerLink } from './shell.js?v=20261122ze';
-import { PokerTable, POKER_SEATS, pokerDeck, cardText, mpClientMoves, mpMine, mpCheck, bestHand, bestOmaha } from './poker.js?v=20261122ze';
-import { plainDeck, shufflePass, lockPass, checkDeck, keyFor } from './mental.js?v=20261122ze';
-import { sha256 } from './game.js?v=20261122ze';
-import { botMove, isBot, BOT_NAMES } from './pokerbot.js?v=20261122ze';
-import { chipSound, cardSound, hitSound, standSound, potSound, tickSound, turnSound, punchSound } from './fx.js?v=20261122ze';
-import { webglOK, initRoom } from './room3d.js?v=20261122ze';
-import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122ze';
-import { showDropped, onOfficeBack, officeView, params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML } from './common.js?v=20261122ze';
+import { outerLink } from './shell.js?v=20261122zf';
+import { PokerTable, POKER_SEATS, pokerDeck, cardText, mpClientMoves, mpMine, mpCheck, bestHand, bestOmaha } from './poker.js?v=20261122zf';
+import { plainDeck, shufflePass, lockPass, checkDeck, keyFor } from './mental.js?v=20261122zf';
+import { sha256 } from './game.js?v=20261122zf';
+import { botMove, isBot, BOT_NAMES } from './pokerbot.js?v=20261122zf';
+import { chipSound, cardSound, hitSound, standSound, potSound, tickSound, turnSound, punchSound } from './fx.js?v=20261122zf';
+import { webglOK, initRoom } from './room3d.js?v=20261122zf';
+import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122zf';
+import { showDropped, markMyTurn, onOfficeBack, setSeated, officeView, params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML } from './common.js?v=20261122zf';
 
-import { shareHidden, startHold } from './vault.js?v=20261122ze';
-import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261122ze';
+import { shareHidden, startHold } from './vault.js?v=20261122zf';
+import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261122zf';
 const PREFIX = 'bjt-pk-';
 // A settings change by vote (js/vote.js): any player at the table may ask, every other player at the table who is online has to say yes.
 const VOTE = {
@@ -598,7 +598,7 @@ function showTable() {
   if (d3) {
     document.body.classList.add('room3d');
     try {
-      S.room = initRoom($('#room'), felt, { phone: phone(), pixel: safeGet('bj-pixel') === '1', hud: $('#hud3d'), size: F, game: 'poker', onGo: (g) => goToGame('poker', g, S.code || params.get('room'), S.role === 'host'), metres: F.H > F.W ? 2.0 * F.W / F.H : 2.4 });
+      S.room = initRoom($('#room'), felt, { phone: phone(), pixel: safeGet('bj-pixel') === '1', hud: $('#hud3d'), size: F, game: 'poker', onGo: (g, now) => goToGame('poker', g, S.code || params.get('room'), S.role === 'host', now), metres: F.H > F.W ? 2.0 * F.W / F.H : 2.4 });
       if (params.has('roomdebug')) window.__room = S.room;
       if (S.tourFor !== S.code) { S.tourFor = S.code; S.room.tour(params.get('from') ? 1500 : 2000, params.get('from')); }
     } catch (e) { console.error(e); S.room = null; document.body.classList.remove('room3d'); toast('The 3D room could not start on this device.'); }
@@ -1431,7 +1431,7 @@ addEventListener('resize', () => { clearTimeout(resizeT); resizeT = setTimeout(r
 
 // The other tables of the office: who plays there is drawn at their table in the room.
 S.others = {};
-watchOffice('poker', () => S.code, (g, list, view) => { (S.views ||= {})[g] = view; S.others[g] = list.filter((p) => p.id.split('#')[0] !== S.myId); S.room?.setOthers(S.others, S.views); });
+watchOffice('poker', () => S.code, (g, list, view) => { (S.views ||= {})[g] = markMyTurn(g, view, S.myId); S.others[g] = list.filter((p) => p.id.split('#')[0] !== S.myId); S.room?.setOthers(S.others, S.views); });
 
 // "Connection dropped" notice and blocked buttons while this browser has no link to the table (common.js showDropped).
 setInterval(() => showDropped(!!S.hold || (S.role === 'guest' && !!S.st && !!S.conn && S.conn[1] === false && document.body.classList.contains('in-room')), S.hold ? "The table is moving to your browser. One moment…" : 'Your moves are not being sent. The table waits for the host. If the host is gone, you can take over.', S.hold ? null : becomeHost), 400);
@@ -1441,6 +1441,7 @@ setInterval(() => showDropped(!!S.hold || (S.role === 'guest' && !!S.st && !!S.c
 function officeRows(st) { return (st?.ledger || []).filter((r) => !String(r.id).startsWith('bot-')).map((r) => ({ id: r.id, name: r.name, chips: r.stack, net: r.net })); }
 // Walking to another table takes this player's chips along. A host cashes out at its own table.
 onOfficeBack(GAME, () => S.code, () => S.role === 'host', (c) => { S.table?.carryIn(S.myId, c.amount, c.from, c.cid); push(); }, (m) => S.net?.send(m));
+setSeated(() => !!S.st?.seats?.some((x) => x && x.id === S.myId));
 setCashOut(async () => {
   if (S.role === 'host' && S.table) { const amount = S.table.cashOut(S.myId); push(); await new Promise((r) => setTimeout(r, 700)); return amount; }
   if (S.role === 'guest' && S.st) return askCashOut((m) => S.net.send(m));

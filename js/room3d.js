@@ -218,7 +218,7 @@ function buildOffice(signText, midShift = 0, midScale = 1, skipRoom = null, live
     chrome: mk({ color: '#b9bec4', roughness: 0.25, metalness: 0.9 }),
     screen: mk({ color: '#0d0f12', roughness: 0.25, metalness: 0.2 }),
     // What the office screens show: the ARC Group logo, from the photo of it, lit like a screen that is on.
-    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261122ze'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
+    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261122zf'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
     dark: mk({ color: '#30353c', roughness: 0.6 }),
   };
   const group = new THREE.Group();
@@ -996,7 +996,7 @@ function buildStorefront() {
     lamp: lam('#c8161d', 0.6), bulb: lit('#ffe9a8'), red: lit('#c8161d'), gold: lit('#f4c542'), wood: lam('#7a5234', 0.35),
     glass: new THREE.MeshBasicMaterial({ color: '#dff3f7', transparent: true, opacity: 0.13, depthWrite: false }),
     awning: new THREE.MeshBasicMaterial({ map: canvasTexture(512, 64, (g, w, h) => { for (let i = 0; i < 16; i++) { g.fillStyle = i % 2 ? '#fff6e6' : '#f08a1c'; g.fillRect((i * w) / 16, 0, w / 16 + 1, h); } }), side: THREE.DoubleSide }),
-    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261122ze') }),
+    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261122zf') }),
     menu: new THREE.MeshBasicMaterial({ map: canvasTexture(256, 384, (g, w, h) => {
       g.fillStyle = '#c8161d'; g.fillRect(0, 0, w, h); g.fillStyle = '#f4c542'; g.fillRect(14, 14, w - 28, 44);
       const r = rng(11); g.fillStyle = '#fff3d6';
@@ -1653,7 +1653,8 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
   }
   function setOthers(map = {}, views = null) {
     if (views) setLive(views, map);
-    const key = JSON.stringify(map);
+    const turns = Object.keys(OTHER_TABLES).filter((g) => views?.[g]?.mine);
+    const key = JSON.stringify([map, turns]);
     if (key === otherKey) return;
     otherKey = key;
     disposeTree(otherGroup); otherGroup.clear();
@@ -1677,7 +1678,7 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     for (const g of Object.keys(OTHER_TABLES)) {
       if (g === game) continue;
       const T = OTHER_TABLES[g], n = Array.isArray(map[g]) ? map[g].length : 0, c = w(T.x - (g === 'blackjack' ? 0.3 : 0), T.y);
-      const sp = makeLabel(`${TABLE_NAMES[g]}${n ? ' · ' + n + ' playing' : ''}`);
+      const sp = makeLabel(`${TABLE_NAMES[g]}${turns.includes(g) ? ' · YOUR TURN' : n ? ' · ' + n + ' playing' : ''}`);
       sp.material.sizeAttenuation = false; sp.scale.set(0.2, 0.05, 1); // the same size on the screen however far the table is
       sp.position.set(c.x, yTop + 0.95 * S, c.z);
       sp.userData.go = g;
@@ -2230,6 +2231,25 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
   let running = true, last = performance.now(), frames = 0, fpsAt = last, fps = 0;
   const near = (a, b, eps) => Math.abs(a - b) < eps;
   let dbgCam = null, ambAt = 0;
+  // Walking with the keys up to another table of the office takes you into it: that table's page is already open
+  // in the office frame (or opens now), and you carry on from where you stand. Your seat here stays yours.
+  let nearAt = 0;
+  function nearTable(now) {
+    if (!onGo || now - nearAt < 3000 || window.__officeAway) return;
+    for (const g of Object.keys(OTHER_TABLES)) {
+      if (g === game) continue;
+      const T = OTHER_TABLES[g], c = office.localToWorld(new THREE.Vector3(-T.x, 0, -T.y));
+      const reach = ((T.r || Math.min(T.w, T.d) / 2) + 0.55) * S;
+      if (Math.hypot(goal.t.x - c.x, goal.t.z - c.z) > reach) continue;
+      nearAt = now;
+      const P = posFor(cur, new THREE.Vector3());
+      try { sessionStorage.setItem(WALK_KEY, JSON.stringify({ to: g, from: game, at: Date.now(), p: office.worldToLocal(P.clone()).toArray(), t: office.worldToLocal(cur.t.clone()).toArray() })); } catch { /* fine */ }
+      moveKeys.clear();
+      window.__roomNear = true;
+      onGo(g, true);
+      return;
+    }
+  }
   const loop = (now) => {
     if (!running) return;
     requestAnimationFrame(loop);
@@ -2245,6 +2265,8 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
       const f = (moveKeys.has('f') ? 1 : 0) - (moveKeys.has('b') ? 1 : 0), r = (moveKeys.has('r') ? 1 : 0) - (moveKeys.has('l') ? 1 : 0);
       panR.set(1, 0, 0).applyQuaternion(camera.quaternion); panR.y = 0; panR.normalize(); panF.set(-panR.z, 0, panR.x).multiplyScalar(-1);
       goal.t.addScaledVector(panF, f * 2.4 * S * dt).addScaledVector(panR, r * 2.4 * S * dt); keepIn(goal.t); rate = 12; dirty = Math.max(dirty, 2);
+
+      nearTable(now);
     }
     const k = 1 - Math.exp(-dt * rate);
     const settled = near(cur.theta, goal.theta, 2e-4) && near(cur.phi, goal.phi, 2e-4) && near(cur.r, goal.r, 0.05) && near(cur.yaw, goal.yaw, 2e-4) && near(cur.pitch, goal.pitch, 2e-4) && cur.t.distanceToSquared(goal.t) < 0.01;
@@ -2387,7 +2409,7 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
   window.__roomWalk = (g) => window.__roomApi?.leave(g) || Promise.resolve(false);
   // Walking back to this table while it stayed open: carry on from where the walk stopped, on to the chair.
   window.__roomBack = () => {
-    walkOut = null;
+    walkOut = null; moveKeys.clear(); nearAt = performance.now();
     let from = null; try { from = JSON.parse(sessionStorage.getItem(WALK_KEY) || 'null')?.from; } catch { from = null; }
     dirty = 2;
     if (!window.__roomApi?.tour(2000, from)) home(true);
@@ -2451,6 +2473,7 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     debugSeat(name) { const m = DESK_OF[name]; if (!m) return null; if (!m.parent) return [m.position.x, m.position.y, m.position.z, 0, -1]; const v = new THREE.Vector3(), w = new THREE.Vector3(); m.getWorldPosition(v); m.localToWorld(w.set(0, 0, -1)); office.worldToLocal(v); office.worldToLocal(w); return [v.x, v.y, v.z, w.x - v.x, w.z - v.z]; },
     debugTrip(who, kind) { office.userData.trip?.(who, kind); touch(); },
     debugTalk() { const n = office.userData.talk?.(); touch(); return n; },
+    debugNear(g) { const T = OTHER_TABLES[g]; if (!T) return; const c = office.localToWorld(new THREE.Vector3(-T.x, 0, -T.y)); goal.t.set(c.x, goal.t.y, c.z); nearAt = 0; nearTable(performance.now() + 5000); },
     debugLook(a, b) { dbgCam = a ? { p: new THREE.Vector3(-a[0], a[1], -a[2]), t: new THREE.Vector3(-b[0], b[1], -b[2]) } : null; touch(); },
     zoomBy(d) { zoom(d > 0 ? 0.86 : 1.16); },
     look,
