@@ -754,3 +754,4 @@ body.room3d .pfelt:not(.tall) .bc-spots { top: 47.5%; }
 body:not(.room3d) .pfelt:not(.tall) .ro-grid.wide { top: 21%; grid-auto-rows: calc(38px * var(--k)); }
 @media (max-width: 560px) { .bc-acts.ro-acts { flex-wrap: wrap; row-gap: 4px; } }
 body:not(.room3d) .pfelt:not(.tall) .ro-result { display: none; }
+.ro-spin.pressed, .bc-acts .btn.primary.pressed { background: #1d6f52 !important; border-color: #7ef0b6 !important; color: #eafff5 !important; }

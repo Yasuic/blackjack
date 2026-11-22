@@ -1,6 +1,6 @@
 // Shared by the poker and baccarat pages: small helpers, the playing card picture, the game switch at the
 // top left, and the link between the host's browser and the players' browsers.
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261121zf';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122a';
 export const params = new URLSearchParams(location.search);
 export const $ = (sel, el = document) => el.querySelector(sel);
 export function safeGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
@@ -90,6 +90,9 @@ export function createHost(peerId, on) {
   const wire = (conn) => {
     conn.on('data', (m) => {
       if (!m || typeof m !== 'object') return;
+      // A player's sign of life, every few seconds: it tells the host who is still there (heard()).
+      conn.rx = Date.now();
+      if (m.t === 'ping') { conn.pings = true; return; }
       // Someone at another table of the office asks who sits here.
       if (m.t === 'peek') { try { conn.send({ t: 'people', list: (on.people?.() || []).slice(0, 12) }); } catch {} return; }
       if (m.t === 'hello') {
@@ -124,6 +127,8 @@ export function createHost(peerId, on) {
   return {
     send(id, m) { const c = conns.get(id); if (c && c.open) { try { c.send(m); } catch {} } },
     ids: () => [...conns.keys()],
+    // Milliseconds since this player's browser was last heard, or null when it sends no signs of life (an older page).
+    quietFor(id) { const c = conns.get(id); return c && c.open && c.pings ? Date.now() - (c.rx || 0) - (c.relay ? 5000 : 0) : null; },
     close() { dead = true; clearInterval(beat); try { relay?.close(); } catch {} try { peer.destroy(); } catch {} },
   };
 }
@@ -212,8 +217,11 @@ export function createGuest(peerId, hello, on) {
   };
   start();
   // Nothing heard from the host for 5.5 seconds (9 on the second path): the link is dead even when the browser has not said so yet.
+  let beatN = 0;
   const watch = setInterval(() => {
     if (dead) return;
+    // A sign of life to the host every 3 seconds (4.5 on the second path).
+    if (conn && conn.open && ++beatN % (conn.relay ? 3 : 2) === 0) { try { conn.send({ t: 'ping' }); } catch {} }
     if (!conn || !conn.open) { downAt ||= Date.now(); if (Date.now() - downAt > 4500 || params.get('relay') === 'only') tryRelay(); return; }
     downAt = 0;
     if (Date.now() - lastRx < (conn.relay ? 9000 : 5500)) return;

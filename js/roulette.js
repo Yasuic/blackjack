@@ -1,7 +1,7 @@
 // European roulette (one zero, 37 pockets) for up to 9 players against the house. Pure rules: the host's
 // browser owns one RouTable and every bet goes through it. Nothing here touches the page or the network.
-import { sha256, MAX_CHIPS } from './game.js?v=20261121zf';
-import { isFrozen, bankJoin, setBank, clearBank, bankGone, bankSettle, ledgerNet, ledgerSum, bankAdopt } from './bank.js?v=20261121zf';
+import { sha256, MAX_CHIPS } from './game.js?v=20261122a';
+import { isFrozen, bankJoin, setBank, clearBank, bankGone, bankSettle, ledgerNet, ledgerSum, bankAdopt } from './bank.js?v=20261122a';
 
 export const ROU_SEATS = 9;
 export const ROU_DEFAULTS = {
@@ -90,6 +90,7 @@ export class RouTable {
     this.spins = [];     // finished spins with their seeds, for checking
     this.log = [];
     this.betStart = null;
+    this.ready = {};     // id -> true: who has pressed Spin for the coming spin
     this.bankId = null;  // the player who is the dealer; null = house, practice, frozen ledger
     this.base = {};      // while frozen: each player's real balance, kept aside
     this.fair = { next: newCommit(), seeds: {} };
@@ -110,7 +111,7 @@ export class RouTable {
   join(id, name, look) {
     let p = this.players[id];
     const clean = String(name || 'Player').replace(/[<>]/g, '').trim().slice(0, 16) || 'Player';
-    if (p) { p.connected = true; p.name = clean; if (look) p.look = look; if (p.seat < 0) p.seat = this.freeSeat(); return p; }
+    if (p) { p.connected = true; p.quiet = false; p.name = clean; if (look) p.look = look; if (p.seat < 0) p.seat = this.freeSeat(); return p; }
     p = { id, name: clean, connected: true, chips: this.settings.startChips, totalIn: this.settings.startChips, look: look || { skin: 2, hair: 0 }, seat: this.freeSeat() };
     this.players[id] = p;
     bankJoin(this, p);
@@ -119,8 +120,30 @@ export class RouTable {
     return p;
   }
   freeSeat() { const used = new Set(Object.values(this.players).filter((p) => !p.kicked).map((p) => p.seat)); for (let i = 0; i < ROU_SEATS; i++) if (!used.has(i)) return i; return -1; }
-  disconnect(id) { const p = this.players[id]; if (p) p.connected = false; }
-  kick(id) { const p = this.players[id]; if (!p) return; bankGone(this, id); this.clearBets(id, true); p.kicked = true; p.connected = false; p.seat = -1; }
+  disconnect(id) { const p = this.players[id]; if (p) p.connected = false; delete this.ready[id]; this.spinIfAll(); }
+  kick(id) { const p = this.players[id]; if (!p) return; bankGone(this, id); this.clearBets(id, true); p.kicked = true; p.connected = false; p.seat = -1; delete this.ready[id]; this.spinIfAll(); }
+  // The wheel turns once every seated player who is online has pressed Spin. A player who is offline is not waited for.
+  voters() { return Object.values(this.players).filter((p) => !p.kicked && p.connected && !p.quiet && p.seat >= 0).map((p) => p.id); }
+  // A player whose browser has gone silent (closed lid, lost network) before the link is seen to drop: not waited for.
+  setQuiet(id, q) { const p = this.players[id]; if (!p || !!p.quiet === !!q) return false; p.quiet = !!q; if (q) delete this.ready[id]; this.spinIfAll(); return true; }
+  waitingFor() { return this.voters().filter((id) => !this.ready[id]); }
+  pressSpin(id) {
+    const p = this.mustPlayer(id);
+    if (p.seat < 0) throw new Error('Only seated players start the spin.');
+    if (this.phase !== 'betting') throw new Error('The wheel is already turning.');
+    if (this.ready[id]) { delete this.ready[id]; return false; } // a second press takes it back
+    if (!this.canSpin()) throw new Error('Place a bet first.');
+    this.ready[id] = true;
+    return this.spinIfAll();
+  }
+  spinIfAll() {
+    if (this.phase !== 'betting') return false;
+    if (!this.canSpin()) { this.ready = {}; return false; }
+    const v = this.voters();
+    if (!v.length || !Object.keys(this.ready).length || v.some((id) => !this.ready[id])) return false;
+    this.doSpin();
+    return true;
+  }
   addChips(id, amount) {
     const p = this.mustPlayer(id);
     amount = clampInt(amount, 1, MAX_CHIPS, 0);
@@ -227,10 +250,11 @@ export class RouTable {
     if (this.history.length > 200) this.history.shift();
     this.bets = {};
     this.betStart = null;
+    this.ready = {};
     this.phase = 'done';
     this.doneAt = Date.now();
   }
-  next() { if (this.phase !== 'done') return; this.phase = 'betting'; this.spin = null; this.pays = {}; this.betStart = null; }
+  next() { if (this.phase !== 'done') return; this.phase = 'betting'; this.spin = null; this.pays = {}; this.betStart = null; this.ready = {}; }
 
   // What everyone is told. The seed of the coming spin is never in it; the seed of a finished spin is.
   publicState(forId) {
@@ -238,15 +262,15 @@ export class RouTable {
     for (const b of Object.values(this.bets)) for (const [k, v] of Object.entries(b)) totals[k] = (totals[k] || 0) + v;
     return {
       game: 'roulette', settings: this.settings, phase: this.phase, round: this.round, hostId: this.hostId, spin: this.spin, pays: this.pays,
-      bets: this.bets, lastBets: this.lastBets, totals, canSpin: this.canSpin(), history: this.history.slice(-60),
+      bets: this.bets, lastBets: this.lastBets, totals, canSpin: this.canSpin(), ready: Object.keys(this.ready), waiting: this.waitingFor(), history: this.history.slice(-60),
       betLeft: this.betStart !== null && this.settings.betTime ? Math.max(0, this.settings.betTime * 1000 - (Date.now() - this.betStart)) : null,
-      players: Object.values(this.players).filter((p) => !p.kicked).map((p) => ({ id: p.id, name: p.name, connected: p.connected, chips: p.chips, totalIn: p.totalIn, look: p.look, seat: p.seat, net: ledgerNet(this, p), base: this.base?.[p.id] || null })),
+      players: Object.values(this.players).filter((p) => !p.kicked).map((p) => ({ id: p.id, name: p.name, connected: p.connected, chips: p.chips, totalIn: p.totalIn, look: p.look, seat: p.seat, away: !!p.quiet, net: ledgerNet(this, p), base: this.base?.[p.id] || null })),
       bankId: this.bankId, frozen: this.frozen, roundFrozen: !!this.roundFrozen, ledgerSum: this.ledgerSum(),
       fair: { nextCommit: this.fair.next.commit, mySeed: !!this.fair.seeds[forId], seeds: Object.keys(this.fair.seeds).filter((id) => id !== this.hostId).length, spins: this.spins.slice(-25) },
       log: this.log.slice(-50),
     };
   }
-  static restore(j) { const t = new RouTable(); Object.assign(t, j); if (!('bankId' in j)) t.base = null; bankAdopt(t); return t; }
+  static restore(j) { const t = new RouTable(); Object.assign(t, j); if (!t.ready) t.ready = {}; if (!('bankId' in j)) t.base = null; bankAdopt(t); return t; }
   // Another player's browser takes the table over from what everyone is told. Chips and bets stay.
   static fromPublic(st, myId) {
     const t = new RouTable(st.settings);
@@ -254,6 +278,7 @@ export class RouTable {
       history: [...(st.history || [])], log: [...(st.log || [])], spins: [...(st.fair?.spins || [])] });
     for (const p of st.players) t.players[p.id] = { id: p.id, name: p.name, connected: p.id === myId, chips: p.chips, totalIn: p.totalIn, look: p.look || { skin: 2, hair: 0 }, seat: p.seat };
     t.bankId = st.bankId || null; t.base = {}; t.roundFrozen = !!st.roundFrozen;
+    for (const id of st.ready || []) t.ready[id] = true;
     for (const p of st.players) if (p.base) t.base[p.id] = { ...p.base };
     if (!('bankId' in st)) { t.base = null; bankAdopt(t); }
     if (t.canSpin()) t.betStart = Date.now();

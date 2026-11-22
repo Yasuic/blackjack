@@ -84,6 +84,25 @@ ok(spinNumber('abc', { a: '1' }) === spinNumber('abc', { a: '1' }) && [0, 1, 2, 
   const a = wheelState(17, 5, 4.2, 9), b = wheelState(17, 5, 4.2, 9); ok(a.ball === b.ball && a.wheel === b.wheel, 'the same spin looks the same on every screen');
 }
 
+{ // the spin starts only when every seated player who is online has pressed Spin
+  const t = new RouTable(); t.join('a', 'Ann'); t.join('b', 'Bob'); t.join('c', 'Cat');
+  let threw = false; try { t.pressSpin('a'); } catch { threw = true; } ok(threw, 'Spin cannot be pressed with no bet on the table');
+  t.bet('a', 'red', 10);
+  ok(t.pressSpin('a') === false && t.phase === 'betting', 'one press of three does not start the spin');
+  ok(t.publicState('b').waiting.join() === 'b,c', 'the table says who has not pressed');
+  t.pressSpin('b'); ok(t.phase === 'betting', 'two presses of three do not start the spin');
+  t.pressSpin('b'); ok(!t.ready.b && t.phase === 'betting', 'a second press takes the press back');
+  t.pressSpin('b'); t.pressSpin('c'); ok(t.phase === 'done' && t.round === 1, 'the spin starts when all three have pressed');
+  ok(Object.keys(t.ready).length === 0, 'the presses are cleared after the spin');
+  t.next(); t.bet('b', 'n7', 5); t.pressSpin('a'); t.pressSpin('b');
+  t.disconnect('c'); ok(t.phase === 'done' && t.round === 2, 'a player who goes offline is not waited for');
+  t.next(); t.join('c', 'Cat'); t.bet('a', 'odd', 5); t.pressSpin('a'); t.pressSpin('b'); ok(t.phase === 'betting', 'a player who is back online must press again');
+  t.clearBets('a'); t.spinIfAll(); ok(Object.keys(t.ready).length === 0, 'with no bet left on the table the presses are cleared');
+  t.bet('a', 'odd', 5); t.pressSpin('a'); t.pressSpin('b'); t.kick('c'); ok(t.phase === 'done' && t.round === 3, 'a removed player is not waited for');
+  { const q = new RouTable(); q.join('a', 'Ann'); q.join('b', 'Bob'); q.bet('a', 'red', 5); q.pressSpin('a'); q.setQuiet('b', true); ok(q.phase === 'done', 'a player whose browser went silent is not waited for'); q.next(); q.setQuiet('b', false); q.bet('a', 'red', 5); q.pressSpin('a'); ok(q.phase === 'betting', 'once heard again, that player must press'); }
+  const u = RouTable.fromPublic((() => { const x = new RouTable(); x.join('a', 'Ann'); x.join('b', 'Bob'); x.bet('a', 'red', 5); x.pressSpin('a'); return x.publicState('b'); })(), 'b');
+  ok(u.ready.a === true && u.phase === 'betting', 'presses survive a move of the table to another browser');
+}
 { const { bankChecks } = await import('./bank.helper.mjs'); bankChecks(ok, RouTable, ['red', 'n17', 'd2', 'c3', 'odd', 'n0'], 'canSpin', 'doSpin'); }
 console.log(`${n - fails}/${n} roulette checks passed`);
 process.exit(fails ? 1 : 0);

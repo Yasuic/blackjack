@@ -1,9 +1,9 @@
 // The roulette page: a European roulette table for up to 9 in Nigel's room. The host's browser runs
 // the table (js/roulette.js); every other browser sends its bets there and is told only what it may see.
-import { RouTable, ROU_SEATS, WHEEL, colorOf, betNumbers, betName, betPays, verifySpin } from './roulette.js?v=20261121zf';
-import { showSpin } from './wheel.js?v=20261121zf';
-import { webglOK, initRoom } from './room3d.js?v=20261121zf';
-import { params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML } from './common.js?v=20261121zf';
+import { RouTable, ROU_SEATS, WHEEL, colorOf, betNumbers, betName, betPays, verifySpin } from './roulette.js?v=20261122a';
+import { showSpin } from './wheel.js?v=20261122a';
+import { webglOK, initRoom } from './room3d.js?v=20261122a';
+import { params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML } from './common.js?v=20261122a';
 
 const PREFIX = 'bjt-ro-';
 const app = $('#app');
@@ -94,9 +94,11 @@ function doMove(id, m) {
     case 'take': t.takeChips(id, m.amount); break;
     case 'bank': if (m.on) t.setBank(id); else if (id === t.bankId || id === t.hostId) t.clearBank(id); break;
     case 'seed': t.setClientSeed(id, m.seed, m.commit); break;
+    case 'ready': t.pressSpin(id); break;
     case 'fx': relayFx(id, m.e); break;
     default: break;
   }
+  t.spinIfAll(); // also clears the Spin presses when the last bet is taken off
 }
 const EMOJI = ['😂', '😭', '😡', '🤡', '🔥', '💀', '👏', '🙏', '🤑', '💩', '🫡', '🤯', '🍀', '🎯'];
 function relayFx(id, e) {
@@ -134,6 +136,8 @@ function hostClock() {
   if (!t) return;
   const now = Date.now();
   if (S.pendingSettings && t.phase === 'betting' && !t.canSpin()) { t.updateSettings(S.pendingSettings); S.pendingSettings = null; push(); }
+  // A player whose browser has sent nothing for 9 seconds is not waited for when the others press Spin.
+  { let ch = false; for (const p of Object.values(t.players)) { if (p.id === S.myId || p.kicked) continue; const q = S.net?.quietFor?.(p.id); if (q !== null && q !== undefined && t.setQuiet(p.id, q > 9000)) ch = true; } if (ch) push(); }
   if (t.phase === 'betting') {
     if (!S.paused && t.settings.betTime && t.betStart !== null && now - t.betStart >= t.settings.betTime * 1000 && t.canSpin()) { t.doSpin(); push(); }
   } else if (now - (t.doneAt || 0) >= showMs()) { t.next(); push(); }
@@ -337,8 +341,10 @@ function render() {
     const pay = final ? st.pays[p.id] : null;
     let bubble = '', bcls = '';
     if (!p.connected) { bubble = 'Offline'; bcls = 'fold'; }
+    else if (p.away) { bubble = 'Away'; bcls = 'fold'; }
     // The bet, and then the result, is a line inside the name plate, so it never covers a neighbour.
-    const tag = pay ? `<u class="${pay.net > 0 ? 'up' : pay.net < 0 ? 'down' : 'push'}">${pay.net > 0 ? '+' + money(pay.net) : pay.net < 0 ? '−' + money(-pay.net) : 'Even'}</u>` : staked ? `<u>Bet ${money(staked)}</u>` : '';
+    const rdy = !pay && (st.ready || []).includes(p.id) ? ' ✓' : '';
+    const tag = pay ? `<u class="${pay.net > 0 ? 'up' : pay.net < 0 ? 'down' : 'push'}">${pay.net > 0 ? '+' + money(pay.net) : pay.net < 0 ? '−' + money(-pay.net) : 'Even'}</u>` : staked ? `<u>Bet ${money(staked)}${rdy}</u>` : rdy ? '<u>✓</u>' : '';
     if (!flatPhone) h += `<div class="pk-seat pk-stand ro-seat${isMe ? ' me' : ' far'}${pay && pay.net > 0 ? ' won' : ''}" style="left:${P.plate.x}%;top:${P.plate.y}%">
       ${bubble ? `<div class="pk-bubble ${bcls}">${bubble}</div>` : ''}
       <div class="pk-plate"><b>${esc(p.name)}</b>${isMe ? '<em>YOU</em>' : ''}${p.id === st.bankId ? '<em class="dl">DEALER</em>' : ''}<span>${money(shownChips(st, p, turn))}</span>${tag ? `<i class="bc-tag ro-tag">${tag}</i>` : ''}</div>
@@ -364,24 +370,29 @@ function drawHud(st, me, turn, flatPhone) {
   const tray = $('#tray'), top = $('#hud-top');
   const isHost = S.role === 'host', done = st.phase === 'done';
   const staked = st.bets[S.myId] ? Object.values(st.bets[S.myId]).reduce((a, x) => a + x, 0) : 0;
+  // Every seated player has the Spin button; the wheel turns once all of them have pressed it.
+  const seated = !!me && me.seat >= 0, ready = st.ready || [], waiting = st.waiting || [], need = ready.filter((id) => !waiting.includes(id)).length + waiting.length;
+  const pressed = ready.includes(S.myId), nameOf = (id) => st.players.find((p) => p.id === id)?.name || '?';
+  const spinLine = !seated ? 'Waiting for the players to press Spin.' : !pressed ? (ready.length ? `Press Spin. ${need - waiting.length} of ${need} have pressed.` : 'Bets are down. Everyone presses Spin.') : `Waiting for ${waiting.slice(0, 3).map(nameOf).map(esc).join(', ')}${waiting.length > 3 ? ' and ' + (waiting.length - 3) + ' more' : ''} to press Spin.`;
+  const spinBtn = (cls) => seated ? `<button class="btn ${cls} primary${pressed ? ' pressed' : ''}" data-act="deal"${st.canSpin && !done ? '' : ' disabled'}>${pressed ? '✓ ' : ''}Spin${need > 1 && st.canSpin && !done ? ` ${need - waiting.length}/${need}` : ''}</button>` : '';
   let status;
   if (turn) status = 'No more bets. The wheel is turning…';
   else if (done) { const pay = st.pays[S.myId]; status = `<b class="ro-n ${st.spin.color}">${st.spin.n}</b> ${pay ? (pay.net > 0 ? `${st.roundFrozen ? 'Practice: you' : 'You'} won ${money(pay.net)}` : pay.net < 0 ? `${st.roundFrozen ? 'Practice: you' : 'You'} lost ${money(-pay.net)}` : 'You broke even') : ''}`; }
   else if (st.betLeft !== null) status = `Place your bets · <b id="bc-left">${Math.max(0, Math.ceil((st.betLeft - (Date.now() - S.at)) / 1000))}</b> s`;
-  else status = st.canSpin ? (isHost ? 'Bets are down. Press Spin.' : 'Waiting for the host to spin.') : me && me.seat < 0 ? 'The table is full. You are watching.' : 'Pick a chip, then tap a number or a box.';
+  else status = st.canSpin ? spinLine : me && me.seat < 0 ? 'The table is full. You are watching.' : 'Pick a chip, then tap a number or a box.';
   if (st.bankId === S.myId && !done) status = st.betLeft !== null ? `You are the dealer · <b id="bc-left">${Math.max(0, Math.ceil((st.betLeft - (Date.now() - S.at)) / 1000))}</b> s` : 'You are the dealer. You pay the winners and take the losing bets.';
   top.innerHTML = `${bankBarHTML(st, S.myId, isHost)}<div class="status">${status}</div>`;
   let h = '';
   if (flatPhone) h += `<div class="ro-people">${st.players.filter((p) => p.seat >= 0).map((p) => { const pay = done && !turn ? st.pays[p.id] : null; return `<span class="${p.id === S.myId ? 'me' : ''}${p.connected ? '' : ' off'}">${esc(p.name)} <b>${money(shownChips(st, p, turn))}</b>${pay ? `<em class="${pay.net > 0 ? 'up' : pay.net < 0 ? 'down' : ''}">${pay.net > 0 ? '+' : pay.net < 0 ? '−' : ''}${money(Math.abs(pay.net))}</em>` : ''}</span>`; }).join('')}</div>`;
   h += lastHTML(st, turn);
-  if (isHost && S.room) h += `<button class="btn primary ro-spin" data-act="deal"${st.canSpin && !done ? '' : ' disabled'}>Spin now</button>`;
+  if (S.room) h += spinBtn('ro-spin');
   h += `<div class="bc-chips">${CHIPS.map((v) => `<button class="bc-chip c${v}${S.chip === v ? ' on' : ''}" data-act="chip" data-v="${v}">${v}</button>`).join('')}</div>`;
   h += `<div class="pk-mine bc-acts ro-acts">
     <span class="bc-bal">Chips <b>${money(me ? shownChips(st, me, turn) : 0)}</b>${staked ? `<i> · bet <b>${money(staked)}</b></i>` : ''}</span>
     <button class="btn small" data-act="undo"${done || !staked ? ' disabled' : ''}>Undo</button>
     <button class="btn small" data-act="clear"${done || !staked ? ' disabled' : ''}>Clear</button>
     <button class="btn small" data-act="rebet"${done || staked || !st.lastBets[S.myId] ? ' disabled' : ''}>Rebet</button>
-    ${isHost && !S.room ? `<button class="btn small primary" data-act="deal"${st.canSpin && !done ? '' : ' disabled'}>Spin</button>` : ''}
+    ${S.room ? '' : spinBtn('small')}
     <button class="btn small" data-act="add">🪙<span> Chips</span></button>
     <button class="btn small" data-act="react">😀</button>
     <button class="btn small danger" data-act="leave">🚪<span> Leave</span></button>
@@ -419,14 +430,14 @@ function rulesHTML(st) {
     <p>European roulette: one wheel with 37 pockets, the numbers 1 to 36 and one green zero. Put chips on the numbers or boxes you think the ball stops on.</p>
     <table class="pk-table"><tr><th>Bet</th><th>Pays</th></tr><tr><td>One number</td><td>35 to 1</td></tr><tr><td>A dozen (1st 12, 2nd 12, 3rd 12) or a column (2 to 1)</td><td>2 to 1</td></tr><tr><td>Red, Black, Odd, Even, 1 to 18, 19 to 36</td><td>1 to 1</td></tr></table>
     <p>Zero belongs to no box: when the ball stops on zero, only a bet on the number 0 wins.</p>
-    <p>Limits: ${money(s.minBet)} to ${money(s.maxInside)} on a number, up to ${money(s.maxOutside)} on a box. ${s.betTime ? `The wheel spins ${s.betTime} seconds after the first bet.` : 'The host spins by hand.'}</p>
+    <p>Limits: ${money(s.minBet)} to ${money(s.maxInside)} on a number, up to ${money(s.maxOutside)} on a box. ${s.betTime ? `The wheel spins ${s.betTime} seconds after the first bet.` : 'The wheel turns once every seated player has pressed Spin.'}</p>
   </div>`;
 }
 function settingsHTML(st) {
   const s = st.settings, num = (k, label, min = 1) => `<label>${label}<input type="number" id="bs-${k}" min="${min}" value="${s[k]}" inputmode="numeric" /></label>`;
   return `<h3>Table settings</h3><div class="pk-set">
     ${num('minBet', 'Smallest bet')}${num('maxInside', 'Largest bet on one number')}${num('maxOutside', 'Largest bet on a box (red, a dozen, …)')}${num('startChips', 'Chips for a new player')}
-    <label>Seconds from the first bet to the spin<select id="bs-betTime">${[0, 10, 15, 20, 30, 45, 60].map((v) => `<option value="${v}"${v === s.betTime ? ' selected' : ''}>${v ? v : 'Spin by hand'}</option>`).join('')}</select></label>
+    <label>Seconds from the first bet to the spin<select id="bs-betTime">${[0, 10, 15, 20, 30, 45, 60].map((v) => `<option value="${v}"${v === s.betTime ? ' selected' : ''}>${v ? v : 'No timer, all press Spin'}</option>`).join('')}</select></label>
     <button class="btn primary" data-act="save-settings">Save</button>
     <p class="hint">Changes start when no bets are on the table.</p></div>`;
 }
@@ -469,7 +480,7 @@ document.addEventListener('click', (e) => {
     case 'rebet': send({ t: 'rebet' }); break;
     case 'bank-on': send({ t: 'bank', on: true }); break;
     case 'bank-off': send({ t: 'bank', on: false }); break;
-    case 'deal': if (t) { try { t.doSpin(); } catch (er) { toast(er.message); } push(); } break;
+    case 'deal': send({ t: 'ready' }); break;
     case 'add': modal(`<h3>My chips</h3><div class="pk-set"><label>Amount<input type="number" id="addamt" min="1" value="${st.settings.startChips}" inputmode="numeric" /></label><div class="pk-acts small"><button class="btn primary" data-act="add-go">➕ Add chips</button><button class="btn" data-act="take-go">➖ Take chips off</button></div><p class="hint">Everyone sees each change in the spin log, and the ledger counts it.</p></div>`); break;
     case 'add-go': send({ t: 'add', amount: Number($('#addamt').value) }); $('#modal').close(); break;
     case 'take-go': send({ t: 'take', amount: Number($('#addamt').value) }); $('#modal').close(); break;
