@@ -23,6 +23,7 @@ export function webglOK() {
 }
 
 // The same display font as the office model. It falls back to the system font until the page has loaded it.
+const DESK_OF = {}; // each office worker's chair by name (for test views)
 const FONT = '"Space Grotesk", system-ui, sans-serif';
 const SKIN = ['#f6d7b8', '#eac39a', '#d6a373', '#b97f4f', '#8a5a36', '#5a3a24'];
 const HAIR = ['#17120f', '#3b2416', '#7a4a22', '#c9a15a', '#9aa0a6'];
@@ -217,7 +218,7 @@ function buildOffice(signText, midShift = 0, midScale = 1, skipRoom = null, live
     chrome: mk({ color: '#b9bec4', roughness: 0.25, metalness: 0.9 }),
     screen: mk({ color: '#0d0f12', roughness: 0.25, metalness: 0.2 }),
     // What the office screens show: the ARC Group logo, from the photo of it, lit like a screen that is on.
-    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261122z'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
+    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261122za'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
     dark: mk({ color: '#30353c', roughness: 0.6 }),
   };
   const group = new THREE.Group();
@@ -376,13 +377,11 @@ function buildOffice(signText, midShift = 0, midScale = 1, skipRoom = null, live
         [['HSI', '+1.2%', 1], ['SPX', '-0.4%', 0], ['NKY', '+0.8%', 1], ['USDHKD', '7.78', 1], ['GOLD', '-0.3%', 0]].forEach(([n2, v, upq], q) => { g.fillStyle = '#fff'; g.font = `700 22px ${FONT}`; g.fillText(n2, 430, 80 + q * 44); g.fillStyle = upq ? '#2bd66b' : '#ff4d4d'; g.fillText(v, 540, 80 + q * 44); });
         g.fillStyle = '#ff9b1a'; g.fillRect(0, ch - 46, cw, 46); g.fillStyle = '#111'; g.font = `700 22px ${FONT}`; g.fillText('BREAKING: ANALYSTS STILL IN THE OFFICE AT 3AM', 14, ch - 22);
       }) })) : f.id === 'tv1' ? (M.pokerTv ||= new THREE.MeshBasicMaterial({ map: canvasTexture(640, 360, (g, cw, ch) => { // the poker room's tournament screen
-        g.fillStyle = '#07130d'; g.fillRect(0, 0, cw, ch); g.fillStyle = '#0f6b3f'; g.fillRect(0, 0, cw, 64); g.textBaseline = 'middle'; g.textAlign = 'center';
-        g.fillStyle = '#f1c76a'; g.font = `700 36px ${FONT}`; g.fillText('ARC POKER ROOM', cw / 2, 34);
-        g.fillStyle = '#fff'; g.font = `700 26px ${FONT}`; g.fillText("NO LIMIT HOLD'EM", cw / 2, 104);
-        g.fillStyle = '#f1c76a'; g.font = `700 64px ${FONT}`; g.fillText('12:34', cw / 2, 178);
-        g.fillStyle = '#9fb3a7'; g.font = `700 20px ${FONT}`; g.fillText('NEXT LEVEL', cw / 2, 226);
-        g.fillStyle = '#fff'; g.font = `700 28px ${FONT}`; g.fillText('BLINDS 100 / 200', cw / 2, 270);
-        g.fillStyle = '#9fb3a7'; g.font = `700 20px ${FONT}`; g.fillText('7 PLAYERS  ·  AVG STACK 14,300', cw / 2, 320);
+        g.fillStyle = '#07130d'; g.fillRect(0, 0, cw, ch); g.fillStyle = '#0f6b3f'; g.fillRect(0, 0, cw, 76); g.textBaseline = 'middle'; g.textAlign = 'center';
+        g.fillStyle = '#f1c76a'; g.font = `700 36px ${FONT}`; g.fillText('WE ARE DA BEST', cw / 2, 28); g.fillStyle = '#d8dde4'; g.font = `italic 600 20px ${FONT}`; g.fillText('- Sergio', cw / 2, 58);
+        g.fillStyle = '#ffffff'; g.font = `800 86px ${FONT}`; g.fillText('ARC', cw / 2, 150);
+        // The three banks in a row under it, as plain name tiles.
+        ['J.P. Morgan', 'Morgan Stanley', 'Goldman Sachs'].forEach((nm, q) => { const x = 22 + q * 204; g.fillStyle = '#f4f2ec'; g.fillRect(x, 226, 188, 80); g.fillStyle = '#14233b'; g.font = `700 25px ${FONT}`; g.fillText(nm, x + 94, 266, 172); });
       }) })) : M.logo, X, 1.45, zc + 0.026 * face, false); return;
     }
     if (f.id === 'sv') { box(f.w, 0.95, f.d, M.dark, X, 0.475, Z); return; }
@@ -487,7 +486,7 @@ function buildOffice(signText, midShift = 0, midScale = 1, skipRoom = null, live
     9: { name: 'Charlene', skin: '#f0c9a4', hair: '#3a2416', top: '#111214', legs: '#111214', longHair: true, dress: true, lush: true, lines: ['yooo look at my new keyboard'], rare: 0.1 },
     10: { name: 'Felix', skin: '#e2ad82', hair: '#1d1712', top: '#e9e6df', legs: '#2b2f38', vest: '#131416', zip: true, lines: ['im going to the gym'] },
     8: { name: 'Tony', skin: '#e8b98f', hair: '#2a1d14', top: '#4a6fa0', legs: '#2b2f38', wide: 0.8, spiky: true, recede: true, cup: 'DETOUR COFFEE', lines: ['WHY IS SERGIO CALLING ME AGAIN'] },
-    27: { name: 'Nigel', skin: '#e8b98f', hair: '#1d1712', top: '#f6f5f1', legs: '#3a3f47', tattoo: true, golf: true, buttons: true },
+    27: { name: 'Nigel', skin: '#e8b98f', hair: '#1d1712', top: '#f6f5f1', legs: '#3a3f47', tattoo: true, golf: true, buttons: true, nespresso: true },
     // The middle block, seen from above with the sign cupboard at the top. Bottom row, left to right: 31, 30, 29, 28. Top row: 35, 34, 33, 32.
     31: { name: 'Henry', skin: '#e2ad82', hair: '#0f0d0c', top: '#5b6470', legs: '#2b2f38', postits: true, pinkKeys: true },
     34: { name: 'David', skin: '#e8b98f', hair: '#2a1d14', top: '#2f3640', legs: '#22262d', glowKeys: true, goose: true, sideHair: true, lines: ['BRUCE DA GOOSE'] },
@@ -636,6 +635,7 @@ function buildOffice(signText, midShift = 0, midScale = 1, skipRoom = null, live
       });
     }
     if (L.eat) {
+      DESK_OF[L.name] = seatMesh;
       // Lunch at the desk: a glass container heaped over the brim, and takeaway coffee cups everywhere.
       const z0 = -reach - 0.02;
       box(0.26, 0.09, 0.18, M.glass, 0, dy + 0.045, z0, false);
@@ -649,13 +649,25 @@ function buildOffice(signText, midShift = 0, midScale = 1, skipRoom = null, live
         if (spots.some((q) => Math.hypot(q[0] - x, q[1] - z) < 0.088)) continue;
         spots.push([x, z]);
       }
+      // A label on the front of the lunch box, facing him.
+      { const t = canvasTexture(512, 80, (g, cw, ch) => { g.fillStyle = '#fffdf4'; g.fillRect(0, 0, cw, ch); g.strokeStyle = '#c33'; g.lineWidth = 6; g.strokeRect(3, 3, cw - 6, ch - 6); g.fillStyle = '#1b1b1b'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = `800 40px ${FONT}`; g.fillText('MAID-COOKED LUNCH', cw / 2, ch / 2 + 2, cw - 24); });
+        const m = new THREE.Mesh(new THREE.PlaneGeometry(0.24, 0.0375), new THREE.MeshBasicMaterial({ map: t })); m.applyMatrix4(at(0, dy + 0.045, z0 + 0.0915)); m.applyMatrix4(frame); group.add(m); }
+      // The cups are a mess: most stand, some lie on their side pointing every way, a few with the lid knocked off.
+      const cupG = (rt, rb, h) => (geoCache[`${rt},${rb},${h},12`] ||= new THREE.CylinderGeometry(rt, rb, h, 12));
+      const lying = (x, y0, z, h, yaw, lidOff) => {
+        const base = at(x, y0 + 0.037, z, yaw, Math.PI / 2), along = (o) => base.clone().multiply(new THREE.Matrix4().makeTranslation(0, o, 0));
+        emit(cupG(0.04, 0.03, h), cup, along(0), false); emit(cupG(0.039, 0.034, 0.05), band, along(0), false);
+        if (!lidOff) emit(cupG(0.043, 0.043, 0.012), lid, along(h / 2 + 0.006), false);
+        else emit(cupG(0.043, 0.043, 0.012), lid, at(x + Math.sin(yaw) * 0.11, y0 + 0.006, z + Math.cos(yaw) * 0.11, 0, 0.25), false);
+      };
       spots.forEach(([x, z], n) => {
         const h = n % 3 ? 0.13 : 0.16;
+        if (n % 3 === 1 || n % 7 === 0) { lying(x, dy, z, h, r2() * 6.28, n % 2 === 0); return; }
         cyl(0.04, 0.03, h, 12, cup, x, dy + h / 2, z, false);
         cyl(0.039, 0.034, 0.05, 12, band, x, dy + h * 0.5, z, false);
-        cyl(0.043, 0.043, 0.012, 12, lid, x, dy + h + 0.006, z, false);
+        if (n % 5 !== 2) cyl(0.043, 0.043, 0.012, 12, lid, x, dy + h + 0.006, z, false);
       });
-      for (let n = 0; n < 16; n++) { const a = r2() * 6.3, d = 0.45 + r2() * 0.75, x = Math.cos(a) * d, z = Math.sin(a) * d * 0.8 + 0.25; cyl(0.04, 0.03, 0.13, 12, cup, x, 0.065, z, false); cyl(0.039, 0.034, 0.05, 12, band, x, 0.065, z, false); cyl(0.043, 0.043, 0.012, 12, lid, x, 0.136, z, false); } // and more cups on the floor round him
+      for (let n = 0; n < 16; n++) { const a = r2() * 6.3, d = 0.45 + r2() * 0.75, x = Math.cos(a) * d, z = Math.sin(a) * d * 0.8 + 0.25; if (n % 2) { lying(x, 0, z, 0.13, r2() * 6.28, n % 3 === 0); continue; } cyl(0.04, 0.03, 0.13, 12, cup, x, 0.065, z, false); cyl(0.039, 0.034, 0.05, 12, band, x, 0.065, z, false); cyl(0.043, 0.043, 0.012, 12, lid, x, 0.136, z, false); } // and more cups on the floor round him
       return;
     }
     const far = -(gap + deskDepth - 0.15); // where the screens stand
@@ -688,10 +700,18 @@ function buildOffice(signText, midShift = 0, midScale = 1, skipRoom = null, live
         [-1, 1].forEach((a) => [-1, 1].forEach((b) => box(0.018, 0.018, 0.008, tyre, x + a * 0.026, dy + 0.009, z + b * 0.018, false)));
       });
     }
+    if (L.nespresso) { // a tiny coffee capsule machine at the far right corner of the desk, with a small cup under the spout
+      const nx = 0.55, nz = far + 0.16, blk = col('#1b1d21', 0.35), chrome = M.chrome, red = col('#b3262c', 0.4);
+      box(0.08, 0.13, 0.14, blk, nx, dy + 0.065, nz); box(0.08, 0.02, 0.09, chrome, nx, dy + 0.14, nz + 0.01, false);
+      box(0.07, 0.012, 0.06, chrome, nx, dy + 0.006, nz + 0.09, false); box(0.02, 0.02, 0.02, chrome, nx, dy + 0.1, nz + 0.075, false);
+      box(0.012, 0.012, 0.004, red, nx + 0.022, dy + 0.12, nz + 0.071, false);
+      cyl(0.017, 0.014, 0.03, 10, col('#f4f3ef', 0.5), nx, dy + 0.027, nz + 0.09, false);
+    }
     if (L.flask) { // a thin metal water flask, narrower at the top, with a steel lid
       const fx = 0.34, fz = -gap - 0.36, steel = mk({ color: '#c9ced3', roughness: 0.25, metalness: 0.85 }), blue = mk({ color: '#3d9fd0', roughness: 0.3, metalness: 0.6 });
       cyl(0.03, 0.034, 0.15, 16, blue, fx, dy + 0.075, fz); cyl(0.017, 0.03, 0.06, 16, blue, fx, dy + 0.18, fz, false); cyl(0.019, 0.019, 0.032, 16, steel, fx, dy + 0.226, fz, false);
     }
+    DESK_OF[L.name] = seatMesh;
     if (L.lines) talkers.push({ name: L.name, k: 0, holder: seatMesh, lines: L.lines, rare: L.rare || 1, cache: {}, on: null, until: 0 });
     if (L.cough) { const sp = tagSprite('*cough cough*', '#ffffff'); sp.position.set(-0.3, 1.42, -0.12); sp.scale.set(0.3, 0.085, 1); seatMesh.add(sp); coughs.push(sp); }
     const plate = (text, w, h, x, y, z, ry, rx, bg, fg) => { // a small flat label
@@ -781,7 +801,7 @@ function buildOffice(signText, midShift = 0, midScale = 1, skipRoom = null, live
     }
     for (const t of talkers) if (t.on && now > t.until) { t.on.visible = false; t.on = null; }
     for (const sp of coughs) sp.visible = now % 2600 < 900;
-    for (const q of glitch) { const on = Math.random() < 0.3; q.m.position.x = q.x + (on ? (Math.random() - 0.5) * 0.03 : 0); q.m.position.y = q.y + (on ? (Math.random() - 0.5) * 0.02 : 0); q.m.visible = Math.random() > 0.06; q.m.material.color.set(on ? (Math.random() < 0.5 ? '#ff3df2' : '#3dfff2') : '#4aa3e8'); }
+    for (const q of glitch) { const on = Math.random() < 0.3; q.m.position.x = q.x + (on ? (Math.random() - 0.5) * 0.03 : 0); if (!q.still) q.m.position.y = q.y + (on ? (Math.random() - 0.5) * 0.02 : 0); q.m.visible = Math.random() > 0.06; q.m.material.color.set(on ? (Math.random() < 0.5 ? '#ff3df2' : '#3dfff2') : '#4aa3e8'); }
     { const dt = Math.min(0.2, (now - (snowAt || now)) / 1000); snowAt = now; for (const f of snow) { const a = f.pts.geometry.attributes.position; for (let i = 0; i < a.count; i++) { let y = a.getY(i) - (0.22 + (i % 5) * 0.05) * dt; if (y < 0) y = 2.6; a.setY(i, y); a.setX(i, a.getX(i) + Math.sin(now * 0.001 + i) * 0.03 * dt); } a.needsUpdate = true; } }
     // Now and then somebody gets up, walks out of the main door with a coffee, and comes back to their desk.
     if (dbgTrip) { const [who, kind] = dbgTrip; dbgTrip = null; const free = walkers.filter((w) => w.state === 'sit' && w.name !== 'Jeff' && w.route), q = who === 'any' ? free[Math.floor(Math.random() * free.length)] : walkers.find((w) => w.name === who && w.state === 'sit'); if (q) { const v = visitOf(who), o = v && walkers.find((w) => w.name === v.to); q.sleep = kind === 'nap'; if (q.sleep) { q.path = q.nap.path; q.talk = null; } else if (kind === 'visit' && o) startVisit(q, v, o); else { q.path = q.route; q.talk = null; } q.state = 'go'; q.i = 0; q.d = 0; q.last = now; q.seat.visible = false; q.wg.visible = true; } }
@@ -849,13 +869,22 @@ function buildOffice(signText, midShift = 0, midScale = 1, skipRoom = null, live
     for (let i = 0; i < 26; i++) box(0.25 + r7() * 0.3, 0.012, 0.25 + r7() * 0.3, col('#f4f7fa', 1), -(r.x + 0.3 + r7() * (r.width - 0.6)), 0.006, -(r.y + 0.3 + r7() * (r.depth - 0.6)), false, r7() * 3); // a little snow on the floor
   });
   group.userData.snowMat = () => M.snow;
-  { // The empty PITCHBOOK desk: envelopes and two staplers. The empty desk beside David: a long mouse pad.
+  { // The empty PITCHBOOK desk: envelopes, two staplers and three delivery boxes. The empty desk beside David: a long mouse pad.
     const c1 = D.furniture.find((f) => f.id === 'c1'), c6 = D.furniture.find((f) => f.id === 'c6'), r8 = rng(88), y = Hh.desk;
     if (c1) {
       for (let n = 0; n < 22; n++) box(0.22, 0.004, 0.11, col(n % 3 ? '#f4f1e8' : '#e3d3ad', 0.9), -(c1.cx + (r8() - 0.5) * 1.05), y + 0.003 + (n % 6) * 0.004, -(c1.cy - 0.04 - r8() * 0.24), false, r8() * 3);
       [[0.35, '#111316'], [-0.2, '#c0262d']].forEach(([ox, c2]) => { box(0.15, 0.03, 0.04, col(c2, 0.5), -(c1.cx + ox), y + 0.04, -(c1.cy - 0.3), true, 0.4); box(0.16, 0.014, 0.045, col('#8a8d90', 0.4), -(c1.cx + ox), y + 0.014, -(c1.cy - 0.3), false, 0.4); });
     }
     if (c6) box(0.85, 0.005, 0.32, col('#17181b', 0.9), -c6.cx, y + 0.003, -(c6.cy + 0.14), false);
+    // Three cardboard delivery boxes nobody has opened, each with a label on top.
+    if (c1) { const o = new THREE.Object3D(); o.position.set(-c1.cx, y, -c1.cy); DESK_OF.pitchbook = o; }
+    if (c1) [[-0.45, 0.04, 0.3, 0.17, 0.22, 0.35, 'RANDOM FELIX MAIL'], [0.1, 0.1, 0.2, 0.11, 0.15, -0.25, 'RANDOM ALLIE MAIL'], [0.5, -0.06, 0.34, 0.22, 0.25, 0.12, 'SOME RANDOM MAIL']].forEach(([ox, oz, w, h, d, ry, text]) => {
+      const x = -(c1.cx + ox), z = -(c1.cy + oz);
+      box(w, h, d, col('#b8875a', 0.95), x, y + 0.02 + h / 2, z, true, ry);
+      box(w * 0.98, 0.003, 0.035, col('#c9a273', 0.6), x, y + 0.02 + h + 0.0015, z, false, ry); // the tape across the top
+      const t = canvasTexture(512, 160, (g, cw, ch) => { g.fillStyle = '#fbfaf5'; g.fillRect(0, 0, cw, ch); g.fillStyle = '#16181c'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = `800 58px ${FONT}`; g.fillText(text, cw / 2, ch / 2 + 2, cw - 30); });
+      emit(new THREE.PlaneGeometry(w * 0.7, w * 0.7 * 160 / 512), new THREE.MeshBasicMaterial({ map: t }), at(x, y + 0.02 + h + 0.004, z, ry, -Math.PI / 2), false);
+    });
   }
   { // A roll of kitchen paper, standing upright on the eating table.
     const t = D.furniture.find((f) => f.id === 'et1');
@@ -936,7 +965,9 @@ function buildOffice(signText, midShift = 0, midScale = 1, skipRoom = null, live
       box(0.36, 0.62, 0.025, M.screen, 0.55, 0.42, -0.1, true, ury); box(0.34, 0.6, 0.003, up, 0.55 - 0.0145 * Math.sin(ury), 0.42, -0.1 - 0.0145 * Math.cos(ury), false, ury);
       if (f.id === 'c4') { // Henry: two blue post-its on the front of the wide screen; they glitch
         const hold = new THREE.Group(); hold.applyMatrix4(parent); group.add(hold);
-        [-0.19, -0.105].forEach((x, n) => { const m = new THREE.Mesh(unitBox, new THREE.MeshBasicMaterial({ color: '#4aa3e8' })); m.scale.set(0.075, 0.075, 0.004); m.position.set(x, 0.47 - n * 0.02, -0.02); hold.add(m); glitch.push({ m, x, y: m.position.y }); });
+        // They hang loose below the bottom right edge of the right panel, stuck to the bezel by their top edge only, each at its own slant, so they never cover the picture.
+        const pan = new THREE.Group(); pan.position.set(-0.372, 0, -0.03 - 0.016); pan.rotation.y = 0.22; hold.add(pan);
+        [[0.05, -0.1], [-0.035, 0.14]].forEach(([x, tilt], n) => { const m = new THREE.Mesh(unitBox, new THREE.MeshBasicMaterial({ color: '#4aa3e8' })); m.geometry = unitBox; m.scale.set(0.075, 0.075, 0.004); m.position.set(x, 0.185 - 0.0375 - n * 0.006, -0.002 - n * 0.003); m.rotation.z = tilt; pan.add(m); glitch.push({ m, x, y: m.position.y, still: true }); });
       }
       const _skip = 0; box(0.04, 0.2, 0.03, M.leg, 0.55, 0.1, -0.07); box(0.2, 0.012, 0.16, M.leg, 0.55, 0, -0.07, false);
       parent = null;
@@ -980,7 +1011,7 @@ function buildStorefront() {
     lamp: lam('#c8161d', 0.6), bulb: lit('#ffe9a8'), red: lit('#c8161d'), gold: lit('#f4c542'), wood: lam('#7a5234', 0.35),
     glass: new THREE.MeshBasicMaterial({ color: '#dff3f7', transparent: true, opacity: 0.13, depthWrite: false }),
     awning: new THREE.MeshBasicMaterial({ map: canvasTexture(512, 64, (g, w, h) => { for (let i = 0; i < 16; i++) { g.fillStyle = i % 2 ? '#fff6e6' : '#f08a1c'; g.fillRect((i * w) / 16, 0, w / 16 + 1, h); } }), side: THREE.DoubleSide }),
-    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261122z') }),
+    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261122za') }),
     menu: new THREE.MeshBasicMaterial({ map: canvasTexture(256, 384, (g, w, h) => {
       g.fillStyle = '#c8161d'; g.fillRect(0, 0, w, h); g.fillStyle = '#f4c542'; g.fillRect(14, 14, w - 28, 44);
       const r = rng(11); g.fillStyle = '#fff3d6';
@@ -1142,8 +1173,10 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
   railShape.holes.push(tableShape(W, H, -4));
   // Blackjack has a modern look: a dark graphite body, a charcoal rail, a thin teal neon line and LED light
   // underneath that glows on the floor. The other games keep the classic wood and brass.
-  const NEON = game === 'blackjack';
-  const NEON_C = 0x3fe6d6;
+  // Every table has it now, each in its own colour: teal blackjack, green poker, magenta baccarat, amber roulette.
+  const NEON = true;
+  const NEON_C = { poker: 0x45e88a, baccarat: 0xe05cff, roulette: 0xffb347 }[game] ?? 0x3fe6d6;
+  const NEON_RGB = [(NEON_C >> 16) & 255, (NEON_C >> 8) & 255, NEON_C & 255].join(',');
   const leather = std(NEON ? { color: 0x1b1f27, roughness: 0.5, metalness: 0.05 } : { color: 0x3a2116, roughness: 0.42, metalness: 0.0 });
   const rail = flat(new THREE.Mesh(
     new THREE.ExtrudeGeometry(railShape, { depth: 6, bevelEnabled: true, bevelThickness: 14, bevelSize: 14, bevelSegments: 6, curveSegments: 72 }), leather), 0);
@@ -1174,7 +1207,7 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     scene.add(flat(new THREE.Mesh(new THREE.ShapeGeometry(led, 72), new THREE.MeshBasicMaterial({ color: NEON_C, side: THREE.DoubleSide })), -100));
     const cv = document.createElement('canvas'); cv.width = cv.height = 256;
     const cx = cv.getContext('2d'), g = cx.createRadialGradient(128, 128, 30, 128, 128, 128);
-    g.addColorStop(0, 'rgba(63,230,214,0.55)'); g.addColorStop(0.55, 'rgba(63,230,214,0.22)'); g.addColorStop(1, 'rgba(63,230,214,0)');
+    g.addColorStop(0, `rgba(${NEON_RGB},0.55)`); g.addColorStop(0.55, `rgba(${NEON_RGB},0.22)`); g.addColorStop(1, `rgba(${NEON_RGB},0)`);
     cx.fillStyle = g; cx.fillRect(0, 0, 256, 256);
     const glowTex = new THREE.CanvasTexture(cv); glowTex.colorSpace = THREE.SRGBColorSpace;
     const glow = flat(new THREE.Mesh(new THREE.PlaneGeometry(W * 1.35, H * 1.6), new THREE.MeshBasicMaterial({ map: glowTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })), FLOOR + 2);
@@ -1919,7 +1952,8 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
       const hh = hud.offsetHeight || 0;
       if (hh < hudReserve + 24) return;
       hudReserve = hh;
-      if (seated) { rate = 4.5; seatGoal(!!homeFit); } else homeFit = fitHome();
+      // Only the fit is updated; the view is not moved, so it never swings while you play.
+      homeFit = fitHome();
     }).observe(hud);
     hudReserve = hud.offsetHeight || 0;
   }
@@ -2089,6 +2123,7 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     // For tests: where the other tables' name tags are on the screen.
     tagsOnScreen() { const r = container.getBoundingClientRect(); camera.updateMatrixWorld(); return otherGroup.children.filter((sp) => sp.userData.go).map((sp) => { tmp.copy(sp.position).project(camera); return { go: sp.userData.go, x: Math.round(r.left + (tmp.x * 0.5 + 0.5) * r.width), y: Math.round(r.top + (-tmp.y * 0.5 + 0.5) * r.height), z: tmp.z }; }); },
     // For tests: put the camera at a point of the office plan (x, height, y in metres) looking at another.
+    debugSeat(name) { const m = DESK_OF[name]; if (!m) return null; if (!m.parent) return [m.position.x, m.position.y, m.position.z, 0, -1]; const v = new THREE.Vector3(), w = new THREE.Vector3(); m.getWorldPosition(v); m.localToWorld(w.set(0, 0, -1)); office.worldToLocal(v); office.worldToLocal(w); return [v.x, v.y, v.z, w.x - v.x, w.z - v.z]; },
     debugTrip(who, kind) { office.userData.trip?.(who, kind); touch(); },
     debugTalk() { const n = office.userData.talk?.(); touch(); return n; },
     debugLook(a, b) { dbgCam = a ? { p: new THREE.Vector3(-a[0], a[1], -a[2]), t: new THREE.Vector3(-b[0], b[1], -b[2]) } : null; touch(); },

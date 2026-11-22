@@ -1,12 +1,12 @@
 // The baccarat page: a punto banco table for up to 9 in the small meeting room. The host's browser runs
 // the table (js/baccarat.js); every other browser sends its bets there and is told only what it may see.
-import { BacTable, BAC_SEATS, BAC_SPOTS, BAC_KEYS, verifyShoe, cardText } from './baccarat.js?v=20261122z';
-import { webglOK, initRoom } from './room3d.js?v=20261122z';
-import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122z';
-import { showDropped, params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML } from './common.js?v=20261122z';
+import { BacTable, BAC_SEATS, BAC_SPOTS, BAC_KEYS, verifyShoe, cardText } from './baccarat.js?v=20261122za';
+import { webglOK, initRoom } from './room3d.js?v=20261122za';
+import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122za';
+import { showDropped, params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML } from './common.js?v=20261122za';
 
-import { shareHidden, startHold } from './vault.js?v=20261122z';
-import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261122z';
+import { shareHidden, startHold } from './vault.js?v=20261122za';
+import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261122za';
 const PREFIX = 'bjt-bc-';
 // A settings change by vote (js/vote.js): any player at the table may ask, every other player at the table who is online has to say yes.
 const VOTE = {
@@ -340,20 +340,93 @@ function drawConn() {
   if (!el) return;
   el.textContent = S.conn[0]; el.className = 'pill ' + (S.conn[1] ? 'live' : 'off');
 }
-// The nine seats along the rounded side of the table. Your own seat is in the middle of it.
+// The wide table is laid out like a casino baccarat table: nine numbered places round the curved side, seat 1 on the
+// right, each with its own Player, Banker and Tie boxes and two pair circles. Rings are measured in felt pixels from
+// one centre near the dealer, flattened sideways like the rim of the table.
+const ARC = { cx: 620, cy: 222, k: 1.5, step: 18, ring: { tie: [200, 252], banker: [252, 296], player: [296, 340], num: [340, 392] }, plate: 402 };
+const arcTh = (seat) => ((4 - seat) * ARC.step * Math.PI) / 180;
+const arcPt = (r, th) => [ARC.cx + ARC.k * r * Math.sin(th), ARC.cy + r * Math.cos(th)];
+const arcRot = (th) => (Math.atan2(-Math.sin(th), ARC.k * Math.cos(th)) * 180) / Math.PI;
+// The places round the rounded side. On the wide table seat 1 is always on the far right, as on a casino table;
+// on the tall phone table your own seat is at the bottom in the middle.
 function seatAt(seat) {
   const st = S.st, me = st?.players.find((p) => p.id === S.myId);
+  const tall = FELT().H > FELT().W;
+  if (!tall) {
+    const th = arcTh(seat), rel = 4 - seat, F = FELT();
+    const [x, y] = arcPt(392, th), [px, py] = arcPt(ARC.plate, th);
+    return { x: (x / F.W) * 100, y: (y / F.H) * 100, rel, plate: { x: (Math.max(70, Math.min(F.W - 70, px)) / F.W) * 100, y: (Math.min(F.H - 14, py) / F.H) * 100 } };
+  }
   const mine = me && me.seat >= 0 ? me.seat : 4;
   const rel = ((seat - mine + 4 + BAC_SEATS * 2) % BAC_SEATS) - 4; // -4 .. 4, 0 is the middle
-  const tall = FELT().H > FELT().W;
   // The flat phone table: fixed places round the lower edge, clear of the betting boxes.
-  if (tall && !S.room) { const T = [[50, 96], [21, 92], [13, 83], [13, 74], [13, 65]][Math.abs(rel)]; return { x: rel < 0 ? T[0] : 100 - T[0], y: T[1], rel, plate: { x: rel < 0 ? T[0] : 100 - T[0], y: T[1] } }; }
-  const a = (rel / 4) * (tall ? 1.32 : 1.2);
-  const P = { x: 50 + (tall ? 45 : 46) * Math.sin(a), y: (tall ? 52 : 34) + (tall ? 43 : 60) * Math.cos(a), rel };
-  const far = Math.abs(rel) >= 3;
-  // In the 3D room every name plate stands at the rim in front of its own chair, clear of the betting boxes.
-  P.plate = S.room ? { x: 50 + Math.sign(rel) * [0, 13.6, 28.6, 37.5, 40][Math.abs(rel)], y: [94, 91.3, 83.5, 69, 55][Math.abs(rel)] } : { x: 50 + Math.sign(rel) * [0, 13.5, 27.5, 37, 40.5][Math.abs(rel)], y: [80.5, 79, 71.5, 60, 47][Math.abs(rel)] };
+  if (!S.room) { const T = [[50, 96], [21, 92], [13, 83], [13, 74], [13, 65]][Math.abs(rel)]; return { x: rel < 0 ? T[0] : 100 - T[0], y: T[1], rel, plate: { x: rel < 0 ? T[0] : 100 - T[0], y: T[1] } }; }
+  const a = (rel / 4) * 1.32;
+  const P = { x: 50 + 45 * Math.sin(a), y: 52 + 43 * Math.cos(a), rel };
+  P.plate = { x: 50 + Math.sign(rel) * [0, 13.6, 28.6, 37.5, 40][Math.abs(rel)], y: [94, 91.3, 83.5, 69, 55][Math.abs(rel)] };
   return P;
+}
+// A short amount for a small chip: 25, 150, 1.2k.
+const chipAmt = (v) => (v >= 10000 ? Math.round(v / 1000) + 'k' : v >= 1000 ? (Math.round(v / 100) / 10) + 'k' : String(v));
+// The printed felt of the wide table as one drawing: rack, emblems, the rules on a curve and the nine places.
+function arcSVG(st, final) {
+  const hand = st.hand, done = st.phase !== 'betting';
+  const me = st.players.find((p) => p.id === S.myId);
+  const mySeat = me && me.seat >= 0 && me.id !== st.bankId ? me.seat : -1;
+  const won = (k) => final && (k === hand.winner || (k === 'ppair' && hand.ppair) || (k === 'bpair' && hand.bpair));
+  const f1 = (n) => Math.round(n * 10) / 10;
+  const P = (r, th) => arcPt(r, th).map(f1).join(' ');
+  const cell = (r0, r1, a0, a1) => `M${P(r1, a0)} A${f1(ARC.k * r1)} ${r1} 0 0 0 ${P(r1, a1)} L${P(r0, a1)} A${f1(ARC.k * r0)} ${r0} 0 0 1 ${P(r0, a0)} Z`;
+  const at = (r, th, du = 0) => { const rot = (arcRot(th) * Math.PI) / 180; const [x, y] = arcPt(r, th); return [f1(x + du * Math.cos(rot)), f1(y + du * Math.sin(rot))]; };
+  let g = '';
+  // The dealer's chip rack along the straight side.
+  const cols = ['#c0392b', '#27864a', '#1d1f26', '#6b3fa0', '#d9d4c7', '#27864a', '#c0392b', '#1d1f26', '#e0a23a', '#6b3fa0', '#d9d4c7', '#c0392b'];
+  g += `<rect x="452" y="10" width="336" height="86" rx="8" fill="#140a18" stroke="#c9a24a" stroke-width="3"/>`;
+  cols.forEach((c, i) => { const x = 466 + i * 26.5, hgt = 40 + ((i * 37) % 30); g += `<rect x="${x}" y="${88 - hgt}" width="20" height="${hgt}" rx="3" fill="${c}"/><rect x="${x}" y="${88 - hgt}" width="20" height="${hgt}" rx="3" fill="url(#bcStripe)"/>`; });
+  // The house emblem in both top corners.
+  for (const x of [150, 1090]) g += `<g class="bc-emb" transform="translate(${x} 92)"><circle r="40" fill="none" stroke="#e9c46a" stroke-width="2.5"/><circle r="33" fill="none" stroke="#e9c46a" stroke-width="1" opacity=".7"/><text y="10" text-anchor="middle" font-size="30" font-weight="800" fill="#f2d58a" letter-spacing="2">ARC</text><text y="66" text-anchor="middle" font-size="17" font-weight="800" fill="#f2d58a" letter-spacing="5">BACCARAT</text></g>`;
+  // The centre: the name of the game, or the result once the cards are out.
+  if (!final) g += `<text x="620" y="322" text-anchor="middle" font-size="22" font-weight="800" fill="#f2d58a" letter-spacing="7">ARC BACCARAT</text><text x="620" y="356" text-anchor="middle" font-size="19" font-weight="800" letter-spacing="3"><tspan fill="#ffd400">PLAYER</tspan><tspan fill="#f2d58a" dx="12">|</tspan><tspan fill="#ff4a3d" dx="12">BANKER</tspan></text>`;
+  // The house rules on a curve just inside the betting places.
+  const rr = 180, ra = (66 * Math.PI) / 180;
+  g += `<path id="bcRule" d="M${P(rr, -ra)} A${f1(ARC.k * rr)} ${rr} 0 0 0 ${P(rr, ra)}" fill="none"/><text font-size="16" font-weight="700" fill="#f4e6c4" letter-spacing="1"><textPath href="#bcRule" startOffset="50%" text-anchor="middle">Tie 8 to 1 · Pairs 11 to 1 · Banker 0.95 to 1</textPath></text>`;
+  const half = ((ARC.step / 2) * Math.PI) / 180, R = ARC.ring;
+  for (let s = 0; s < BAC_SEATS; s++) {
+    const th = arcTh(s), a0 = th - half, a1 = th + half, rot = f1(arcRot(th)), mine = s === mySeat;
+    const p = st.players.find((x) => x.seat === s && x.id !== st.bankId);
+    const live = p && st.bets[p.id], bets = (p && (live && BAC_KEYS.some((k) => live[k]) ? live : done && st.pays[p.id] ? st.lastBets[p.id] : null)) || {};
+    const pay = p && final ? st.pays[p.id] : null;
+    const act = (k) => (mine && !done ? ` data-act="bet" data-spot="${k}" id="bspot-${k}"` : '');
+    const cls = (k) => `bc-c ${k}${mine ? ' my' : ''}${won(k) ? ' won' : ''}${final && bets[k] && !won(k) ? ' lost' : ''}`;
+    const chip = (k, r, du = 0, small = false) => {
+      const v = bets[k];
+      if (!v) return '';
+      const line = pay?.lines.find((l) => l.spot === k), txt = small ? chipAmt(v) : money(v), [x, y] = at(r, th, du);
+      const fill = line ? (line.net > 0 ? '#7ef0b6' : line.net < 0 ? '#bdb3c4' : '#dfe6ee') : '#ffd66e';
+      if (small) return `<g class="bc-chipg" transform="translate(${x} ${y})"><circle r="13" fill="${fill}" stroke="#fff" stroke-width="2" stroke-dasharray="4 3"/><text y="${txt.length > 3 ? 3.5 : 4.5}" text-anchor="middle" font-size="${txt.length > 3 ? 10 : 12.5}" font-weight="800" fill="#1b1300">${txt}</text></g>`;
+      const w = 18 + txt.length * 10.5;
+      return `<g class="bc-chipg" transform="translate(${x} ${y}) rotate(${rot})"><rect x="${-w / 2}" y="-13" width="${w}" height="26" rx="13" fill="${fill}" stroke="#fff" stroke-width="2"/><text y="6" text-anchor="middle" font-size="17" font-weight="800" fill="#1b1300">${txt}</text></g>`;
+    };
+    const label = (k, r, text, color, size) => { if (bets[k]) return chip(k, r); const [x, y] = at(r, th); return `<text class="bc-lab" x="${x}" y="${y}" transform="rotate(${rot} ${x} ${y})" dy="${f1(size * 0.36)}" text-anchor="middle" font-size="${size}" font-weight="900" fill="${color}" letter-spacing="1">${text}</text>`; };
+    g += `<g class="bc-place${mine ? ' my' : ''}">`;
+    g += `<path class="bc-c num" d="${cell(R.num[0], R.num[1], a0, a1)}"/>`;
+    g += `<path class="${cls('player')}" d="${cell(R.player[0], R.player[1], a0, a1)}"${act('player')}/>`;
+    g += `<path class="${cls('banker')}" d="${cell(R.banker[0], R.banker[1], a0, a1)}"${act('banker')}/>`;
+    g += `<path class="${cls('tie')}" d="${cell(R.tie[0], R.tie[1], a0, a1)}"${act('tie')}/>`;
+    g += label('player', (R.player[0] + R.player[1]) / 2, 'PLAYER', '#ffd400', 17);
+    g += label('banker', (R.banker[0] + R.banker[1]) / 2, 'BANKER', '#ff4a3d', 17);
+    g += label('tie', R.tie[1] - 15, 'TIE 8:1', '#7ef0a0', 14);
+    // The pair circles in the inner part of the Tie box.
+    for (const [k, du, ch, col] of [['ppair', -17, 'P', '#ffd400'], ['bpair', 17, 'B', '#ff4a3d']]) {
+      const [x, y] = at(R.tie[0] + 14, th, du);
+      g += `<g${act(k)} class="${cls(k)} pair"><circle cx="${x}" cy="${y}" r="13" fill="rgba(0,0,0,.25)" stroke="${col}" stroke-width="2.5"/>${bets[k] ? '' : `<text x="${x}" y="${f1(y + 5)}" text-anchor="middle" font-size="13" font-weight="900" fill="${col}">${ch}</text>`}</g>`;
+      g += bets[k] ? chip(k, R.tie[0] + 14, du, true) : '';
+    }
+    const [nx, ny] = at((R.num[0] + R.num[1]) / 2 - 4, th);
+    // In the 3D room a seated player's standing name plate hides this spot, so the plate carries the number instead.
+    if (p && S.room) g += '</g>'; else g += `<text class="bc-num" x="${nx}" y="${ny}" transform="rotate(${rot} ${nx} ${ny})" dy="11" text-anchor="middle" font-size="30" font-weight="800" fill="#fff">${s + 1}</text></g>`;
+  }
+  return `<svg class="bc-arc" viewBox="0 0 ${FELT().W} ${FELT().H}" preserveAspectRatio="none" aria-hidden="false"><defs><pattern id="bcStripe" width="20" height="8" patternUnits="userSpaceOnUse"><rect y="0" width="20" height="2" fill="rgba(255,255,255,.35)"/><rect y="4" width="20" height="1" fill="rgba(0,0,0,.35)"/></pattern></defs>${g}</svg>`;
 }
 // Where the round is in its show: how many cards are out, and whether the result is known yet.
 function stage(st) {
@@ -408,12 +481,15 @@ function render() {
   h += `<div class="bc-deal pk-stand${done ? ' on' : ''}">${done ? side('P', 'PLAYER', hand.P) + side('B', 'BANKER', hand.B) : '<div class="bc-side p"><b>PLAYER</b><div class="bc-cards empty"></div></div><div class="bc-side b"><b>BANKER</b><div class="bc-cards empty"></div></div>'}</div>`;
   if (final) {
     const who = hand.winner === 'tie' ? `Tie ${hand.pt} : ${hand.bt}` : `${hand.winner === 'player' ? 'Player' : 'Banker'} wins ${hand.winner === 'player' ? hand.pt : hand.bt} to ${hand.winner === 'player' ? hand.bt : hand.pt}`;
-    h += `<div class="bc-result pk-stand ${hand.winner}">${who}${hand.natural ? ' · natural' : ''}${hand.ppair ? ' · Player pair' : ''}${hand.bpair ? ' · Banker pair' : ''}</div>`;
+    h += `<div class="bc-result${FELT().W > FELT().H ? ' flat' : ' pk-stand'} ${hand.winner}">${who}${hand.natural ? ' · natural' : ''}${hand.ppair ? ' · Player pair' : ''}${hand.bpair ? ' · Banker pair' : ''}</div>`;
   }
   // The five places to bet.
   const myBets = (done ? null : st.bets[S.myId]) || {};
   const myPay = final ? st.pays[S.myId] : null;
   const wonSpot = (k) => final && (k === hand.winner || (k === 'ppair' && hand.ppair) || (k === 'bpair' && hand.bpair));
+  const wide = FELT().W > FELT().H;
+  if (wide) h += arcSVG(st, final);
+  else {
   h += `<div class="bc-spots">${['ppair', 'player', 'tie', 'banker', 'bpair'].map((k) => {
     const mine = done ? (st.lastBets[S.myId] && st.pays[S.myId] ? st.lastBets[S.myId][k] : 0) : myBets[k] || 0;
     const line = myPay?.lines.find((l) => l.spot === k);
@@ -423,6 +499,7 @@ function render() {
       ${!done && st.totals[k] ? `<i>All: ${money(st.totals[k])}</i>` : ''}
     </button>`;
   }).join('')}</div>`;
+  }
   // The players along the rounded side.
   const people = [], chips = [], stools = [];
   for (const p of st.players) {
@@ -434,24 +511,35 @@ function render() {
     let bubble = '', bcls = '';
     if (!p.connected) { bubble = 'Offline'; bcls = 'fold'; }
     // What the player has down is a line inside the name plate, so it can never cover a neighbour or a betting box.
-    const tag = !pay && staked ? BAC_KEYS.filter((k) => b[k]).map((k) => `<u class="${k}">${{ player: 'P', banker: 'B', tie: 'T', ppair: 'PP', bpair: 'BP' }[k]} ${money(b[k])}</u>`).join('') : pay ? `<u class="${pay.net > 0 ? 'up' : pay.net < 0 ? 'down' : 'push'}">${pay.net > 0 ? '+' + money(pay.net) : pay.net < 0 ? '−' + money(-pay.net) : 'Push'}</u>` : '';
+    const tag = !pay && staked && !wide ? BAC_KEYS.filter((k) => b[k]).map((k) => `<u class="${k}">${{ player: 'P', banker: 'B', tie: 'T', ppair: 'PP', bpair: 'BP' }[k]} ${money(b[k])}</u>`).join('') : pay ? `<u class="${pay.net > 0 ? 'up' : pay.net < 0 ? 'down' : 'push'}">${pay.net > 0 ? '+' + money(pay.net) : pay.net < 0 ? '−' + money(-pay.net) : 'Push'}</u>` : '';
     h += `<div class="pk-seat pk-stand bc-seat r${Math.abs(P.rel)}${isMe ? ' me' : ' far'}${pay && pay.net > 0 ? ' won' : ''}" style="left:${A.x}%;top:${A.y}%">
       ${bubble ? `<div class="pk-bubble ${bcls}">${bubble}</div>` : ''}
-      <div class="pk-plate"><b>${esc(p.name)}</b>${isMe ? '<em>YOU</em>' : ''}${p.id === st.bankId ? '<em class="dl">DEALER</em>' : ''}<span>${money(shownChips(st, p, final))}</span>${tag ? `<i class="bc-tag">${tag}</i>` : ''}</div>
+      <div class="pk-plate">${wide ? `<i class="sn">${p.seat + 1}</i>` : ''}<b>${esc(p.name)}</b>${isMe ? '<em>YOU</em>' : ''}${p.id === st.bankId ? '<em class="dl">DEALER</em>' : ''}<span>${money(shownChips(st, p, final))}</span>${tag ? `<i class="bc-tag">${tag}</i>` : ''}</div>
     </div>`;
     // Bet chips lie in one row in front of the betting boxes, in seat order, never on a box's words or a name.
-    const ar = Math.abs(P.rel), B = FELT().W < FELT().H ? { x: 50 + (P.x - 50) * 0.6, y: 50 + (P.y - 50) * 0.62 } : S.room ? { x: 50 + P.rel * 4.6, y: 76 - ar * 0.4 } : { x: 50 + P.rel * 4.6, y: 58 - ar * 0.2 };
+    const ar = Math.abs(P.rel), B = wide ? { x: (arcPt(318, arcTh(p.seat))[0] / FELT().W) * 100, y: (arcPt(318, arcTh(p.seat))[1] / FELT().H) * 100 } : FELT().W < FELT().H ? { x: 50 + (P.x - 50) * 0.6, y: 50 + (P.y - 50) * 0.62 } : S.room ? { x: 50 + P.rel * 4.6, y: 76 - ar * 0.4 } : { x: 50 + P.rel * 4.6, y: 58 - ar * 0.2 };
     h += `<div class="pk-spot" id="spot-${p.seat}" style="left:${B.x}%;top:${B.y}%"></div>`;
     stools.push({ seat: p.seat, x: P.x, y: P.y });
     people.push({ id: p.id, name: p.name, look: p.look || { skin: 2, hair: 0 }, seat: p.seat, seats: BAC_SEATS, isMe, isDealer: false, bank: p.id === st.bankId, x: P.x, y: P.y, bet: staked });
-    chips.push({ seat: p.seat, main: staked, balance: shownChips(st, p, final), mine: isMe });
+    chips.push({ seat: p.seat, main: wide ? 0 : staked, balance: shownChips(st, p, final), mine: isMe });
   }
   body.innerHTML = h;
   S.presence = people.map((p) => ({ id: p.id, name: p.name, look: p.look, seat: p.seat, seats: p.seats }));
   if (S.room) { S.room.setPeople(people, stools); S.room.setChips(chips); S.room.setOthers(S.others); }
   drawHud(st, me, sg);
   drawMenu(st);
+  fitFlat();
 }
+// The flat computer table is made smaller when the window is short, so the chips and buttons below never cover it.
+function fitFlat() {
+  const f = $('#felt');
+  if (!f || S.room || phone() || FELT().H > FELT().W) return;
+  const hud = document.querySelector('.pk-flat-hud'), top = f.getBoundingClientRect().top, hudTop = hud ? hud.getBoundingClientRect().top : innerHeight;
+  // The name plates of the nearest seats hang a little below the felt, so 30 more pixels are kept free.
+  const z = Math.max(0.4, Math.min(1, (innerWidth - 40) / 1268, (hudTop - top - 44) / FELT().H));
+  f.style.zoom = z.toFixed(3);
+}
+addEventListener('resize', () => fitFlat());
 function roadHTML(st) {
   const list = st.history.slice(-(phone() ? 22 : 36));
   if (st.phase === 'done' && !(stage(st)?.final)) list.pop(); // the round in play is not written before its cards are out

@@ -1,7 +1,7 @@
 // Baccarat (punto banco) for up to 9 players against the house. Pure rules: the host's browser owns one
 // BacTable and every bet goes through it. Nothing here touches the page or the network.
-import { sha256, fairShoe, MAX_CHIPS } from './game.js?v=20261122z';
-import { isFrozen, bankJoin, setBank, clearBank, bankGone, bankSettle, ledgerNet, ledgerSum, bankAdopt, bankCashOut, bankCarryIn } from './bank.js?v=20261122z';
+import { sha256, fairShoe, MAX_CHIPS } from './game.js?v=20261122za';
+import { isFrozen, bankJoin, setBank, clearBank, bankGone, bankSettle, ledgerNet, ledgerSum, bankAdopt, bankCashOut, bankCarryIn } from './bank.js?v=20261122za';
 
 export const BAC_SEATS = 9;
 export const BAC_DEFAULTS = {
@@ -126,7 +126,8 @@ export class BacTable {
     this.addLog(`${clean} joined with ${this.settings.startChips}.`);
     return p;
   }
-  freeSeat() { const used = new Set(Object.values(this.players).filter((p) => !p.kicked).map((p) => p.seat)); for (let i = 0; i < BAC_SEATS; i++) if (!used.has(i)) return i; return -1; }
+  // Seats fill from the middle of the curved side outwards, as at a casino table.
+  freeSeat() { const used = new Set(Object.values(this.players).filter((p) => !p.kicked).map((p) => p.seat)), mid = (BAC_SEATS - 1) >> 1; for (let d = 0; d < BAC_SEATS; d++) { const i = mid + (d % 2 ? (d + 1) >> 1 : -(d >> 1)); if (i >= 0 && i < BAC_SEATS && !used.has(i)) return i; } return -1; }
   disconnect(id) { const p = this.players[id]; if (p) p.connected = false; }
   kick(id) { const p = this.players[id]; if (!p) return; bankGone(this, id); this.clearBets(id, true); p.kicked = true; p.connected = false; p.seat = -1; }
   addChips(id, amount) {

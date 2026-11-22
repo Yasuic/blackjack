@@ -1,7 +1,7 @@
 // Shared by the poker and baccarat pages: small helpers, the playing card picture, the game switch at the
 // top left, and the link between the host's browser and the players' browsers.
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122z';
-import { cleanBox, cleanPiece } from './vault.js?v=20261122z';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122za';
+import { cleanBox, cleanPiece } from './vault.js?v=20261122za';
 export const params = new URLSearchParams(location.search);
 export const $ = (sel, el = document) => el.querySelector(sel);
 export function safeGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
@@ -75,7 +75,8 @@ export function goToGame(current, g, code, isHost) {
 // ---------- One wallet for the whole office ----------
 // Walking to another table takes your chips along. This table writes them off as cashed out (your +/- here
 // stays the same, so its ledger still adds up to zero), and the next table adds them as your buy-in. If a
-// hand of yours is still being played, the chips stay here: a second tap walks over without them.
+// hand, bet or deal of yours is still in play you stay here until it is over. Only when the table cannot be
+// reached does a second tap walk over without the chips.
 const CARRY_KEY = 'office-carry';
 let cashOutFn = null, walking = false, walkAnyway = null;
 export function setCashOut(fn) { cashOutFn = fn; }
@@ -96,8 +97,10 @@ export async function walkTo(current, g, url, code) {
   if (cashOutFn && code && !anyway) {
     try { amount = Number(await cashOutFn()) || 0; } catch (e) {
       walking = false; walkCover(null);
+      // A hand, bet or deal of yours still in play: you stay at this table until it is over.
+      if (!e.net) { walkAnyway = null; toast(e.message || 'Your hand is still in play. Walk over when it is over.'); return; }
       walkAnyway = { g, t: Date.now() };
-      toast(`${e.message || 'Your chips could not leave this table.'} Tap again to walk over and leave your chips here.`);
+      toast(`${e.message} Tap again to walk over and leave your chips here.`);
       return;
     }
   }
@@ -120,9 +123,10 @@ const cashWait = {};
 export function askCashOut(send) {
   return new Promise((res, rej) => {
     const rid = randomHex(4);
-    const timer = setTimeout(() => { delete cashWait[rid]; rej(new Error('The table did not answer.')); }, 5000);
+    const netErr = (msg) => Object.assign(new Error(msg), { net: true });
+    const timer = setTimeout(() => { delete cashWait[rid]; rej(netErr('The table did not answer.')); }, 5000);
     cashWait[rid] = (m) => { clearTimeout(timer); delete cashWait[rid]; if (m.err) rej(new Error(m.err)); else res(Number(m.amount) || 0); };
-    try { send({ t: 'cashout', rid }); } catch { clearTimeout(timer); delete cashWait[rid]; rej(new Error('No link to the table.')); }
+    try { send({ t: 'cashout', rid }); } catch { clearTimeout(timer); delete cashWait[rid]; rej(netErr('No link to the table.')); }
   });
 }
 export function gotCashed(m) { cashWait[m?.rid]?.(m); }

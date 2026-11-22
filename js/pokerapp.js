@@ -1,16 +1,16 @@
 // The poker page: a Texas Hold'em table for up to 9 in the big meeting room. The host's browser runs
 // the table (js/poker.js); every other browser sends its moves there and is told only what it may see.
-import { PokerTable, POKER_SEATS, pokerDeck, cardText, mpClientMoves, mpMine, mpCheck, bestHand, bestOmaha } from './poker.js?v=20261122z';
-import { plainDeck, shufflePass, lockPass, checkDeck, keyFor } from './mental.js?v=20261122z';
-import { sha256 } from './game.js?v=20261122z';
-import { botMove, isBot, BOT_NAMES } from './pokerbot.js?v=20261122z';
-import { chipSound, cardSound, hitSound, standSound, potSound, tickSound, turnSound, punchSound } from './fx.js?v=20261122z';
-import { webglOK, initRoom } from './room3d.js?v=20261122z';
-import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122z';
-import { showDropped, params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML } from './common.js?v=20261122z';
+import { PokerTable, POKER_SEATS, pokerDeck, cardText, mpClientMoves, mpMine, mpCheck, bestHand, bestOmaha } from './poker.js?v=20261122za';
+import { plainDeck, shufflePass, lockPass, checkDeck, keyFor } from './mental.js?v=20261122za';
+import { sha256 } from './game.js?v=20261122za';
+import { botMove, isBot, BOT_NAMES } from './pokerbot.js?v=20261122za';
+import { chipSound, cardSound, hitSound, standSound, potSound, tickSound, turnSound, punchSound } from './fx.js?v=20261122za';
+import { webglOK, initRoom } from './room3d.js?v=20261122za';
+import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122za';
+import { showDropped, params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML } from './common.js?v=20261122za';
 
-import { shareHidden, startHold } from './vault.js?v=20261122z';
-import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261122z';
+import { shareHidden, startHold } from './vault.js?v=20261122za';
+import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261122za';
 const PREFIX = 'bjt-pk-';
 // A settings change by vote (js/vote.js): any player at the table may ask, every other player at the table who is online has to say yes.
 const VOTE = {
@@ -804,7 +804,7 @@ function playSounds(st) {
     if (say) { (S.said ||= {})[i] = { text: say, until: Date.now() + 2000 }; clearTimeout(S.saidT); S.saidT = setTimeout(() => { if (S.st) render(); }, 2080); }
   });
   try {
-    if (now.mine && !was.mine) { turnSound(); if (safeGet('pk-turnhome') !== '0') S.room?.turnHome?.(); } // your turn starts: a short beep for you only, and the view glides back to your chair
+    if (now.mine && !was.mine) { turnSound(); if (safeGet('pk-turnhome2') === '1') S.room?.turnHome?.(); } // your turn starts: a short beep for you only; the view moves back to your chair only if you turned that on
     if (now.hand !== was.hand && now.phase !== 'waiting' && now.phase !== 'done') { cardSound(); setTimeout(cardSound, 140); setTimeout(cardSound, 280); return; } // a new hand is dealt
     if (now.hand !== was.hand) return;
     if (now.board > was.board) { const n = Math.min(3, now.board - was.board); for (let k = 0; k < n; k++) setTimeout(cardSound, k * 200); } // one sound a card, in step with the cards coming out // flop, turn, river
@@ -818,6 +818,12 @@ function playSounds(st) {
     });
     if (now.phase === 'done' && was.phase !== 'done' && st.result?.wins?.some((w) => st.seats[w.seat]?.id === S.myId)) potSound();
   } catch { /* sound is never worth an error */ }
+}
+// A folded player's cards lie on the table until the next card of the board comes out (flop, turn or river), then they are gone.
+function foldGone(st, i) {
+  const k = st.handNo + ':' + i, n = st.board.length + (st.board2?.length || 0), f = (S.foldAt ||= {});
+  if (!(k in f)) f[k] = n;
+  return n > f[k] || st.phase === 'done';
 }
 function render() {
   drawVote(S.st?.vote, send);
@@ -914,7 +920,8 @@ function render() {
     else if (seat.hand && done && seat.shown) { bubble = esc(shortHand(seat.hand)); bcls = 'in'; }
     // Nothing stays over a name while a player is simply in the hand or has folded: the last move shows for two seconds,
     // a folded player's plate is dimmed with no cards, and the player to act has a glowing plate with a time bar.
-    else if (seat.inHand && seat.folded) { bubble = seat.mucked ? 'Mucked' : 'Folded'; bcls = 'fold out'; }
+    // Once the next street is out, a folded player's label and name go too, to keep the table clear.
+    else if (seat.inHand && seat.folded && !(live && foldGone(st, i))) { bubble = seat.mucked ? 'Mucked' : 'Folded'; bcls = 'fold out'; }
     else if (live && S.said?.[i] && S.said[i].until > Date.now()) { bubble = esc(S.said[i].text); bcls = S.said[i].text === 'Fold' ? 'fold say' : 'in say'; }
     if (votes[seat.id]?.length && !seat.out) bubble += ` · away vote ${votes[seat.id].length}`;
     // Your own cards are in the panel at the bottom, so in the 3D room they are not stood on the felt as well.
@@ -924,11 +931,11 @@ function render() {
     h += `<div class="pk-seat pk-stand${!me ? ' far' : ''}${me ? ' me' : ''}${turn ? ' turn' : ''}${seat.inHand && seat.folded ? ' folded' : ''}${!seat.inHand && live ? ' idle' : ''}${bcls === 'win' ? ' won' : ''}${R ? ' ' + R.side : ''}" style="left:${A.x}%;top:${A.y}%;--ds:${ds.toFixed(2)}${R ? ';--dsy:' + (ds * (S.ringTall?.[rel(i)] || 1)).toFixed(3) : ''}" data-seat="${i}" data-rel="${rel(i)}">
       ${bubble ? `<div class="pk-bubble ${bcls}">${bubble}</div>` : ''}
       <div class="pk-cards${seat.folded ? ' dim' : ''}${seat.cards.length > 2 ? ' four' : ''}">${cards}</div>
-      <button class="pk-plate" data-act="seat-menu" data-seat="${i}"><b>${R && st.button === i && st.handNo > 0 ? '<i class="pk-d" title="Dealer button">D</i>' : ''}${esc(seat.name)}${me ? ' <em>YOU</em>' : ''}</b><span>${amt(seat.stack - (showing ? seat.won || 0 : 0))}</span>${timer}</button>${me ? '<button class="pk-react" data-act="react" title="Reaction">😀</button>' : ''}
+      <button class="pk-plate" data-act="seat-menu" data-seat="${i}"><b>${R && st.button === i && st.handNo > 0 ? '<i class="pk-d" title="Dealer button">D</i>' : ''}${!me && live && seat.inHand && seat.folded && foldGone(st, i) ? '' : esc(seat.name)}${me ? ' <em>YOU</em>' : ''}</b><span>${amt(seat.stack - (showing ? seat.won || 0 : 0))}</span>${timer}</button>${me ? '<button class="pk-react" data-act="react" title="Reaction">😀</button>' : ''}
     </div>`;
     h += `<div class="pk-spot${seat.bet ? ' has' : ''}" id="spot-${i}" style="left:${B.x}%;top:${B.y}%;--ds:${R ? R.bs.toFixed(2) : 1}">${seat.bet ? `<span class="pk-amt pk-stand${st.raiser === i && seat.bet === st.currentBet ? ' raise' : ''}">${amt(seat.bet)}</span>` : ''}</div>`;
     if (!R && st.button === i && st.handNo > 0) { h += `<div class="pk-dbtn" style="left:calc(${B.x}% + ${(P.y > 50 ? 1 : -1) * (phone() ? 30 : 52)}px);top:${B.y}%">D</div>`; }
-    people.push({ id: seat.id, name: seat.name, look: seat.look || { skin: 2, hair: 0 }, seat: i, seats: POKER_SEATS, isMe: me, isDealer: false, x: P.x, y: P.y, bet: seat.bet, cards: !me && seat.inHand && st.phase !== 'waiting' ? (seat.folded ? 'down' : 'up') : null }); // your own cards are the big ones at the bottom
+    people.push({ id: seat.id, name: seat.name, look: seat.look || { skin: 2, hair: 0 }, seat: i, seats: POKER_SEATS, isMe: me, isDealer: false, x: P.x, y: P.y, bet: seat.bet, cards: !me && seat.inHand && st.phase !== 'waiting' ? (seat.folded ? (foldGone(st, i) ? null : 'down') : 'up') : null }); // your own cards are the big ones at the bottom
     chips.push({ seat: i, main: seat.bet, balance: seat.stack - (showing ? seat.won || 0 : 0), mine: me });
   }
   const potChips = st.phase === 'done' ? (showing ? potNow : 0) : st.pot;
@@ -1143,7 +1150,7 @@ function drawMenu(st) {
     <button class="menu-item" data-act="bomb">💣 Bomb pot next hand: ${st.bombNext ? 'on' : 'off'}</button>
     <button class="menu-item" data-act="pause">${S.paused ? '▶️ Resume dealing' : '⏸️ Pause after this hand'}</button>` : ''}
     <button class="menu-item" data-act="view3d">🧊 3D room: ${use3D() ? 'on' : 'off'}</button>
-    ${S.room ? `<button class="menu-item" data-act="turnhome">🎯 Back to my seat on my turn: ${safeGet('pk-turnhome') === '0' ? 'off' : 'on'}</button>` : ''}
+    ${S.room ? `<button class="menu-item" data-act="turnhome">🎯 Back to my seat on my turn: ${safeGet('pk-turnhome2') === '1' ? 'on' : 'off'}</button>` : ''}
     ${S.room ? '<button class="menu-item" data-act="walk">🚶 Walk around</button><button class="menu-item" data-act="view-reset">🪑 Back to my seat</button>' : ''}
     ${mySeatNow(st) ? '<button class="menu-item" data-act="stand">🚪 Leave my seat</button>' : ''}
     <button class="menu-item" data-act="leave">↩️ Leave the table</button>`;
@@ -1333,7 +1340,7 @@ document.addEventListener('click', (e) => {
     case 'view3d': safeSet('bj-3d', use3D() ? '0' : '1'); location.reload(); break;
     case 'walk': closeMenu(); S.room?.walk(true); break;
     case 'view-reset': closeMenu(); S.room?.home(); break;
-    case 'turnhome': safeSet('pk-turnhome', safeGet('pk-turnhome') === '0' ? '1' : '0'); drawMenu(st); break;
+    case 'turnhome': safeSet('pk-turnhome2', safeGet('pk-turnhome2') === '1' ? '0' : '1'); drawMenu(st); break;
     case 'leave': if (S.role === 'guest') send({ t: 'stand' }); setTimeout(() => { location.href = location.pathname; }, 150); break;
     default: break;
   }
