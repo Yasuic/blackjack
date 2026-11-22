@@ -1,13 +1,14 @@
 // The poker page: a Texas Hold'em table for up to 9 in the big meeting room. The host's browser runs
 // the table (js/poker.js); every other browser sends its moves there and is told only what it may see.
-import { PokerTable, POKER_SEATS, pokerDeck, cardText } from './poker.js?v=20261122h';
-import { sha256 } from './game.js?v=20261122h';
-import { botMove, isBot, BOT_NAMES } from './pokerbot.js?v=20261122h';
-import { chipSound, cardSound, hitSound, standSound, potSound, tickSound, turnSound, punchSound } from './fx.js?v=20261122h';
-import { webglOK, initRoom } from './room3d.js?v=20261122h';
-import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122h';
-import { params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame } from './common.js?v=20261122h';
+import { PokerTable, POKER_SEATS, pokerDeck, cardText } from './poker.js?v=20261122i';
+import { sha256 } from './game.js?v=20261122i';
+import { botMove, isBot, BOT_NAMES } from './pokerbot.js?v=20261122i';
+import { chipSound, cardSound, hitSound, standSound, potSound, tickSound, turnSound, punchSound } from './fx.js?v=20261122i';
+import { webglOK, initRoom } from './room3d.js?v=20261122i';
+import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122i';
+import { params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame } from './common.js?v=20261122i';
 
+import { shareHidden, startHold } from './vault.js?v=20261122i';
 const PREFIX = 'bjt-pk-';
 const app = $('#app');
 const S = { name: safeGet('bj-name') || '', myId: getClientId(), code: null, role: null, table: null, st: null, net: null, room: null,
@@ -73,10 +74,11 @@ function openHost(code) {
   S.net = createHost(PREFIX + code, {
     msg: hostMsg,
     people: () => S.presence || [],
+    piece: (id, piece) => S.hold?.add(piece),
     gone: (id) => { S.table?.disconnect(id); S.goneAt[id] = Date.now(); push(); },
     status: (text, ok) => { S.conn = [text, ok]; drawConn(); },
     taken: () => { // someone already runs this table (your own other tab, or a player who took the table over): join it instead
-      S.net.close(); clearInterval(S.clock); S.table = null; startGuest(code, true);
+      S.hold = null; S.net.close(); clearInterval(S.clock); S.table = null; startGuest(code, true);
     },
   });
   clearInterval(S.clock);
@@ -98,24 +100,41 @@ function myKept(st) {
 function takeOver() {
   const st = S.st;
   if (!st || S.role !== 'guest') return;
+  const kept = S.net.vault?.();
   try { S.net.close(); } catch {}
-  const t = PokerTable.fromPublic(st, S.myId, myKept(st));
   const oldHost = st.hostId, oldName = st.players.find((p) => p.id === oldHost)?.name || 'The host';
-  t.join(S.myId, S.name, getLook());
-  t.addLog(`${oldName}'s browser left. The table now runs in ${S.name}'s browser${t.inHand() ? ' and the hand goes on' : ''}.`);
-  const now = Date.now();
-  for (const p of Object.values(t.players)) if (p.id !== S.myId) S.goneAt[p.id] = now;
-  S.role = 'host'; S.table = t; S.started = st.handNo > 0; S.paused = false; S.doneAt = 0;
-  // Players still in the hand get a few seconds to hand in their cards before anyone can act.
-  // Computer players move with the table: their old cards stayed in the old host's browser, so they get two unseen cards.
-  for (const p of Object.values(t.players)) if (isBot(p.id)) { p.connected = true; delete S.goneAt[p.id]; }
-  for (const i of t.missingCards()) if (isBot(t.seats[i].id)) { try { t.redraw(i); } catch {} }
-  S.waitFor = t.missingCards().map((i) => t.seats[i].id).filter((id) => id !== oldHost);
-  S.waitUntil = now + 12000;
-  t.waitCards = S.waitFor.length > 0;
+  const hold = startHold(kept);
+  const finish = (text) => {
+    if (S.role !== 'host' || S.hold !== hold) return;
+    let t = null;
+    try { if (text) t = PokerTable.fromHidden(JSON.parse(text), st, S.myId); } catch { t = null; }
+    const same = !!t;
+    if (!t) t = PokerTable.fromPublic(st, S.myId, myKept(st));
+    t.join(S.myId, S.name, getLook());
+    t.addLog(`${oldName}'s browser left. The table now runs in ${S.name}'s browser${t.inHand() ? (same ? ' and the hand goes on with the same deck, card for card' : ' and the hand goes on') : ''}.`);
+    const now = Date.now();
+    for (const p of Object.values(t.players)) if (p.id !== S.myId) S.goneAt[p.id] = now;
+    S.table = t; S.started = st.handNo > 0; S.paused = false; S.doneAt = 0;
+    // Computer players move with the table.
+    for (const p of Object.values(t.players)) if (isBot(p.id)) { p.connected = true; delete S.goneAt[p.id]; }
+    if (same) { S.waitFor = []; S.waitUntil = 0; }
+    else {
+      // The old deck could not be opened. Players still in the hand get a few seconds to hand in their cards before anyone can act.
+      // The computer players' old cards stayed in the old host's browser, so they get two unseen cards.
+      for (const i of t.missingCards()) if (isBot(t.seats[i].id)) { try { t.redraw(i); } catch {} }
+      S.waitFor = t.missingCards().map((i) => t.seats[i].id).filter((id) => id !== oldHost);
+      S.waitUntil = now + 12000;
+      t.waitCards = S.waitFor.length > 0;
+    }
+    S.hold = null; S.vault = null;
+    // Players who came back while the pieces were collected.
+    for (const [id, m] of Object.entries(hold?.hellos || {})) { try { hostMsg(id, m); } catch {} }
+    push();
+  };
+  S.role = 'host'; S.table = null; S.hold = hold;
   openHost(S.code);
   toast('The host left. The table now runs in your browser.');
-  push();
+  if (hold) hold.done.then(finish); else finish(null);
 }
 function watchHost() {
   const st = S.st;
@@ -126,6 +145,8 @@ function watchHost() {
   S.takeT = setTimeout(() => { S.takeT = null; if (S.role === 'guest' && S.nohost) takeOver(); }, 1500 + rank * 4000);
 }
 function hostMsg(id, m) {
+  // A host change is being settled: note who came back and ask for their piece of the key (js/vault.js).
+  if (S.hold) { if (m.t === 'hello') { S.hold.hellos[id] = m; S.net.send(id, { t: 'piece-ask', kid: S.hold.kid }); } return; }
   const t = S.table;
   if (!t) return;
   try {
@@ -214,6 +235,8 @@ function push() {
   const t = S.table;
   if (!t) return;
   for (const id of S.net.ids()) S.net.send(id, { t: 'state', st: t.publicState(id) });
+  // The deck and the cards nobody else may see go along locked, so the same deck goes on if this browser leaves.
+  shareHidden(S, S.net, t.seats.filter((x) => x && x.id !== S.myId && !isBot(x.id) && t.players[x.id]?.connected).map((x) => x.id), t.hidden());
   S.st = t.publicState(S.myId);
   keepMine(S.st);
   S.at = Date.now();
@@ -344,6 +367,7 @@ function sendSeed() {
 }
 // A move of this browser: straight to the table for the host, over the link for everyone else.
 function send(m) {
+  if (S.hold) { toast('One moment: the table is moving to your browser.'); return; }
   if (S.role === 'host') { try { doMove(S.myId, m); } catch (e) { toast(e.message); } push(); }
   else if (!S.net?.send(m)) toast('Not connected to the host right now.');
 }

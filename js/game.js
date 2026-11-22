@@ -582,7 +582,7 @@ export class Table {
     return this.vote.id;
   }
 
-  // Settings changes from the host also need everyone's yes.
+  // A settings change, from the host or from any player, needs a yes from everyone else who is online.
   proposeSettings(hostId, patch, summary) {
     if (this.vote) throw new Error('A vote is already running.');
     this.checkSeatCount(patch?.seats);
@@ -590,7 +590,7 @@ export class Table {
     this.voteSeq = (this.voteSeq || 0) + 1;
     if (!voters.length) { this.applySettings(patch); return null; }
     this.vote = { id: this.voteSeq, kind: 'settings', candidate: hostId, patch, summary, voters, votes: {} };
-    this.addLog('The host proposed new settings. Everyone votes.');
+    this.addLog(`${this.players[hostId]?.name || 'A player'} proposed new settings. Everyone else votes.`);
     return this.vote.id;
   }
 

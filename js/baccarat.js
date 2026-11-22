@@ -1,7 +1,7 @@
 // Baccarat (punto banco) for up to 9 players against the house. Pure rules: the host's browser owns one
 // BacTable and every bet goes through it. Nothing here touches the page or the network.
-import { sha256, fairShoe, MAX_CHIPS } from './game.js?v=20261122h';
-import { isFrozen, bankJoin, setBank, clearBank, bankGone, bankSettle, ledgerNet, ledgerSum, bankAdopt } from './bank.js?v=20261122h';
+import { sha256, fairShoe, MAX_CHIPS } from './game.js?v=20261122i';
+import { isFrozen, bankJoin, setBank, clearBank, bankGone, bankSettle, ledgerNet, ledgerSum, bankAdopt } from './bank.js?v=20261122i';
 
 export const BAC_SEATS = 9;
 export const BAC_DEFAULTS = {
@@ -309,6 +309,21 @@ export class BacTable {
     return { P: side('P'), B: side('B'), peel: true };
   }
   static restore(j) { const t = new BacTable(); Object.assign(t, j); if (!('bankId' in j)) t.base = null; bankAdopt(t); return t; }
+  // The hidden part of the table for a host change: everything, without the long lists every player is told anyway.
+  hidden() { return JSON.stringify({ ...this, log: [], past: [], history: [] }); }
+  // Another player's browser takes the table over with the old host's hidden part, opened with the players' pieces
+  // of the key (js/vault.js): the same shoe in the same order, the same cards of the round in play.
+  static fromHidden(hid, st, myId) {
+    if (!hid || !Array.isArray(hid.shoe) || hid.round !== st.round || hid.phase !== st.phase) throw new Error('The locked copy does not fit the table.');
+    const t = BacTable.restore(hid), now = Date.now();
+    t.hostId = myId;
+    t.log = [...(st.log || [])]; t.history = [...(st.history || [])]; t.past = (st.fair?.past || []).map((r) => ({ ...r }));
+    for (const p of Object.values(t.players)) p.connected = p.id === myId;
+    if (t.peel) { t.peel.at = now; t.peel.last = now; }
+    if (t.betStart) t.betStart = now;
+    if (t.phase === 'done') t.doneAt = now;
+    return t;
+  }
   // Another player's browser takes the table over from what everyone is told. Chips, bets and results stay;
   // the cards still in the old shoe are gone with the old host, so a new shoe is shuffled.
   static fromPublic(st, myId) {

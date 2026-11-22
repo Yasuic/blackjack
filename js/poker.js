@@ -1,6 +1,6 @@
 // No-limit Texas Hold'em for up to 9 players. Pure rules: the host's browser owns one PokerTable and
 // every action goes through it. Nothing here touches the page or the network.
-import { SUITS, RANKS, sha256, fairSeed, fairShoe, MAX_CHIPS } from './game.js?v=20261122h';
+import { SUITS, RANKS, sha256, fairSeed, fairShoe, MAX_CHIPS } from './game.js?v=20261122i';
 
 export const POKER_SEATS = 9;
 export const POKER_DEFAULTS = {
@@ -827,6 +827,20 @@ export class PokerTable {
     if (!x || !x.inHand || x.cards.length === this.holeN) return;
     x.cards = Array.from({ length: this.holeN }, () => this.draw()); x.redrawn = true; x.cc = null;
     this.addLog(`${this.name(i)} did not come back after the table moved, so the seat got new cards from the cards nobody had seen.`);
+  }
+  // The hidden part of the table for a host change (js/vault.js): everything, without the long lists.
+  hidden() { return JSON.stringify({ ...this, log: [], hist: [] }); }
+  // Another player's browser takes the table over with the old host's hidden part, opened with the players' pieces
+  // of the key: the same deck in the same order and every player's own cards, so the hand goes on card for card.
+  static fromHidden(hid, st, myId) {
+    if (!hid || !Array.isArray(hid.deck) || hid.handNo !== st.handNo || hid.phase !== st.phase) throw new Error('The locked copy does not fit the table.');
+    const t = PokerTable.restore(hid);
+    t.hostId = myId;
+    t.log = [...(st.log || [])]; t.hist = st.lastHand ? [st.lastHand] : [];
+    for (const p of Object.values(t.players)) p.connected = p.id === myId;
+    if (t.inHand()) t.turnStarted = Date.now();
+    t.waitCards = false;
+    return t;
   }
   // The whole table as plain data (the host's browser keeps it, so a reload carries on), and back again.
   static restore(j) { const t = new PokerTable(); Object.assign(t, j); return t; }

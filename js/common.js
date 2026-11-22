@@ -1,6 +1,7 @@
 // Shared by the poker and baccarat pages: small helpers, the playing card picture, the game switch at the
 // top left, and the link between the host's browser and the players' browsers.
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122h';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122i';
+import { cleanBox, cleanPiece } from './vault.js?v=20261122i';
 export const params = new URLSearchParams(location.search);
 export const $ = (sel, el = document) => el.querySelector(sel);
 export function safeGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
@@ -102,6 +103,8 @@ export function createHost(peerId, on) {
         if (old && old !== conn) { try { old.close(); } catch {} }
         conn.pid = id; conns.set(id, conn);
       }
+      // A player's piece of the key to the hidden cards, asked for by a host that took the table over (js/vault.js). Direct links only.
+      if (m.t === 'piece') { if (conn.pid && !conn.relay) on.piece?.(conn.pid, cleanPiece(m.piece)); return; }
       if (conn.pid) on.msg(conn.pid, m);
     });
     const bye = () => { if (conn.pid && conns.get(conn.pid) === conn) { conns.delete(conn.pid); on.gone?.(conn.pid); } };
@@ -127,6 +130,7 @@ export function createHost(peerId, on) {
   return {
     send(id, m) { const c = conns.get(id); if (c && c.open) { try { c.send(m); } catch {} } },
     ids: () => [...conns.keys()],
+    direct: (id) => { const c = conns.get(id); return !!(c && c.open && !c.relay); },
     // Milliseconds since this player's browser was last heard, or null when it sends no signs of life (an older page).
     quietFor(id) { const c = conns.get(id); return c && c.open && c.pings ? Date.now() - (c.rx || 0) - (c.relay ? 5000 : 0) : null; },
     close() { dead = true; clearInterval(beat); try { relay?.close(); } catch {} try { peer.destroy(); } catch {} },
@@ -173,6 +177,14 @@ export function watchOffice(current, getCode, onPeople) {
 }
 // A player's side. on: { msg(m), status(text, ok), open(), nohost() }. hello() gives the first message.
 export function createGuest(peerId, hello, on) {
+  // The locked copy of the table's hidden cards and this player's piece of its key (js/vault.js). The piece is
+  // handed only to a host that asks for it over a direct link, which happens after a host change.
+  let vbox = null, vpiece = null;
+  const vaultMsg = (m, c, direct) => {
+    if (m.t === 'vault') { vbox = cleanBox(m.box); vpiece = direct ? cleanPiece(m.piece) : null; return true; }
+    if (m.t === 'piece-ask') { if (direct && vpiece && vpiece.kid === m.kid) { try { c.send({ t: 'piece', piece: vpiece }); } catch {} } return true; }
+    return false;
+  };
   let peer = null, conn = null, dead = false, tries = 0, timer = null, lastRx = 0, downAt = 0, relayBusy = false;
   const retry = () => { if (dead) return; clearTimeout(timer); timer = setTimeout(connect, Math.min(6000, 800 + tries++ * 700)); };
   const connect = () => {
@@ -184,7 +196,7 @@ export function createGuest(peerId, hello, on) {
     conn = c;
     const giveUp = setTimeout(() => { if (!c.open && conn === c) { try { c.close(); } catch {} retry(); } }, 9000);
     c.on('open', () => { clearTimeout(giveUp); if (conn !== c) { const old = conn; conn = c; try { old?.close(); } catch {} } tries = 0; lastRx = Date.now(); on.status?.('Live', true); c.send(hello()); on.open?.(); });
-    c.on('data', (m) => { lastRx = Date.now(); if (m && typeof m === 'object' && m.t !== 'ping') on.msg(m); });
+    c.on('data', (m) => { lastRx = Date.now(); if (m && typeof m === 'object' && m.t !== 'ping' && !vaultMsg(m, c, true)) on.msg(m); });
     c.on('close', () => { clearTimeout(giveUp); if (conn === c) { on.status?.('Reconnecting', false); retry(); } });
     c.on('error', () => { clearTimeout(giveUp); if (conn === c) retry(); });
   };
@@ -209,7 +221,7 @@ export function createGuest(peerId, hello, on) {
       if (dead || (conn && conn.open)) { link.close(); return; }
       const old = conn; conn = link;
       try { old?.close(); } catch {}
-      link.on('data', (m) => { lastRx = Date.now(); if (m && typeof m === 'object' && m.t !== 'ping') on.msg(m); });
+      link.on('data', (m) => { lastRx = Date.now(); if (m && typeof m === 'object' && m.t !== 'ping' && !vaultMsg(m, link, false)) on.msg(m); });
       link.on('close', () => { if (conn === link) { conn = null; on.status?.('Reconnecting', false); retry(); } });
       tries = 0; lastRx = Date.now(); downAt = 0;
       on.status?.('Live', true); link.send(hello()); on.open?.();
@@ -232,6 +244,7 @@ export function createGuest(peerId, hello, on) {
   }, 1500);
   return {
     send(m) { if (conn && conn.open) { try { conn.send(m); return true; } catch {} } return false; },
+    vault: () => ({ box: vbox, piece: vpiece }),
     close() { dead = true; clearTimeout(timer); clearInterval(watch); try { conn?.close(); } catch {} try { peer?.destroy(); } catch {} },
   };
 }

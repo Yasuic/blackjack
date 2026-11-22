@@ -1,15 +1,16 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261122h';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122h';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122h';
-import { tickSound, winSound } from './fx.js?v=20261122h';
-import * as HX from './history.js?v=20261122h';
-import { webglOK, initRoom } from './room3d.js?v=20261122h';
-import { watchOffice } from './common.js?v=20261122h';
-import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122h';
-import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122h';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261122i';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122i';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122i';
+import { tickSound, winSound } from './fx.js?v=20261122i';
+import * as HX from './history.js?v=20261122i';
+import { webglOK, initRoom } from './room3d.js?v=20261122i';
+import { watchOffice } from './common.js?v=20261122i';
+import { makeVault, makeOpener, cleanBox, cleanPiece } from './vault.js?v=20261122i';
+import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122i';
+import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122i';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -19,7 +20,7 @@ const ROOM_PREFIX = 'bjt-';
 // so the new host never has to wait for the old host's address to be released.
 const hostAddr = (g) => ROOM_PREFIX + S.code + (g > 0 ? '-' + g : '');
 const CHIPS = [1, 5, 25, 100, 500];
-const VOTE_SECONDS = 20;
+const VOTE_SECONDS = 30;
 
 const S = {
   role: null,        // 'host' or 'player'
@@ -318,12 +319,23 @@ function sendSnap() {
   const { shoe, shoeSize, fair, hist, evts, created, runCount, dealer, turn, pendingSettings, ...lite } = t.toJSON();
   // What everyone can see of the dealer's hand goes along (never the face down card), so a round in play can carry on after a host move.
   lite.dealerSeen = { revealed: !!dealer?.revealed, cards: dealer?.revealed ? dealer.cards : (dealer?.cards || []).slice(0, 1) };
+  lite.shoeLeft = shoe.length;
   const order = Object.values(t.players).filter((p) => p.id !== S.myId && p.connected && !p.kicked).map((p) => p.id);
   const body = JSON.stringify({ order, table: lite, gen: S.gen || 0 });
-  if (body === S.snapSent) return;
+  // The hidden part (the shoe in its order, the shuffle codes, the face down card) goes along locked. The key is cut
+  // into pieces, one per seated player, and more than half of the pieces are needed to open it (js/vault.js).
+  // While a move is being settled (S.hold) this browser does not have the hidden part yet, so nothing is locked.
+  const holders = S.hold ? [] : order.filter((id) => t.seats.some((x) => x && x.playerId === id) && S.conns[id]?.open && !S.conns[id].relay);
+  S.vault ||= makeVault();
+  const pack = S.hold ? { box: null, piece: () => null, changed: false } : S.vault.pack(holders, JSON.stringify({ shoe, shoeSize, fair, runCount, dealer, turn, pendingSettings, pendingCard: t.pendingCard || null }));
+  if (body === S.snapSent && !pack.changed) return;
   S.snapSent = body;
-  const msg = { t: 'snap', snap: body, gen: S.gen || 0 };
-  for (const conn of Object.values(S.conns)) if (conn.open) { try { conn.send(msg); } catch {} }
+  S.snapPack = pack;
+  for (const conn of Object.values(S.conns)) if (conn.open) { try { conn.send(snapMsg(conn)); } catch {} }
+}
+function snapMsg(conn) {
+  const pack = S.snapPack;
+  return { t: 'snap', snap: S.snapSent, gen: S.gen || 0, box: pack?.box || null, piece: (!conn.relay && pack?.piece(conn.clientId)) || null };
 }
 // A player's browser found no host at the table's address. After a short wait (longer for players
 // further down the list, so only one steps up) it opens the table itself.
@@ -369,20 +381,56 @@ function maybeTakeOver() {
     // A round in play is never called off: it carries on with the same hands and bets (resumeAfterMove).
     // Only bets of a round that had not been dealt yet go back to their players.
     const seen = snap?.table?.dealerSeen || (S.state?.dealer ? { revealed: !!S.state.dealer.revealed, cards: S.state.dealer.cards } : null);
-    delete table.dealerSeen;
+    delete table.dealerSeen; delete table.shoeLeft;
     table.vote = null; table.hist = []; table.evts = []; table.created = null;
-    const carried = table.resumeAfterMove(seen);
-    table.addLog(fresh ? `${S.name} opened the table.` : `The host left. ${S.name} is the host now. The shoe was shuffled again.${carried ? ' The round in play goes on.' : ''}${table.banker && table.banker === oldHost && table.players[oldHost] ? ` ${table.players[oldHost].name} is still the dealer.` : ''}`);
-    table.ev(fresh ? 'table opened with no host present' : 'host handoff: new host, new shuffle', S.myId);
+    // The same shoe goes on when enough players bring their pieces of the key (js/vault.js). Until they have
+    // come back (a few seconds) no card is dealt: every step that takes a card waits in line behind `gate`.
+    const opener = !fresh && S.box ? makeOpener(S.box, S.piece) : null;
+    const stillDealer = table.banker && table.banker === oldHost && table.players[oldHost] ? ` ${table.players[oldHost].name} is still the dealer.` : '';
+    let done = false, release = () => {};
+    const settle = (text) => {
+      if (done) return; done = true;
+      let hidden = null;
+      try { hidden = text ? JSON.parse(text) : null; } catch { hidden = null; }
+      let carried;
+      if (hidden && Array.isArray(hidden.shoe)) {
+        const { shoe, shoeSize, fair, runCount, dealer, turn, pendingSettings, pendingCard } = hidden;
+        Object.assign(table, { shoe, shoeSize, fair, runCount, dealer, turn, pendingSettings });
+        table.pendingCard = pendingCard || null;
+        carried = table.inRound();
+        table.addLog(`The host left. ${S.name} is the host now. The same shoe goes on, card for card.${carried ? ' The round in play goes on.' : ''}${stillDealer}`);
+        table.ev('host handoff: new host, same shoe', S.myId);
+      } else {
+        carried = table.resumeAfterMove(seen);
+        table.addLog(fresh ? `${S.name} opened the table.` : `The host left. ${S.name} is the host now. ${opener ? 'Too few players came back to open the old shoe, so the shoe' : 'The shoe'} was shuffled again.${carried ? ' The round in play goes on.' : ''}${stillDealer}`);
+        table.ev(fresh ? 'table opened with no host present' : 'host handoff: new host, new shuffle', S.myId);
+      }
+      S.hold = null;
+      // Players who do not come back to the new host in time get the usual away move, so the round always ends.
+      if (carried) for (const p of Object.values(table.players)) if (p.id !== S.myId && !p.connected && !p.kicked) awayClock(p.id);
+      release();
+      if (S.role === 'host' && S.table === table) hostChanged();
+    };
+    if (opener) {
+      table.dealer = seen?.cards?.length ? { cards: seen.revealed ? seen.cards : seen.cards.slice(0, 1), revealed: !!seen.revealed } : table.dealer;
+      table.turn = null;
+      S.hold = opener;
+      freshChain = freshChain.then(() => new Promise((res) => { release = res; if (done) res(); })).catch(() => {});
+      const until = Date.now() + 10000;
+      const poll = setInterval(() => {
+        const text = opener.count() >= opener.need ? opener.open() : null;
+        if (text || Date.now() > until || S.table !== table) { clearInterval(poll); settle(text); }
+      }, 200);
+    }
     try { S.conn?.close(); } catch {}
     try { S.peer?.destroy(); } catch {}
     clearInterval(S.watchdog);
     S.conn = null; S.taking = false; S.noHostAt = null; S.why = ''; S.dead = {};
     for (const c of S.probes || []) { try { c.close(); } catch {} } S.probes = [];
     sessDel('bj-join-' + S.code);
+    S.vault = null; S.box = null;
+    if (!opener) settle(null);
     startHost(true, { code: S.code, table, peer, gen: newGen });
-    // Players who do not come back to the new host in time get the usual away move, so the round always ends.
-    if (carried) for (const p of Object.values(table.players)) if (p.id !== S.myId && !p.connected && !p.kicked) awayClock(p.id);
     toast(fresh ? 'Nobody was hosting, so the table opened in your browser. You are the host: keep this tab open.' : 'The host left. You are the host now: keep this tab open.');
   });
 }
@@ -433,8 +481,9 @@ function onHostMessage(conn, msg) {
     S.conns[id] = conn;
     clearTimeout(S.goneTimers[id]); delete S.goneTimers[id];
     S.table.join(id, msg.name, msg.buyIn, msg.look);
+    if (S.hold && msg.piece) S.hold.add(cleanPiece(msg.piece));
     hostChanged();
-    if (S.snapSent) { try { conn.send({ t: 'snap', snap: S.snapSent, gen: S.gen || 0 }); } catch {} }
+    if (S.snapSent) { try { conn.send(snapMsg(conn)); } catch {} }
     if (S.chat?.length) { try { conn.send({ t: 'chat-log', list: S.chat.slice(-40) }); } catch {} }
     try { conn.send({ t: 'voice-list', list: voiceList() }); } catch {}
     return;
@@ -536,6 +585,7 @@ function runAction(id, msg, onError) {
         if (left && asker) { delete S.askFor[id]; sayTo(asker, me.leaving ? `${me.name} will sit out when this hand ends.` : `${me.name} sat out. The seat is free.`); }
         break;
       }
+      case 'propose': hostPropose(id, msg.patch); break;
       case 'sit-dealer': {
         const voteId = t.requestDealer(id);
         if (voteId) setTimeout(() => hostDo((tb) => tb.expireVote(voteId)), VOTE_SECONDS * 1000);
@@ -901,7 +951,9 @@ function wireGuestConn(conn) {
     S.online = true;
     S.why = '';
     S.retry = 0; S.noHostAt = null; S.noReplyAt = 0; S.linkTries = 0; S.viaRelay = !!conn.relay;
-    conn.send({ t: 'join', clientId: S.myId, name: S.name, buyIn: S.buyIn, look: S.look });
+    // This player's piece of the key goes only to a host that took the table over after the piece was made, and only on a direct link.
+    const piece = S.piece && !conn.relay && (S.gen || 0) > (S.pieceGen ?? Infinity) ? S.piece : undefined;
+    conn.send({ t: 'join', clientId: S.myId, name: S.name, buyIn: S.buyIn, look: S.look, piece });
   };
   conn.on('open', opened);
   if (conn.open && !conn.relay) opened(); // a link that opened before it was picked as the table's link
@@ -911,7 +963,7 @@ function wireGuestConn(conn) {
     if (msg.t === 'state') { setState(msg.state); render(); setTimerFromState(msg.state); }
     else if (msg.t === 'error') { toast(msg.msg); if (msg.bet) dropPend(); }
     else if (msg.t === 'hist') { S.guestHist = Array.isArray(msg.rounds) ? msg.rounds : []; S.guestHistTotal = msg.total || S.guestHist.length; drawHistPanel(true); if ($('#modal')?.open && $('#hist-list')) showHistory(); }
-    else if (msg.t === 'snap') { S.snap = String(msg.snap || '').slice(0, 400000); if (Number.isInteger(msg.gen) && msg.gen >= 0 && msg.gen < 100000) S.gen = msg.gen; }
+    else if (msg.t === 'snap') { S.snap = String(msg.snap || '').slice(0, 400000); if (Number.isInteger(msg.gen) && msg.gen >= 0 && msg.gen < 100000) S.gen = msg.gen; S.box = cleanBox(msg.box); S.piece = cleanPiece(msg.piece); S.pieceGen = S.gen || 0; }
     else if (msg.t === 'say') toast(String(msg.msg || '').slice(0, 200));
     else if (msg.t === 'chat') gotChat(msg);
     else if (msg.t === 'voice-list') gotVoiceList(msg.list);
@@ -1151,7 +1203,7 @@ function buildLayout() {
           ${fold('m-log', '📝 Table log', `<div id="host-log" class="log"></div>
             ${fold('m-logs', 'Logs', `<button class="menu-item" data-act="hist-panel" title="A small list of the hands at the left of the screen.">🕘 Hand history: ${histOn() ? 'on' : 'off'}</button>`, true)}`)}` : `
           ${fold('m-players', '👥 Players', '<div id="guest-players" class="player-list"></div>')}
-          <div class="menu-note hint">Only the host can propose new settings, and everyone votes on them.</div>
+          ${fold('m-settings', '⚙️ Game settings', '<div class="hint" style="margin-bottom:8px">Any seated player can change the settings. Everyone else has to vote yes.</div><div id="host-settings"></div>')}
           ${fold('m-log', '📝 Table log', `<div id="host-log" class="log"></div>
             ${fold('m-logs', 'Logs', `<button class="menu-item" data-act="hist-panel" title="A small list of the hands at the left of the screen.">🕘 Hand history: ${histOn() ? 'on' : 'off'}</button>`, true)}`)}`}
           ${fold('m-cheat', '✅ Game Cheating Detection', `
@@ -1583,7 +1635,7 @@ function render(note) {
   if (st.phase !== 'settled') { clearTimeout(S.resultTimer); $('#result-pop')?.remove(); }
   $('#controls').innerHTML = controlsHTML(st);
   $('#controls').hidden = !$('#controls').innerHTML.trim();
-  if (S.role === 'host') renderHostPanel(st);
+  if (S.role === 'host') renderHostPanel(st); else renderSettings(st);
   renderVote(st);
   renderBalance(st);
   renderHostPops();
@@ -1617,7 +1669,7 @@ function renderVote(st) {
   if (!box) { box = document.createElement('div'); box.id = 'vote'; box.className = 'vote-pop'; document.body.appendChild(box); }
   const mine = v.candidate === S.myId;
   const isSet = v.kind === 'settings';
-  const title = mine ? 'Waiting for votes' : isSet ? `${esc(v.name)} (host) wants to change the settings` : `${esc(v.name)} wants to be the dealer`;
+  const title = mine ? 'Waiting for votes' : isSet ? `${esc(v.name)} wants to change the settings` : `${esc(v.name)} wants to be the dealer`;
   const body = isSet ? `<ul class="vote-list">${(v.summary || []).map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` : '';
   box.innerHTML = `<div class="vote-card">
     <div class="vote-title">${title}</div>
@@ -2795,11 +2847,16 @@ function renderHostPanel(st) {
     </div>`).join('') || '<div class="hint">Nobody yet. Send the invite link.</div>';
   $('#host-log').innerHTML = st.log.slice().reverse().map((l) => `<div>${esc(l)}</div>`).join('');
 
+  renderSettings(st);
+}
+// The settings form, for the host and for every player: a change by anyone goes to a vote of all the others.
+function renderSettings(st) {
+  const ph = st.phase;
   // Settings are only redrawn when they change, so typing in them is not interrupted.
   const locked = !(ph === 'betting' || ph === 'settled');
   const key = JSON.stringify(st.settings) + locked;
   const box = $('#host-settings');
-  if (key === S.settingsKey || box.contains(document.activeElement)) return;
+  if (!box || key === S.settingsKey || box.contains(document.activeElement)) return;
   S.settingsKey = key;
   const s = st.settings;
   const dis = locked ? 'disabled' : '';
@@ -2881,19 +2938,39 @@ const SETTING_NAMES = {
   blackjackPays: ['Blackjack pays', (v) => (v === 1.5 ? '3 to 2' : v + ' to 1')],
   sideBets: ['Side bets', (v) => (v.length ? v.map((k) => SIDE_BETS[k]?.name).join(', ') : 'none')],
 };
-function proposeSettings(patch) {
-  const cur = S.table.settings;
-  const changes = Object.keys(patch).filter((k) => SETTING_NAMES[k] && String(patch[k]) !== String(cur[k]))
+// Which settings of a patch differ from the table's, as a list of setting names.
+function settingChanges(cur, patch) {
+  return Object.keys(patch || {}).filter((k) => SETTING_NAMES[k] && String(patch[k]) !== String(cur[k]))
     .filter((k) => !(k === 'penetration' && (patch.shuffleMode || cur.shuffleMode) === 'rounds') && !(k === 'shuffleEvery' && (patch.shuffleMode || cur.shuffleMode) !== 'rounds'));
-  if (!changes.length) { toast('Nothing changed.'); return; }
-  const summary = changes.map((k) => `${SETTING_NAMES[k][0]}: ${SETTING_NAMES[k][1](patch[k])}`);
+}
+// On the host: a settings change asked for by player `by` (the host or any seated player) starts a vote of everyone else.
+// Only known settings are taken from the patch, since it may come over the network.
+function hostPropose(by, patch) {
+  const t = S.table, clean = {};
+  for (const k of Object.keys(patch || {})) if (SETTING_NAMES[k]) clean[k] = patch[k];
+  if (clean.sideBets !== undefined) clean.sideBets = (Array.isArray(clean.sideBets) ? clean.sideBets : []).filter((k) => SIDE_BETS[k]).slice(0, 20);
+  clean.countTraining = false;
+  const changes = settingChanges(t.settings, clean);
+  if (!changes.length) return 'none';
+  if (by !== S.myId && !t.seatsOf(by).length && t.banker !== by) throw new Error('Take a seat to change the settings.');
+  const summary = changes.map((k) => `${SETTING_NAMES[k][0]}: ${SETTING_NAMES[k][1](clean[k])}`);
+  const id = t.proposeSettings(by, clean, summary);
+  if (!id) return 'saved';
+  S.voteEnds = Date.now() + VOTE_SECONDS * 1000;
+  setTimeout(() => hostDo((tb) => tb.expireVote(id)), VOTE_SECONDS * 1000);
+  return 'vote';
+}
+function proposeSettings(patch) {
+  if (S.role !== 'host') {
+    if (!settingChanges(S.state?.settings || {}, patch).length) { toast('Nothing changed.'); return; }
+    send({ t: 'propose', patch });
+    toast('Sent to the table for a vote.');
+    S.settingsKey = '';
+    return;
+  }
   hostDo((t) => {
-    const id = t.proposeSettings(S.myId, patch, summary);
-    if (id) {
-      S.voteEnds = Date.now() + VOTE_SECONDS * 1000;
-      setTimeout(() => hostDo((tb) => tb.expireVote(id)), VOTE_SECONDS * 1000);
-      toast('Sent to the table for a vote.');
-    } else toast(t.pendingSettings ? 'Saved. It starts when this hand ends.' : 'Settings saved.');
+    const r = hostPropose(S.myId, patch);
+    toast(r === 'none' ? 'Nothing changed.' : r === 'vote' ? 'Sent to the table for a vote.' : t.pendingSettings ? 'Saved. It starts when this hand ends.' : 'Settings saved.');
   });
   S.settingsKey = '';
 }

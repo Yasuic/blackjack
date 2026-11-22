@@ -1,10 +1,11 @@
 // The baccarat page: a punto banco table for up to 9 in the small meeting room. The host's browser runs
 // the table (js/baccarat.js); every other browser sends its bets there and is told only what it may see.
-import { BacTable, BAC_SEATS, BAC_SPOTS, BAC_KEYS, verifyShoe, cardText } from './baccarat.js?v=20261122h';
-import { webglOK, initRoom } from './room3d.js?v=20261122h';
-import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122h';
-import { params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML } from './common.js?v=20261122h';
+import { BacTable, BAC_SEATS, BAC_SPOTS, BAC_KEYS, verifyShoe, cardText } from './baccarat.js?v=20261122i';
+import { webglOK, initRoom } from './room3d.js?v=20261122i';
+import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122i';
+import { params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML } from './common.js?v=20261122i';
 
+import { shareHidden, startHold } from './vault.js?v=20261122i';
 const PREFIX = 'bjt-bc-';
 const app = $('#app');
 const S = { name: safeGet('bj-name') || '', myId: getClientId(), code: null, role: null, table: null, st: null, net: null, room: null,
@@ -66,14 +67,17 @@ function openHost(code) {
   S.net = createHost(PREFIX + code, {
     msg: hostMsg,
     people: () => S.presence || [],
+    piece: (id, piece) => S.hold?.add(piece),
     gone: (id) => { S.table?.disconnect(id); push(); },
     status: (text, ok) => { S.conn = [text, ok]; drawConn(); },
-    taken: () => { S.net.close(); clearInterval(S.clock); S.table = null; startGuest(code, true); },
+    taken: () => { S.hold = null; S.net.close(); clearInterval(S.clock); S.table = null; startGuest(code, true); },
   });
   clearInterval(S.clock);
   S.clock = setInterval(hostClock, 300);
 }
 function hostMsg(id, m) {
+  // A host change is being settled: note who came back and ask for their piece of the key (js/vault.js).
+  if (S.hold) { if (m.t === 'hello') { S.hold.hellos[id] = m; S.net.send(id, { t: 'piece-ask', kid: S.hold.kid }); } return; }
   const t = S.table;
   if (!t) return;
   try {
@@ -123,6 +127,8 @@ function push() {
   const t = S.table;
   if (!t) return;
   for (const id of S.net.ids()) S.net.send(id, { t: 'state', st: t.publicState(id) });
+  // The shoe and the cards nobody has seen go along locked, so the same shoe goes on if this browser leaves.
+  shareHidden(S, S.net, Object.values(t.players).filter((p) => p.id !== S.myId && p.seat >= 0 && p.connected && !p.kicked).map((p) => p.id), t.hidden());
   S.st = t.publicState(S.myId);
   S.at = Date.now();
   try { safeSet('bc-host', JSON.stringify({ code: S.code, table: { ...t, log: t.log.slice(-60) } })); } catch {}
@@ -175,15 +181,26 @@ function watchHost() {
 function takeOver() {
   const st = S.st;
   if (!st || S.role !== 'guest') return;
+  const kept = S.net.vault?.();
   try { S.net.close(); } catch {}
-  const t = BacTable.fromPublic(st, S.myId);
   const oldName = st.players.find((p) => p.id === st.hostId)?.name || 'The host';
-  t.join(S.myId, S.name, getLook());
-  t.addLog(`${oldName}'s browser left. The table now runs in ${S.name}'s browser. Chips and bets are kept, and a new shoe is shuffled.`);
-  S.role = 'host'; S.table = t; S.paused = false;
+  const hold = startHold(kept);
+  const finish = (text) => {
+    if (S.role !== 'host' || S.hold !== hold) return;
+    let t = null;
+    try { if (text) t = BacTable.fromHidden(JSON.parse(text), st, S.myId); } catch { t = null; }
+    const same = !!t;
+    if (!t) t = BacTable.fromPublic(st, S.myId);
+    t.join(S.myId, S.name, getLook());
+    for (const [id, m] of Object.entries(hold?.hellos || {})) { try { t.join(id, m.name, m.look); } catch {} }
+    t.addLog(`${oldName}'s browser left. The table now runs in ${S.name}'s browser. Chips and bets are kept, ${same ? 'and the same shoe goes on, card for card' : hold ? 'but too few players came back to open the old shoe, so a new shoe is shuffled' : 'and a new shoe is shuffled'}.`);
+    S.hold = null; S.vault = null; S.table = t; S.paused = false;
+    push();
+  };
+  S.role = 'host'; S.table = null; S.hold = hold;
   openHost(S.code);
   toast('The host left. The table now runs in your browser.');
-  push();
+  if (hold) hold.done.then(finish); else finish(null);
 }
 function sendSeed() {
   const c = S.st?.fair?.nextCommit;
@@ -191,6 +208,7 @@ function sendSeed() {
   if (S.net.send({ t: 'seed', seed: randomHex(16), commit: c })) S.seedFor = c;
 }
 function send(m) {
+  if (S.hold) { toast('One moment: the table is moving to your browser.'); return; }
   if (S.role === 'host') { try { doMove(S.myId, m); } catch (e) { toast(e.message); } push(); }
   else if (!S.net?.send(m)) toast('Not connected to the host right now.');
 }
