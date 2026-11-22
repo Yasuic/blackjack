@@ -282,7 +282,7 @@ body:not(.room3d) .pfelt.tall .bc-deal { top: 17%; }
 .bc-side.p b { color: #7fc4ff; } .bc-side.b b { color: #ff8f8f; }
 .bc-side.p { border-color: rgba(127,196,255,.55); } .bc-side.b { border-color: rgba(255,143,143,.55); }
 .bc-side.won { box-shadow: 0 0 calc(22px * var(--k)) rgba(255,214,110,.95); border-color: #ffd66e; }
-.bc-cards { display: flex; gap: calc(4px * var(--k)); min-height: calc(var(--cw) * 1.4); align-items: center; justify-content: center; }
+.bc-cards { display: flex; gap: calc(4px * var(--k)); min-height: calc(var(--cw) * 1.4 * var(--cardz, 1)); align-items: center; justify-content: center; }
 .bc-cards .card.third { transform: rotate(90deg); margin: 0 calc(var(--cw) * .2); }
 .bc-total { font: 800 calc(22px * var(--k)) "Space Grotesk", sans-serif; color: #fff6dc; min-height: 1.2em; line-height: 1.1; }
 .bc-result { left: 50%; top: 44%; white-space: nowrap; font: 800 calc(19px * var(--k)) "Space Grotesk", sans-serif; color: #1b1300; background: linear-gradient(#ffe9a6, #e8c46a); border: 2px solid #fff3c9; border-radius: 999px; padding: calc(4px * var(--k)) calc(18px * var(--k)); box-shadow: 0 6px 24px rgba(0,0,0,.6); z-index: 4; }
@@ -541,7 +541,7 @@ body.room-fp.room3d .pfelt:not(.tall) .pk-bubble { margin-bottom: calc(2px * var
 body.room-fp.room3d .felt.pfelt:not(.tall) { --k: 1.5; }
 
 /* Baccarat: a face down card that is peeled. The cover (card back) is cut away from the top left corner as it lifts. */
-.bc-peel { position: relative; width: var(--cw); height: calc(var(--cw) * 1.4); flex: none; touch-action: none; pointer-events: auto; }
+.bc-peel { position: relative; width: calc(var(--cw) * var(--cardz, 1)); height: calc(var(--cw) * 1.4 * var(--cardz, 1)); flex: none; touch-action: none; pointer-events: auto; }
 .bc-peel > .card { position: absolute; inset: 0; margin: 0; }
 .bc-peel .card.blank { background: #f3f1ea; border-radius: calc(var(--cw) * .09); }
 .bc-peel .card.cover { clip-path: polygon(calc(var(--f, 0) * 165%) 0, 100% 0, 100% 100%, 0 100%, 0 calc(var(--f, 0) * 120%)); filter: drop-shadow(-2px -2px 3px rgba(0,0,0,.5)); }
@@ -769,3 +769,42 @@ body:not(.room3d) .felt.pk-brawl { animation: pk-shake .16s 1.2s linear infinite
 @media (prefers-reduced-motion: reduce) { body:not(.room3d) .felt.pk-brawl { animation: none; } }
 .menu-head { padding: 8px 14px 4px; font: 800 11px Inter, system-ui, sans-serif; letter-spacing: .12em; text-transform: uppercase; color: #ffd27a; background: var(--panel); border-left: 1px solid var(--line); border-right: 1px solid var(--line); }
 .menu-note { padding: 8px 14px; font-size: 12px; color: #b9c2bd; background: var(--panel); border: 1px solid var(--line); border-top: none; }
+/* ---------- Top bar tools: card size, Session profit, volume ---------- */
+.tt-profit { font-weight: 600; white-space: nowrap; border-color: rgba(255,255,255,.16); }
+.tt-profit b { font-weight: 800; }
+.tt-profit.up b { color: #7ef0b6; } .tt-profit.down b { color: #ff8a8a; }
+.tt-size { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.tt-size .tt-ico { font-size: 18px; line-height: 1; opacity: .85; }
+.tt-size input { width: 96px; accent-color: #e8c46a; }
+body.no-cards .tt-size, body.no-cards .tt-pop .tt-row:first-child { display: none; }
+.tt-wrap { position: relative; }
+.tt-btn { min-width: 38px; }
+.tt-pop { position: absolute; right: 0; top: calc(100% + 8px); z-index: 80; width: 280px; max-width: 92vw; background: #121821; border: 1px solid rgba(255,255,255,.14); border-radius: 14px; padding: 12px 14px; box-shadow: 0 14px 40px rgba(0,0,0,.6); display: grid; gap: 8px; }
+.tt-pop[hidden] { display: none; }
+.tt-head { font: 800 11px Inter, system-ui, sans-serif; letter-spacing: .12em; text-transform: uppercase; color: #ffd27a; margin-top: 4px; }
+.tt-row { display: grid; grid-template-columns: 108px 1fr 40px; align-items: center; gap: 8px; font-size: 13px; color: #dfe6e2; }
+.tt-row input { width: 100%; accent-color: #e8c46a; }
+.tt-row b { text-align: right; font-variant-numeric: tabular-nums; color: #fff; }
+.tt-reset { justify-self: end; }
+button.tt-profit { cursor: pointer; font-family: inherit; color: inherit; background: rgba(255,255,255,.04); flex: none; }
+/* Blackjack keeps its Side bets and Ledger buttons over the bar, so its tools have a fixed place between them. */
+.tt-box { display: contents; }
+@media (min-width: 701px) { body.in-room .topbar .tt-box { position: absolute; left: 446px; top: 50%; transform: translateY(-50%); display: flex; align-items: center; gap: 10px; } }
+@media (max-width: 1240px) { .tt-size { display: none; } }
+@media (max-width: 1040px) { .tt-profit .tt-pl { display: none; } .tt-profit::before { content: 'P/L '; opacity: .7; } }
+@media (max-width: 700px) {
+  body.in-room .topbar .tt-profit { flex: none; overflow: visible; padding: 3px 7px; font-size: 11px; }
+  .tt-profit:not([hidden]) ~ .tt-wrap .tt-btn { display: none; }
+  .tt-wrap { position: static; }
+  .tt-btn { min-width: 32px; padding-left: 6px; padding-right: 6px; }
+  .tt-pop { position: fixed; left: 8px; right: 8px; top: calc(var(--topbar-h, 52px) + 4px); width: auto; max-width: none; }
+  body.in-room .topbar .game-switch { max-width: 112px; }
+  /* Room for the readout: the invite button is its picture only (the menu has the full invite link). */
+  body.in-room .topbar [data-act="copy"] { font-size: 0; padding: 6px 8px; }
+  body.in-room .topbar [data-act="copy"]::before { content: '🔗'; font-size: 14px; }
+}
+@media (max-width: 430px) { body.in-room .topbar .game-switch { max-width: 88px; min-width: 52px; flex: 0 1 88px; padding-left: 6px; padding-right: 2px; } body.in-room .topbar { gap: 4px; padding-left: 6px; padding-right: 6px; } body.in-room .topbar .btn.small { padding-left: 6px; padding-right: 6px; } body.in-room .topbar .tt-profit { padding: 3px 5px; } body.in-room .topbar .tt-profit::before { content: ''; } }
+.tt-sp { font-size: 14px; font-weight: 600; color: #dfe6e2; padding-bottom: 6px; border-bottom: 1px solid rgba(255,255,255,.1); }
+.tt-sp[hidden] { display: none; }
+.tt-sp b.up { color: #7ef0b6; } .tt-sp b.down { color: #ff8a8a; }
+body.no-cards .tt-pop .tt-row:first-child { display: grid; } body.no-cards .tt-pop .tt-row:first-of-type { display: none; }

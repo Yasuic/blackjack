@@ -1,14 +1,15 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261122e';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122e';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122e';
-import { tickSound, winSound } from './fx.js?v=20261122e';
-import * as HX from './history.js?v=20261122e';
-import { webglOK, initRoom } from './room3d.js?v=20261122e';
-import { watchOffice } from './common.js?v=20261122e';
-import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122e';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261122f';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122f';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122f';
+import { tickSound, winSound } from './fx.js?v=20261122f';
+import * as HX from './history.js?v=20261122f';
+import { webglOK, initRoom } from './room3d.js?v=20261122f';
+import { watchOffice } from './common.js?v=20261122f';
+import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122f';
+import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122f';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -1107,11 +1108,13 @@ function buildLayout() {
   const host = S.role === 'host';
   try { S.room?.stop(); } catch {}
   S.room = null;
+  initTopTools({ onChange: () => { try { render(); } catch { /* drawn again on the next change */ } } });
   document.body.classList.add('in-room');
   app.innerHTML = `
     <div class="topbar">
       <select class="game-switch" id="game-switch" title="Switch game" aria-label="Game"><option value="blackjack" selected>🃏 Blackjack</option><option value="poker">♠️ Poker</option><option value="baccarat">🎴 Baccarat</option><option value="roulette">🎡 Roulette</option></select>
       <span id="conn-pill" class="pill">Connecting</span>
+      <span class="tt-box">${topToolsHTML()}</span>
       <span class="spacer"></span>
       <button id="fair-pill" class="pill fair-pill" data-act="fair" title="How the shuffle is kept fair">🔐<span class="fp-t"> Provably fair</span></button>
       <button class="btn small gold" data-act="copy">🔗 Invite</button>
@@ -1467,6 +1470,7 @@ function renderLedger(st) {
   const box = $('#ledger');
   if (!box || !st.ledger) return;
   const net = (r) => r.chips - r.totalIn - (r.houseNet || 0); // hands against the house are left out
+  { const mine = st.ledger.find((r) => r.id === S.myId); setProfit(mine ? net(mine) : null); }
   const rows = st.ledger.slice().sort((a, b) => net(b) - net(a));
   const sumIn = rows.reduce((a, r) => a + r.totalIn, 0);
   const sumChips = rows.reduce((a, r) => a + r.chips, 0);
@@ -2013,7 +2017,7 @@ ${isBanker && st.settings.decks !== 'csm' ? `<button class="btn small gold" data
   computeOdds(st);
   // The dealer's cards: side by side while they fit, closer together when the hand grows. The total sits beside them.
   const laneW = box.phone ? (spots.find((p) => p.mode === 'focus')?.hw || box.W - 16) : 620;
-  const dcw = box.phone ? (box.H < 500 ? 46 : 52) : 66;
+  const dcw = Math.round((box.phone ? (box.H < 500 ? 46 : 52) : 66) * cardScale());
   const dn = Math.max(1, d.cards.length);
   const ddx = dn > 1 ? Math.max(FAN_DX, Math.min(0.86, ((box.phone ? laneW - 70 : 440) / dcw - 1) / (dn - 1))) : 0;
   const dW = Math.round(dcw * (1 + (dn - 1) * ddx));
@@ -2026,7 +2030,7 @@ ${isBanker && st.settings.decks !== 'csm' ? `<button class="btn small gold" data
       ${dealerSeat}
       <div class="dealer-hand">
         <div class="cards" style="width:${dW}px">${d.cards.map((c, i) => placed(cardHTML(c, true, `${r}-d-${i}`, [i, st.seats.length]), `left:${Math.round(i * ddx * dcw)}px`)).join('')}</div>
-        <div class="dealer-total">${dealerTotal}${S.fav === 'dealer' && !S.dealing ? ' <span class="fav-tag">Favourite</span>' : ''}</div>
+        <div class="dealer-total">${dealerTotal}${S.fav === 'dealer' && !S.dealing && hintsOn() ? ' <span class="fav-tag">Favourite</span>' : ''}</div>
       </div>
     </div>
     <div class="chip-tray" aria-hidden="true"></div><div class="discard-box" aria-hidden="true"></div>
@@ -2063,6 +2067,7 @@ function computeOdds(st) {
   if (any.length && any.every((o) => o.win < o.lose)) S.fav = 'dealer';
 }
 function oddsHTML(key) {
+  if (!hintsOn()) return ''; // win chances and the Favourite tag are hints too
   const o = S.odds?.[key];
   if (!o || S.dealing) return '';
   const pct = (x) => Math.round(x * 100) + '%';
@@ -2151,6 +2156,7 @@ function handsHTML(st, s, i, mode, W, H) {
   let best = null;
   // A seat on the arc with three or four hands: two rows, and the box grows toward the dealer (the
   // middle of the table is free), so the cards stay as large as with two hands.
+  const Z = cardScale(); // the player's own card size from the top bar slider
   const tall = mode === 'seat' && n > 2;
   // My own seats have the same circle as everyone's, but their cards may reach further toward the
   // dealer and be larger, as far as the width of the seat's lane allows.
@@ -2160,11 +2166,11 @@ function handsHTML(st, s, i, mode, W, H) {
   if (tall) H = H * 2 + 2;
   for (const rows of tall ? (n > 6 ? [2, 3] : [2]) : n > 2 ? [1, 2] : [1]) {
     const per = Math.ceil(n / rows), meta = rows > 1 ? B.meta1 : B.meta;
-    let cw = Math.min(B.cwMax, (H / rows - meta - 2) / 2.26);
+    let cw = Math.min(B.cwMax * Z, (H * Math.max(1, Z) / rows - meta - 2) / 2.26);
     for (let r = 0; r < rows; r++) {
       const u = units.slice(r * per, (r + 1) * per);
       if (!u.length) continue;
-      const room = W - (u.length - 1) * B.gap;
+      const room = W * Math.max(1, Z) - (u.length - 1) * B.gap;
       while (cw > 10 && u.reduce((a, x) => a + Math.max(x * cw, B.minW), 0) > room) cw -= 0.5;
     }
     if (!best || cw > best.cw + 1) best = { rows, per, cw, meta };
@@ -2327,7 +2333,8 @@ function pvpBtnHTML(st, seat) {
 }
 
 // The tray in the middle under the table: chips while betting, play buttons on your turn.
-function hintsOn() { return safeGet('bj-hints') !== '0'; }
+// Off unless the player turns it on. The key is new (it was 'bj-hints'), so an older saved 'on' starts off once too.
+function hintsOn() { return safeGet('bj-hints2') === '1'; }
 // Count training is off unless the host switches it on for the whole table in the settings.
 function trainingOn() { return !!S.state?.settings?.countTraining; }
 
@@ -3154,7 +3161,7 @@ function runAct(el) {
     case 'voice-mic': setMic(!V.mic); break;
     case 'voice-mute': V.muted[el.dataset.id] = !V.muted[el.dataset.id]; applyMutes(); drawVoice(); break;
     case 'chat-close': toggleChat(false); break;
-    case 'hints': safeSet('bj-hints', hintsOn() ? '0' : '1'); el.textContent = hintsOn() ? '💡 Strategy hints: on' : '💡 Strategy hints: off'; render(); break;
+    case 'hints': safeSet('bj-hints2', hintsOn() ? '0' : '1'); el.textContent = hintsOn() ? '💡 Strategy hints: on' : '💡 Strategy hints: off'; render(); break;
     case 'buyin-open': openBuyIn(); break;
     case 'ledger-toggle': { const l = $('#ledger'); l.classList.toggle('closed'); safeSet('bj-ledger', l.classList.contains('closed') ? '0' : '1'); renderLedger(S.state); break; }
     case 'buyin-answer': hostDo((t) => t.answerBuyIn(Number(el.dataset.id), el.dataset.yes === '1')); break;
@@ -3474,7 +3481,7 @@ function showHurry({ from, name, say }) {
   el.style.setProperty('--tilt', (Math.random() * 16 - 8).toFixed(1) + 'deg');
   document.body.appendChild(el);
   setTimeout(() => el.remove(), 1500);
-  if (say === 'bus' || say === 'split') shoutSound(say); else hitSound();
+  shoutSound(say);
 }
 // The Hurry up button stays right beside the Reactions button, wherever that is on this screen.
 function placeHurry() {

@@ -815,8 +815,8 @@ body.in-room .table-stage::after { display: none; }
 .lh-short { display: none; }
 
 /* ---------- Cards: rank over a small suit in the top-left corner, large suit lower right ---------- */
-.card { --w: var(--cw, 46px); width: var(--w); height: calc(var(--w) * 1.4); font-size: calc(var(--w) / 10); border-radius: .9em; padding: 0; display: block; overflow: hidden; }
-.card.big { --w: var(--cw, 66px); border-radius: .9em; padding: 0; }
+.card { --w: calc(var(--cw, 46px) * var(--cardz, 1)); width: var(--w); height: calc(var(--w) * 1.4); font-size: calc(var(--w) / 10); border-radius: .9em; padding: 0; display: block; overflow: hidden; }
+.card.big { --w: calc(var(--cw, 66px) * var(--cardz, 1)); border-radius: .9em; padding: 0; }
 .card .ix { position: absolute; left: .5em; top: .45em; width: 3.6em; display: flex; flex-direction: column; align-items: center; line-height: 1; }
 .card .rk { font-size: 3.7em; line-height: .92; letter-spacing: -.06em; }
 .card .rk.ten { letter-spacing: -.15em; margin-left: -.12em; }

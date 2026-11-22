@@ -1,9 +1,10 @@
 // The roulette page: a European roulette table for up to 9 in Nigel's room. The host's browser runs
 // the table (js/roulette.js); every other browser sends its bets there and is told only what it may see.
-import { RouTable, ROU_SEATS, WHEEL, colorOf, betNumbers, betName, betPays, verifySpin } from './roulette.js?v=20261122e';
-import { showSpin } from './wheel.js?v=20261122e';
-import { webglOK, initRoom } from './room3d.js?v=20261122e';
-import { params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML } from './common.js?v=20261122e';
+import { RouTable, ROU_SEATS, WHEEL, colorOf, betNumbers, betName, betPays, verifySpin } from './roulette.js?v=20261122f';
+import { showSpin } from './wheel.js?v=20261122f';
+import { webglOK, initRoom } from './room3d.js?v=20261122f';
+import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122f';
+import { params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML } from './common.js?v=20261122f';
 
 const PREFIX = 'bjt-ro-';
 const app = $('#app');
@@ -209,13 +210,15 @@ const FELT = () => {
   return { W, H: use3D() ? 640 : Math.max(380, Math.min(600, innerHeight - 56 - (S.hudH ? S.hudH + 16 : 235))) };
 };
 function showTable() {
-  document.body.classList.add('in-room');
+  initTopTools();
+  document.body.classList.add('in-room', 'no-cards');
   const d3 = use3D();
   app.innerHTML = `
     <div class="topbar">
       ${gameSwitchHTML('roulette')}
       <span id="conn-pill" class="pill">Connecting</span>
       <span class="spacer"></span>
+      ${topToolsHTML()}
       <button class="pill fair-pill" data-act="fair" title="How the spin is kept fair">🔐<span class="fp-t"> Fair spin</span></button>
       <button class="btn small gold" data-act="copy">🔗 Invite</button>
       <div class="menu-wrap" id="menu-wrap">
@@ -303,6 +306,8 @@ function render() {
   }
   const me = st.players.find((p) => p.id === S.myId);
   const turn = turning(st), done = st.phase === 'done', final = done && !turn;
+  // Session profit on the top bar: the player's own line of the ledger, held back like the chips while the result is still coming out.
+  setProfit(me ? (st.frozen && me.base ? Math.round((me.base.chips - me.base.totalIn) * 100) / 100 : Math.round((me.net - (me.chips - shownChips(st, me, turn))) * 100) / 100) : null);
   const win = final ? st.spin.n : null;
   const mine = (done ? (st.pays[S.myId] ? st.lastBets[S.myId] : null) : st.bets[S.myId]) || {};
   const tall = FELT().H > FELT().W;

@@ -1,5 +1,10 @@
 import assert from 'node:assert/strict';
 import * as G from '../js/game.js';
+// A new table's defaults (the person set these on 2026-11-22): shuffle at 65% used, every side bet offered, max bet 75, max side bet 10.
+{ const d = new G.Table({}).settings;
+  if (d.penetration !== 65 || d.maxBet !== 75 || d.maxSideBet !== 10 || d.sideBets.length !== G.SIDE_KEYS.filter((k) => k !== 'friendBust').length) throw new Error('new table defaults are wrong: ' + JSON.stringify([d.penetration, d.maxBet, d.maxSideBet, d.sideBets])); }
+// The tests below were written for wider limits and three side bets, so they set those themselves.
+Object.assign(G.DEFAULT_SETTINGS, { penetration: 85, maxBet: 1000, maxSideBet: 100, sideBets: ['hot3', 'bustIt', 'twentyOnePlus3'] });
 G.DEFAULT_SETTINGS.sideBets = G.SIDE_KEYS; // tests cover every side bet
 const c = (s) => ({ r: s.slice(0, -1), s: s.slice(-1) });
 const cs = (str) => str.split(' ').map(c);

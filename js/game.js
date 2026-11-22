@@ -8,12 +8,12 @@ export const DEFAULT_SETTINGS = {
   seats: 7,              // player seats at the table (any whole number from 1 up)
   decks: 8,              // 1, 2, 6, 8, 20, or 'csm' (randomized: full reshuffle before every round)
   shuffleMode: 'penetration', // 'penetration' or 'rounds'
-  penetration: 85,       // reshuffle once this % of the shoe has been dealt
+  penetration: 65,       // reshuffle once this % of the shoe has been dealt
   shuffleEvery: 5,       // or reshuffle every N rounds
   startChips: 1000,
   minBet: 10,
-  maxBet: 1000,
-  maxSideBet: 100,
+  maxBet: 75,
+  maxSideBet: 10,
   dealerHitsSoft17: false,
   countTraining: false,  // the host can switch the card count display on for the whole table
   blackjackPays: 1.5,    // 3:2
@@ -95,6 +95,8 @@ export const SIDE_BETS = {
   },
 };
 export const SIDE_KEYS = Object.keys(SIDE_BETS);
+// A new table offers every side bet (the host can untick any of them).
+DEFAULT_SETTINGS.sideBets = SIDE_KEYS.filter((k) => k !== 'friendBust');
 
 // ---------- Card helpers ----------
 export const cardValue = (c) => (c.r === 'A' ? 1 : ['J', 'Q', 'K'].includes(c.r) ? 10 : Number(c.r));

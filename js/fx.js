@@ -19,6 +19,38 @@ function audio() {
   if (ctx.state === 'suspended') ctx.resume();
   return ctx;
 }
+// ---------- Volume ----------
+// Every sound goes through one of three groups (game sounds, effects, horns) and then the main volume.
+// Each player sets these on their own screen; the browser remembers them.
+const VOL_KEY = 'bj-vol', VOL_DEF = { main: 100, game: 100, fx: 100, horn: 100 };
+let vol = { ...VOL_DEF }, grp = 'game', buses = null;
+try { const v = JSON.parse(localStorage.getItem(VOL_KEY) || '{}'); for (const k of Object.keys(VOL_DEF)) if (Number.isFinite(v[k])) vol[k] = Math.max(0, Math.min(100, v[k])); } catch { /* the defaults stay */ }
+const gainOf = (v) => (v / 100) ** 2; // the square makes the slider feel even to the ear
+function bus(ac) {
+  if (!buses || buses.ac !== ac) {
+    buses = { ac, main: ac.createGain() };
+    buses.main.connect(ac.destination);
+    for (const k of ['game', 'fx', 'horn']) { buses[k] = ac.createGain(); buses[k].connect(buses.main); }
+    for (const k of Object.keys(VOL_DEF)) buses[k].gain.value = gainOf(vol[k]);
+  }
+  return buses[grp] || buses.game;
+}
+export function getVolume() { return { ...vol }; }
+export function setVolume(key, value) {
+  if (!(key in VOL_DEF)) return;
+  vol[key] = Math.max(0, Math.min(100, Math.round(Number(value) || 0)));
+  if (buses) buses[key].gain.value = gainOf(vol[key]);
+  try { localStorage.setItem(VOL_KEY, JSON.stringify(vol)); } catch { /* not saved, still set for now */ }
+}
+// The punch after a bad beat in poker: knocks, in the effects group.
+export function punchSound() {
+  if (muted) return;
+  const ac = audio();
+  if (!ac) return;
+  grp = 'fx';
+  const t = ac.currentTime + 0.01;
+  knock(ac, t, 1); knock(ac, t + 0.09, 0.7);
+}
 // Browsers only allow sound after the first tap or click.
 window.addEventListener('pointerdown', () => audio(), { once: true });
 
@@ -34,7 +66,7 @@ function noise(ac) {
 // One clay chip landing on other chips: a hard click, two short ringing tones as a heavy clay chip makes,
 // and a soft thud from the cloth under the pile.
 function clack(ac, when, level = 1) {
-  const out = ac.destination, k = 0.9 + Math.random() * 0.25;
+  const out = bus(ac), k = 0.9 + Math.random() * 0.25;
   const src = ac.createBufferSource(); src.buffer = noise(ac);
   const bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 3000 * k; bp.Q.value = 2.2;
   const g = ac.createGain();
@@ -52,6 +84,7 @@ function clack(ac, when, level = 1) {
 }
 
 export function chipSound(count = 1) {
+  grp = 'game';
   if (muted) return;
   const ac = audio();
   if (!ac) return;
@@ -69,12 +102,13 @@ let lastCard = 0;
 // A dealt card: a very short paper slide, then a firm flat slap on the felt with a low thump under it.
 // (Made in the browser. Free sound files could not be fetched from the build machine.)
 export function cardSound() {
+  grp = 'game';
   if (muted) return;
   const ac = audio();
   if (!ac) return;
   const t = Math.max(ac.currentTime + 0.01, lastCard + 0.09);
   lastCard = t;
-  const out = ac.destination, vary = 0.92 + Math.random() * 0.16; // each card sounds a touch different
+  const out = bus(ac), vary = 0.92 + Math.random() * 0.16; // each card sounds a touch different
   // Slide: a quick whisper of paper.
   const slide = ac.createBufferSource(); slide.buffer = noise(ac);
   const bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 0.8;
@@ -109,7 +143,7 @@ function knock(ac, when, level) {
   g.gain.setValueAtTime(0.0001, when);
   g.gain.exponentialRampToValueAtTime(0.5 * level, when + 0.004);
   g.gain.exponentialRampToValueAtTime(0.0001, when + 0.12);
-  o.connect(g).connect(ac.destination);
+  o.connect(g).connect(bus(ac));
   o.start(when);
   o.stop(when + 0.13);
   const n = ac.createBufferSource();
@@ -121,12 +155,13 @@ function knock(ac, when, level) {
   ng.gain.setValueAtTime(0.0001, when);
   ng.gain.exponentialRampToValueAtTime(0.35 * level, when + 0.003);
   ng.gain.exponentialRampToValueAtTime(0.0001, when + 0.05);
-  n.connect(lp).connect(ng).connect(ac.destination);
+  n.connect(lp).connect(ng).connect(bus(ac));
   n.start(when, Math.random() * 0.3, 0.06);
 }
 
 // Hit: two taps on the table, the way players ask for a card.
 export function hitSound() {
+  grp = 'game';
   if (muted) return;
   const ac = audio();
   if (!ac) return;
@@ -137,6 +172,7 @@ export function hitSound() {
 
 // Stand: a soft wave of the hand, an airy sweep with a low settle at the end.
 export function standSound() {
+  grp = 'game';
   if (muted) return;
   const ac = audio();
   if (!ac) return;
@@ -153,7 +189,7 @@ export function standSound() {
   g.gain.setValueAtTime(0.0001, t);
   g.gain.exponentialRampToValueAtTime(0.22, t + 0.14);
   g.gain.exponentialRampToValueAtTime(0.0001, t + 0.36);
-  n.connect(bp).connect(g).connect(ac.destination);
+  n.connect(bp).connect(g).connect(bus(ac));
   n.start(t, 0, 0.4);
   const o = ac.createOscillator();
   o.type = 'triangle';
@@ -163,7 +199,7 @@ export function standSound() {
   og.gain.setValueAtTime(0.0001, t + 0.18);
   og.gain.exponentialRampToValueAtTime(0.06, t + 0.2);
   og.gain.exponentialRampToValueAtTime(0.0001, t + 0.45);
-  o.connect(og).connect(ac.destination);
+  o.connect(og).connect(bus(ac));
   o.start(t + 0.18);
   o.stop(t + 0.5);
 }
@@ -220,6 +256,7 @@ export function flyChip(from, to, value, delay = 0, sound = true) {
 
 // Short tick for the last seconds before your time runs out.
 export function tickSound(last = false) {
+  grp = 'game';
   if (muted) return;
   const ac = audio();
   if (!ac) return;
@@ -234,13 +271,14 @@ export function tickSound(last = false) {
   const f = ac.createBiquadFilter();
   f.type = 'lowpass';
   f.frequency.value = 3000;
-  o.connect(f).connect(g).connect(ac.destination);
+  o.connect(f).connect(g).connect(bus(ac));
   o.start(t);
   o.stop(t + 0.1);
 }
 
 // Your turn: two short soft notes, the second higher.
 export function turnSound() {
+  grp = 'game';
   if (muted) return;
   const ac = audio();
   if (!ac) return;
@@ -248,12 +286,13 @@ export function turnSound() {
     const t = ac.currentTime + 0.01 + at, o = ac.createOscillator(), g = ac.createGain();
     o.type = 'sine'; o.frequency.value = hz;
     g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.16, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
-    o.connect(g).connect(ac.destination); o.start(t); o.stop(t + 0.18);
+    o.connect(g).connect(bus(ac)); o.start(t); o.stop(t + 0.18);
   });
 }
 
 // Win: a bright rising chime (major arpeggio with a soft bell tone) and a shower of chips.
 export function winSound(big = false) {
+  grp = 'game';
   if (muted) return;
   const ac = audio();
   if (!ac) return;
@@ -269,7 +308,7 @@ export function winSound(big = false) {
       g.gain.setValueAtTime(0.0001, t);
       g.gain.exponentialRampToValueAtTime(lvl, t + 0.01);
       g.gain.exponentialRampToValueAtTime(0.0001, t + 0.9);
-      o.connect(g).connect(ac.destination);
+      o.connect(g).connect(bus(ac));
       o.start(t);
       o.stop(t + 1);
     }
@@ -287,7 +326,7 @@ function tone(ac, type, f0, f1, t, dur, level) {
   g.gain.setValueAtTime(0.0001, t);
   g.gain.exponentialRampToValueAtTime(level, t + 0.01);
   g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-  o.connect(g).connect(ac.destination);
+  o.connect(g).connect(bus(ac));
   o.start(t);
   o.stop(t + dur + 0.02);
   return o;
@@ -303,11 +342,12 @@ function burst(ac, t, dur, level, type, freq, q = 1) {
   g.gain.setValueAtTime(0.0001, t);
   g.gain.exponentialRampToValueAtTime(level, t + 0.005);
   g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-  n.connect(f).connect(g).connect(ac.destination);
+  n.connect(f).connect(g).connect(bus(ac));
   n.start(t, Math.random() * 0.2, dur + 0.02);
 }
 
 export function throwSound(item, stage) {
+  grp = 'fx';
   if (muted) return;
   const ac = audio();
   if (!ac) return;
@@ -356,7 +396,7 @@ export function throwSound(item, stage) {
       g.gain.exponentialRampToValueAtTime(0.35, t + 0.04);
       g.gain.setValueAtTime(0.3, t + 0.5);
       g.gain.exponentialRampToValueAtTime(0.0001, t + 0.75);
-      o.connect(lp).connect(g).connect(ac.destination);
+      o.connect(lp).connect(g).connect(bus(ac));
       o.start(t); lfo.start(t);
       o.stop(t + 0.8); lfo.stop(t + 0.8);
       tone(ac, 'sine', 800, 1600, t + 0.8, 0.15, 0.05);
@@ -386,6 +426,7 @@ export function throwSound(item, stage) {
 // A steady rolling hiss while the ball runs round the rim, clicks over the frets, and a last rattle into the pocket.
 // roll(speed): speed is the ball's turning speed in radians a second; the sound gets lower and softer as it slows.
 export function spinSound() {
+  grp = 'game';
   const ac = muted ? null : audio();
   if (!ac) return { roll() {}, click() {}, drop() {}, stop() {} };
   const src = ac.createBufferSource();
@@ -395,7 +436,7 @@ export function spinSound() {
   // The ball passes the listener once a turn, so the hiss swells and fades with each lap.
   const lfo = ac.createOscillator(), lg = ac.createGain(); lfo.frequency.value = 1.5; lg.gain.value = 0;
   lfo.connect(lg).connect(g.gain);
-  src.connect(bp).connect(g).connect(ac.destination);
+  src.connect(bp).connect(g).connect(bus(ac));
   src.start(); lfo.start();
   let dead = false, lastClick = 0;
   const end = () => { if (dead) return; dead = true; try { g.gain.cancelScheduledValues(ac.currentTime); g.gain.setTargetAtTime(0.0001, ac.currentTime, 0.05); src.stop(ac.currentTime + 0.3); lfo.stop(ac.currentTime + 0.3); } catch { /* already stopped */ } };
@@ -416,6 +457,7 @@ export function spinSound() {
 
 // Poker: you won the pot. Two bright bell notes going up, then the chips being pulled in. Our own sound.
 export function potSound() {
+  grp = 'game';
   if (muted) return;
   const ac = audio();
   if (!ac) return;
@@ -424,7 +466,7 @@ export function potSound() {
     for (const [mult, lvl, dur] of [[1, 0.2, 0.7], [2.0, 0.07, 0.4], [2.99, 0.035, 0.25], [4.2, 0.02, 0.15]]) {
       const o = ac.createOscillator(); o.type = 'sine'; o.frequency.value = f * mult;
       const g = ac.createGain(); g.gain.setValueAtTime(0.0001, t0 + d); g.gain.exponentialRampToValueAtTime(lvl, t0 + d + 0.006); g.gain.exponentialRampToValueAtTime(0.0001, t0 + d + dur);
-      o.connect(g).connect(ac.destination); o.start(t0 + d); o.stop(t0 + d + dur + 0.05);
+      o.connect(g).connect(bus(ac)); o.start(t0 + d); o.stop(t0 + d + dur + 0.05);
     }
   });
   for (let i = 0; i < 9; i++) clack(ac, t0 + 0.34 + i * 0.045 + Math.random() * 0.02, 0.55 - i * 0.03);
@@ -455,6 +497,7 @@ function hiss(ac, out, t, dur, level, type, f0, f1, q = 1) {
   n.connect(f).connect(g).connect(out); n.start(t); n.stop(t + dur + 0.02);
 }
 export function shoutSound(kind) {
+  grp = 'horn';
   if (muted) return;
   const ac = audio();
   if (!ac) return;
@@ -466,7 +509,8 @@ export function shoutSound(kind) {
   const lim = ac.createDynamicsCompressor();
   lim.threshold.value = -20; lim.ratio.value = 10; lim.attack.value = 0.003; lim.release.value = 0.12;
   const master = ac.createGain(); master.gain.value = 0.32;
-  out.connect(top).connect(lim).connect(master).connect(ac.destination);
+  out.connect(top).connect(lim).connect(master).connect(bus(ac));
+  if (kind !== 'bus' && kind !== 'split') { knock(ac, t, 1); knock(ac, t + 0.13, 0.8); return; }
   if (kind === 'bus') {
     // Two short horn toots and one longer one, with a soft whoop that climbs under the last.
     horn(ac, out, t, 0.09, 330, 0.3); horn(ac, out, t + 0.12, 0.09, 330, 0.3); horn(ac, out, t + 0.24, 0.34, 392, 0.34);

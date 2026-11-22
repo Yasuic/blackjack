@@ -1,8 +1,9 @@
 // The baccarat page: a punto banco table for up to 9 in the small meeting room. The host's browser runs
 // the table (js/baccarat.js); every other browser sends its bets there and is told only what it may see.
-import { BacTable, BAC_SEATS, BAC_SPOTS, BAC_KEYS, verifyShoe, cardText } from './baccarat.js?v=20261122e';
-import { webglOK, initRoom } from './room3d.js?v=20261122e';
-import { params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML } from './common.js?v=20261122e';
+import { BacTable, BAC_SEATS, BAC_SPOTS, BAC_KEYS, verifyShoe, cardText } from './baccarat.js?v=20261122f';
+import { webglOK, initRoom } from './room3d.js?v=20261122f';
+import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122f';
+import { params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML } from './common.js?v=20261122f';
 
 const PREFIX = 'bjt-bc-';
 const app = $('#app');
@@ -207,6 +208,7 @@ const FELT = () => {
   return { W, H: use3D() ? 640 : Math.max(400, Math.min(620, innerHeight - 56 - 250)) };
 };
 function showTable() {
+  initTopTools({ css: true });
   document.body.classList.add('in-room');
   const d3 = use3D();
   app.innerHTML = `
@@ -214,6 +216,7 @@ function showTable() {
       ${gameSwitchHTML('baccarat')}
       <span id="conn-pill" class="pill">Connecting</span>
       <span class="spacer"></span>
+      ${topToolsHTML()}
       <button class="pill fair-pill" data-act="fair" title="How the shoe is kept fair">🔐<span class="fp-t"> Fair shoe</span></button>
       <button class="btn small gold" data-act="copy">🔗 Invite</button>
       <div class="menu-wrap" id="menu-wrap">
@@ -294,6 +297,8 @@ function render() {
   }
   const me = st.players.find((p) => p.id === S.myId);
   const sg = stage(st), done = st.phase !== 'betting', final = st.phase === 'done';
+  // Session profit on the top bar: the player's own line of the ledger, held back like the chips while the result is still coming out.
+  setProfit(me ? (st.frozen && me.base ? Math.round((me.base.chips - me.base.totalIn) * 100) / 100 : Math.round((me.net - (me.chips - shownChips(st, me, sg?.final))) * 100) / 100) : null);
   if (S.peelRound !== st.round) { S.peelRound = st.round; S.peelF = {}; }
   const pl = st.peel;
   const hand = st.hand;

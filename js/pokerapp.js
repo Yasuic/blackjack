@@ -1,11 +1,12 @@
 // The poker page: a Texas Hold'em table for up to 9 in the big meeting room. The host's browser runs
 // the table (js/poker.js); every other browser sends its moves there and is told only what it may see.
-import { PokerTable, POKER_SEATS, pokerDeck, cardText } from './poker.js?v=20261122e';
-import { sha256 } from './game.js?v=20261122e';
-import { botMove, isBot, BOT_NAMES } from './pokerbot.js?v=20261122e';
-import { chipSound, cardSound, hitSound, standSound, potSound, tickSound, turnSound } from './fx.js?v=20261122e';
-import { webglOK, initRoom } from './room3d.js?v=20261122e';
-import { params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame } from './common.js?v=20261122e';
+import { PokerTable, POKER_SEATS, pokerDeck, cardText } from './poker.js?v=20261122f';
+import { sha256 } from './game.js?v=20261122f';
+import { botMove, isBot, BOT_NAMES } from './pokerbot.js?v=20261122f';
+import { chipSound, cardSound, hitSound, standSound, potSound, tickSound, turnSound, punchSound } from './fx.js?v=20261122f';
+import { webglOK, initRoom } from './room3d.js?v=20261122f';
+import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122f';
+import { params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame } from './common.js?v=20261122f';
 
 const PREFIX = 'bjt-pk-';
 const app = $('#app');
@@ -204,7 +205,7 @@ function showPunch(st) {
     el.className = 'pk-pow pk-stand'; el.textContent = words[n++ % words.length];
     el.style.left = Pb.x + (Math.random() * 14 - 7) + '%'; el.style.top = Pb.y + (Math.random() * 8 - 6) + '%'; el.style.setProperty('--rot', (Math.random() * 30 - 15).toFixed(0) + 'deg');
     box.append(el); setTimeout(() => el.remove(), 700);
-    try { hitSound(); if (n % 2) chipSound(2); } catch { /* sound is never worth an error */ }
+    try { punchSound(); } catch { /* sound is never worth an error */ }
     setTimeout(hit, 330);
   };
   setTimeout(hit, Math.round(ms * 0.26)); // the first hit comes when the walk round the table is over
@@ -361,6 +362,7 @@ const FELT = () => {
   return { W, H: use3D() ? 640 : Math.max(380, Math.min(640, innerHeight - 56 - 345)) };
 };
 function showTable() {
+  initTopTools({ css: true });
   document.body.classList.add('in-room');
   const d3 = use3D();
   app.innerHTML = `
@@ -368,6 +370,7 @@ function showTable() {
       ${gameSwitchHTML('poker')}
       <span id="conn-pill" class="pill">Connecting</span>
       <span class="spacer"></span>
+      ${topToolsHTML()}
       <button class="btn small" id="away-top" data-act="away" hidden title="Away: sit out the next hands">💺</button><button class="btn small primary" id="host-run" data-act="hostrun" hidden></button>
       <button class="pill fair-pill" data-act="fair" title="How the deck is kept fair">🔐<span class="fp-t"> Fair deck</span></button>
       <button class="btn small gold" data-act="copy">🔗 Invite</button>
@@ -623,6 +626,7 @@ function render() {
     return;
   }
   playSounds(st);
+  setProfit(st.ledger?.find((r) => r.id === S.myId)?.net ?? null);
   if (st.punch && S.punched !== st.punch.at) { S.punched = st.punch.at; if (st.punch.left > 400) showPunch(st); }
   const { mySeat, at, rel } = seatLayout(st);
   const ring = useRing(), plan = ring ? ringNow() : null;
