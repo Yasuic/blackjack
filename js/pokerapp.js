@@ -1,15 +1,15 @@
 // The poker page: a Texas Hold'em table for up to 9 in the big meeting room. The host's browser runs
 // the table (js/poker.js); every other browser sends its moves there and is told only what it may see.
-import { PokerTable, POKER_SEATS, pokerDeck, cardText } from './poker.js?v=20261122s';
-import { sha256 } from './game.js?v=20261122s';
-import { botMove, isBot, BOT_NAMES } from './pokerbot.js?v=20261122s';
-import { chipSound, cardSound, hitSound, standSound, potSound, tickSound, turnSound, punchSound } from './fx.js?v=20261122s';
-import { webglOK, initRoom } from './room3d.js?v=20261122s';
-import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122s';
-import { showDropped, params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML } from './common.js?v=20261122s';
+import { PokerTable, POKER_SEATS, pokerDeck, cardText } from './poker.js?v=20261122t';
+import { sha256 } from './game.js?v=20261122t';
+import { botMove, isBot, BOT_NAMES } from './pokerbot.js?v=20261122t';
+import { chipSound, cardSound, hitSound, standSound, potSound, tickSound, turnSound, punchSound } from './fx.js?v=20261122t';
+import { webglOK, initRoom } from './room3d.js?v=20261122t';
+import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122t';
+import { showDropped, params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML } from './common.js?v=20261122t';
 
-import { shareHidden, startHold } from './vault.js?v=20261122s';
-import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261122s';
+import { shareHidden, startHold } from './vault.js?v=20261122t';
+import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261122t';
 const PREFIX = 'bjt-pk-';
 // A settings change by vote (js/vote.js): any player at the table may ask, every other player at the table who is online has to say yes.
 const VOTE = {

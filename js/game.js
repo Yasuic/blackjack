@@ -1527,8 +1527,10 @@ export class Table {
         seat.returned += pay;
       }
       seat.net = seat.returned - seat.staked;
-      // Win streak, for the fire on a hot player's stack.
-      if (seat.net > 0) p.streak = (p.streak || 0) + 1; else if (seat.net < 0) p.streak = 0;
+      // Win streak, for the fire on a hot seat. Each seat keeps its own, so a player with several seats can have
+      // fire on every seat that is winning. The player's own count is the best of their seats (for the ledger snapshot).
+      if (seat.net > 0) seat.streak = (seat.streak || 0) + 1; else if (seat.net < 0) seat.streak = 0;
+      p.streak = Math.max(0, ...this.seats.filter((x) => x && x.playerId === p.id).map((x) => x.streak || 0));
       seat.ready = false;
     }
     // A player sitting as the dealer pays and collects everything.
@@ -1647,7 +1649,7 @@ export class Table {
           ready: s.ready,
           out: !!s.out,
           betSeq: s.betSeq || 0,
-          streak: this.players[s.playerId]?.streak || 0,
+          streak: s.streak || 0,
           insurance: s.insurance,
           insuranceDecided: s.insuranceDecided,
           sideResults: s.sideResults,
