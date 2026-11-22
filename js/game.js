@@ -1105,6 +1105,32 @@ export class Table {
     return this.dealer.cards.length === 2 && handTotal(this.dealer.cards).total === 21;
   }
 
+  // The table moved to another player's browser. A round that was being played is never called off and no bet
+  // goes back: every hand, bet and card on the table stays, and the round is played to its end from a new shoe.
+  // dealerSeen is what everyone could see of the dealer's hand (the up card, or all cards once turned over).
+  // The dealer's face down card was known to the old host alone, so it is dealt again from the new shoe. Once
+  // the dealer has looked for blackjack and had none, the new face down card cannot make blackjack either.
+  // Returns true when a round carries on.
+  resumeAfterMove(dealerSeen) {
+    const cards = (dealerSeen?.cards || []).filter((c) => c && c.r && c.s);
+    const live = this.inRound() && cards.length > 0 && this.seats.some((x) => x && x.hands.length);
+    this.newShoe();
+    if (!live) { this.phase = 'settled'; this.startBetting(); return false; } // no hand had started: bets not yet dealt go back to their players
+    const revealed = !!dealerSeen.revealed && cards.length >= 2;
+    this.dealer = { cards: revealed ? cards.map((c) => ({ r: c.r, s: c.s })) : [{ r: cards[0].r, s: cards[0].s }], revealed };
+    this.turn = null;
+    if (!revealed) {
+      const up = this.dealer.cards[0], looked = this.phase !== 'insurance' && (up.r === 'A' || cardValue(up) === 10);
+      this.drawHole();
+      for (let n = 0; looked && this.dealerHasBlackjack() && n < 500; n++) this.dealer.cards[1] = this.draw();
+    }
+    this.addLog('The table moved to a new host during a round. The round goes on with the same hands and bets; cards still to come are dealt from the new shoe.');
+    this.ev('round carried on after a host move', null, `round ${this.round}`);
+    if (this.phase === 'insurance') { if (this.allInsuranceDecided()) this.afterInsurance(); }
+    else if (this.phase === 'playing') this.advance();
+    return true;
+  }
+
   drawHole() {
     if (this.dealer.cards.length === 1) this.dealer.cards.push(this.draw());
   }

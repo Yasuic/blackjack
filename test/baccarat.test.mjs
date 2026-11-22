@@ -125,7 +125,35 @@ for (let bt = 0; bt <= 7; bt++) for (let v = 0; v <= 9; v++) {
   t.bet('p1', 'player', 10); t.deal(); ok(!t.peelTick(Date.now() + 700) || t.peel.open.B0, 'the clock turns only the side nobody peels');
   now = Date.now() + 13000; turns = 0; while (t.phase === 'peel' && turns < 20) { now += 13000; t.peelTick(now); turns++; } ok(t.phase === 'done', 'a slow peeler is timed out'); t.next();
   t.bet('p1', 'player', 10); const had = t.chipsTotal(); t.deal(); const m = BacTable.fromPublic(t.publicState('p2'), 'p2');
-  ok(m.phase === 'betting' && m.chipsTotal() === had && !Object.keys(m.bets).length, 'a table that moves during a peel calls the round off and returns the bets');
+  ok(m.phase === 'peel' && m.bets.p1?.player === 10 && m.chipsTotal() === t.chipsTotal(), 'a table that moves during a peel keeps the round and the bets');
+  BacTable.noPeel = true;
+}
+{ // A host move during the peel never calls the round off: bets stay, turned cards stay, the round is paid.
+  BacTable.noPeel = false;
+  let bad = 0, kept = 0, paid = 0, sums = 0, minePeel = 0;
+  for (let r = 0; r < 300; r++) {
+    const t = new BacTable({ startChips: 1000 });
+    for (const id of ['p0', 'p1', 'p2']) t.join(id, id.toUpperCase());
+    t.bet('p1', 'player', 40); t.bet('p2', 'banker', 30);
+    const total = t.chipsTotal();
+    t.deal();
+    // some cards are turned before the host is lost
+    const turns = r % 5;
+    for (let k = 0; k < turns && t.phase === 'peel'; k++) { const closed = t.peelKeys().filter((x) => !t.peel.open[x]); if (!closed.length) break; t.peel.open[closed[0]] = true; t.peelAdvance(); }
+    if (t.phase !== 'peel') continue;
+    const taker = r % 2 ? 'p1' : 'p2', st = JSON.parse(JSON.stringify(t.publicState(taker)));
+    const m = BacTable.fromPublic(st, taker);
+    if (m.phase !== 'peel' || m.bets.p1?.player !== 40 || m.bets.p2?.banker !== 30 || m.chipsTotal() !== total) bad++;
+    // every card that was face up before the move is the same card after it
+    for (const k of Object.keys(st.peel.open)) if (st.peel.open[k]) { const a = t.full[k[0]][Number(k[1])], b = m.full[k[0]][Number(k[1])]; if (b && a.r === b.r && a.s === b.s) kept++; else bad++; }
+    // the cards the new host was peeling are the same too
+    for (const [k, c] of Object.entries(st.peel.mine || {})) { const b = m.full[k[0]][Number(k[1])]; if (b && b.r === c.r && b.s === c.s) minePeel++; else bad++; }
+    let guard = 0;
+    while (m.phase === 'peel' && guard++ < 20) { for (const k of m.peelKeys()) m.peel.open[k] = true; m.peelAdvance(); }
+    if (m.phase === 'done' && m.pays.p1 && m.pays.p2) paid++; else bad++;
+    if (m.phase === 'done' && m.pays.p1.back === bacPay({ player: 40 }, m.hand).back && m.pays.p2.back === bacPay({ banker: 30 }, m.hand).back) sums++; else bad++;
+  }
+  ok(bad === 0 && paid > 100 && kept > 100 && minePeel > 50 && sums === paid, `a host move mid round keeps bets and turned cards and pays the round (${paid} rounds, ${kept} turned cards kept, ${minePeel} peeled cards kept, ${bad} wrong)`);
   BacTable.noPeel = true;
 }
 console.log(`${n - fails}/${n} baccarat checks passed`);

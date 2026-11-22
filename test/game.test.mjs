@@ -547,3 +547,53 @@ console.log('ok two seats');
   }
   console.log('ok resplit aces');
 }
+// A host move in the middle of a round: the round is never called off and no bet goes back.
+{
+  let carried = 0, bjAfterPeek = 0, changed = 0, settled = 0, sumOff = 0, betweenRounds = 0;
+  for (let r = 0; r < 1500; r++) {
+    const t = new G.Table({ decks: 6, seats: 3 });
+    const ids = ['a', 'b', 'c'];
+    ids.forEach((id, i) => { t.join(id, id); t.sit(id, i); });
+    t.join('bank', 'Bank'); t.sitDealer('bank');
+    for (const id of ids) t.setBet(id, { main: 20, sides: {}, ready: true });
+    if (t.phase === 'betting') t.deal();
+    const total = () => Object.values(t.players).reduce((n, p) => n + p.chips, 0) ;
+    // play a random part of the round
+    let steps = r % 4;
+    while (steps-- > 0 && t.phase === 'insurance') { const s = t.seats.find((x) => x && !x.insuranceDecided); if (s) { try { t.insurance(s.playerId, false); } catch { break; } } else break; }
+    steps = r % 3;
+    while (steps-- > 0 && t.phase === 'playing' && t.turn) { const id = t.seats[t.turn.seat].playerId; t.action(id, Math.random() < 0.5 ? 'stand' : 'hit'); }
+    const phase = t.phase;
+    if (!t.inRound()) { betweenRounds++; continue; }
+    // what the next host holds: the table without the shoe and without the face down card
+    const { shoe, shoeSize, fair, hist, evts, created, runCount, dealer, turn, pendingSettings, ...lite } = JSON.parse(JSON.stringify(t.toJSON()));
+    const seen = { revealed: !!dealer.revealed, cards: dealer.revealed ? dealer.cards : dealer.cards.slice(0, 1) };
+    const m = G.Table.fromJSON(lite);
+    for (const p of Object.values(m.players)) { p.connected = true; p.gone = false; }
+    const before = JSON.stringify(m.seats.map((x) => x && [x.bet, x.staked, x.hands.map((h) => [h.cards, h.bet, !!h.doubled])]));
+    const chipsBefore = Object.values(m.players).reduce((n, p) => n + p.chips, 0);
+    if (!m.resumeAfterMove(seen)) { changed++; continue; }
+    carried++;
+    // the hands and bets on the table are the same as before the move
+    if (phase !== 'dealer' && JSON.stringify(m.seats.map((x) => x && [x.bet, x.staked, x.hands.map((h) => [h.cards, h.bet, !!h.doubled])])) !== before) changed++;
+    if (Object.values(m.players).reduce((n, p) => n + p.chips, 0) !== chipsBefore) changed++; // no bet went back
+    const up = m.dealer.cards[0];
+    if (phase === 'playing' && (up.r === 'A' || ['10', 'J', 'Q', 'K'].includes(up.r)) && m.dealer.cards.length === 2 && G.handTotal(m.dealer.cards).total === 21) bjAfterPeek++;
+    // play the round out
+    let guard = 0;
+    while (m.inRound() && guard++ < 200) {
+      if (m.phase === 'insurance') { const s = m.seats.find((x) => x && x.hands.length && !x.insuranceDecided); if (s) m.insurance(s.playerId, false); else m.afterInsurance(); }
+      else if (m.phase === 'playing' && m.turn) m.action(m.seats[m.turn.seat].playerId, 'stand');
+      else if (m.phase === 'dealer') { while (m.dealerStep()) {} }
+    }
+    if (m.phase === 'settled' && m.seats.every((x) => !x || !x.hands.length || x.net !== null)) settled++;
+    // players against a player dealer: the chips at the table add up to the same number as before the round
+    if (Math.abs(Object.values(m.players).reduce((n, p) => n + p.chips, 0) - 4000) > 0.001) sumOff++;
+  }
+  assert.ok(carried > 1000, 'rounds carried on: ' + carried);
+  assert.equal(changed, 0, 'hands, bets and chips are untouched by the move');
+  assert.equal(bjAfterPeek, 0, 'no dealer blackjack after the dealer already looked');
+  assert.equal(settled, carried, 'every carried round is played to a result');
+  assert.equal(sumOff, 0, 'chips add up after the carried round');
+  console.log(`ok round carries on after a host move (${carried} rounds)`);
+}

@@ -1,15 +1,15 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261122f';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122f';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122f';
-import { tickSound, winSound } from './fx.js?v=20261122f';
-import * as HX from './history.js?v=20261122f';
-import { webglOK, initRoom } from './room3d.js?v=20261122f';
-import { watchOffice } from './common.js?v=20261122f';
-import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122f';
-import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122f';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261122g';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122g';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122g';
+import { tickSound, winSound } from './fx.js?v=20261122g';
+import * as HX from './history.js?v=20261122g';
+import { webglOK, initRoom } from './room3d.js?v=20261122g';
+import { watchOffice } from './common.js?v=20261122g';
+import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122g';
+import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122g';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -308,14 +308,16 @@ addEventListener('pagehide', saveHostNow);
 document.addEventListener('visibilitychange', () => { if (document.hidden) saveHostNow(); });
 
 // ---------- The table outlives its host ----------
-// Between rounds the host's browser sends every player a copy of the table as everyone can already
-// see it: seats, chips, buy-ins and settings. The shoe, the shuffle codes and the hand history are
+// After every change the host's browser sends every player a copy of the table as everyone can already
+// see it: seats, chips, buy-ins, settings, and during a round the hands and bets on the table (never the
+// dealer's face down card), so a round in play carries on after a host move. The shoe, the shuffle codes and the hand history are
 // left out. If the host's browser goes away, the next player's browser opens the table again from
 // that copy with a new shuffle, so nobody ever learns the order of the old shoe.
 function sendSnap() {
   const t = S.table;
-  if (!(t.phase === 'betting' || t.phase === 'settled')) return;
   const { shoe, shoeSize, fair, hist, evts, created, runCount, dealer, turn, pendingSettings, ...lite } = t.toJSON();
+  // What everyone can see of the dealer's hand goes along (never the face down card), so a round in play can carry on after a host move.
+  lite.dealerSeen = { revealed: !!dealer?.revealed, cards: dealer?.revealed ? dealer.cards : (dealer?.cards || []).slice(0, 1) };
   const order = Object.values(t.players).filter((p) => p.id !== S.myId && p.connected && !p.kicked).map((p) => p.id);
   const body = JSON.stringify({ order, table: lite, gen: S.gen || 0 });
   if (body === S.snapSent) return;
@@ -364,10 +366,13 @@ function maybeTakeOver() {
     for (const p of Object.values(table.players)) { p.connected = false; p.gone = false; }
     table.join(S.myId, S.name, S.buyIn, S.look);
     // The old host stays the dealer when they were the dealer: the dealer makes no choices, so the others can keep playing.
-    table.phase = 'settled'; table.startBetting(); // bets from a round that never finished go back
+    // A round in play is never called off: it carries on with the same hands and bets (resumeAfterMove).
+    // Only bets of a round that had not been dealt yet go back to their players.
+    const seen = snap?.table?.dealerSeen || (S.state?.dealer ? { revealed: !!S.state.dealer.revealed, cards: S.state.dealer.cards } : null);
+    delete table.dealerSeen;
     table.vote = null; table.hist = []; table.evts = []; table.created = null;
-    table.newShoe();
-    table.addLog(fresh ? `${S.name} opened the table.` : `The host left. ${S.name} is the host now. The shoe was shuffled again.${table.banker && table.banker === oldHost && table.players[oldHost] ? ` ${table.players[oldHost].name} is still the dealer.` : ''}`);
+    const carried = table.resumeAfterMove(seen);
+    table.addLog(fresh ? `${S.name} opened the table.` : `The host left. ${S.name} is the host now. The shoe was shuffled again.${carried ? ' The round in play goes on.' : ''}${table.banker && table.banker === oldHost && table.players[oldHost] ? ` ${table.players[oldHost].name} is still the dealer.` : ''}`);
     table.ev(fresh ? 'table opened with no host present' : 'host handoff: new host, new shuffle', S.myId);
     try { S.conn?.close(); } catch {}
     try { S.peer?.destroy(); } catch {}
@@ -376,6 +381,8 @@ function maybeTakeOver() {
     for (const c of S.probes || []) { try { c.close(); } catch {} } S.probes = [];
     sessDel('bj-join-' + S.code);
     startHost(true, { code: S.code, table, peer, gen: newGen });
+    // Players who do not come back to the new host in time get the usual away move, so the round always ends.
+    if (carried) for (const p of Object.values(table.players)) if (p.id !== S.myId && !p.connected && !p.kicked) awayClock(p.id);
     toast(fresh ? 'Nobody was hosting, so the table opened in your browser. You are the host: keep this tab open.' : 'The host left. You are the host now: keep this tab open.');
   });
 }

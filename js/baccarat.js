@@ -1,7 +1,7 @@
 // Baccarat (punto banco) for up to 9 players against the house. Pure rules: the host's browser owns one
 // BacTable and every bet goes through it. Nothing here touches the page or the network.
-import { sha256, fairShoe, MAX_CHIPS } from './game.js?v=20261122f';
-import { isFrozen, bankJoin, setBank, clearBank, bankGone, bankSettle, ledgerNet, ledgerSum, bankAdopt } from './bank.js?v=20261122f';
+import { sha256, fairShoe, MAX_CHIPS } from './game.js?v=20261122g';
+import { isFrozen, bankJoin, setBank, clearBank, bankGone, bankSettle, ledgerNet, ledgerSum, bankAdopt } from './bank.js?v=20261122g';
 
 export const BAC_SEATS = 9;
 export const BAC_DEFAULTS = {
@@ -319,10 +319,22 @@ export class BacTable {
     t.bankId = st.bankId || null; t.base = {}; t.roundFrozen = !!st.roundFrozen;
     for (const p of st.players) if (p.base) t.base[p.id] = { ...p.base };
     if (!('bankId' in st)) { t.base = null; bankAdopt(t); }
-    if (t.phase === 'peel') { // the face down cards were only in the old host's browser: the round is called off and every bet goes back
-      for (const id of Object.keys(t.bets)) if (t.players[id]) t.players[id].chips = r2(t.players[id].chips + t.staked(id));
-      t.bets = {}; t.phase = 'betting'; t.hand = null; t.round = Math.max(0, t.round - 1);
-      t.addLog('The table moved to a new host while cards were face down. That round is called off and the bets went back.');
+    if (t.phase === 'peel') {
+      // A round is never called off and no bet goes back. Cards already turned stay as they are, and so do the
+      // cards this player was peeling (their browser was told those). A card nobody but the old host had seen
+      // is dealt from the new shoe, which is as random as the card it replaces. The third card rules are
+      // applied again to the cards as they now are.
+      const view = st.hand || { P: [], B: [] }, mine = st.peel?.mine || {}, open = st.peel?.open || { P0: false, B0: false, P1: false, B1: false };
+      const known = (k) => mine[k] || (open[k] ? view[k[0]]?.[Number(k[1])] : null) || null;
+      t.newShoe();
+      const feed = ['P0', 'B0', 'P1', 'B1', ...['P2', 'B2'].filter((k) => k in open)].map(known);
+      t.full = bacRound(() => feed.shift() || t.draw());
+      const stage = t.full.P[2] || t.full.B[2] ? (st.peel?.stage === 2 ? 2 : 1) : 1;
+      t.peel = { stage, open: {}, who: { P: st.peel?.who?.P || null, B: st.peel?.who?.B || null }, at: Date.now(), last: Date.now() };
+      for (const k of ['P0', 'B0', 'P1', 'B1']) t.peel.open[k] = !!open[k];
+      if (stage === 2) { if (t.full.P[2]) t.peel.open.P2 = !!open.P2; if (t.full.B[2]) t.peel.open.B2 = !!open.B2; }
+      t.hand = null;
+      t.addLog('The table moved to a new host during a round. The round goes on with the same bets: cards already turned stay, and a card nobody had seen is dealt from the new shoe.');
     }
     if (t.canDeal()) t.betStart = Date.now();
     if (t.phase === 'done') t.doneAt = Date.now();
