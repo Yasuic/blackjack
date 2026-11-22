@@ -2986,8 +2986,8 @@ function renderSettings(st) {
       ${canShuffle ? `<button class="btn full" data-act="h-shuffle">${locked ? 'Shuffle before next hand' : 'Shuffle now'}</button>` : ''}
     </div>`, true)}
     ${fold('set-seats', '🪑 Seats', `<div class="settings-grid">
-      <label class="full">Seats at the table<input id="set-seats" type="number" min="1" step="1" inputmode="numeric" value="${s.seats}" ${dis} /></label>
-      <div class="hint full">Most casino tables have 7. Anyone at the table can change this, with no vote. Fewer seats than players: seats are taken from whoever holds the most first, then from the highest seat numbers. It happens between rounds.</div>
+      <label class="full">Seats at the table<input id="set-seats" type="number" min="1" step="1" inputmode="numeric" value="${s.seats}" ${S.role === 'host' ? dis : 'disabled'} /></label>
+      <div class="hint full">Most casino tables have 7. Only the host can change this, with no vote. Fewer seats than players: seats are taken from whoever holds the most first, then from the highest seat numbers. It happens between rounds.</div>
     </div>`, true)}
     ${fold('set-bets', '💵 Chips and bet limits', `<div class="settings-grid">
       <label>Starting chips<input id="set-start" type="number" min="1" value="${s.startChips}" ${dis} /></label>
@@ -3060,7 +3060,8 @@ function hostPropose(by, patch) {
   clean.countTraining = false;
   const changes = settingChanges(t.settings, clean);
   if (!changes.length) return 'none';
-  // The number of seats needs no vote: anyone at the table who may change settings sets it. It still waits for the round to end.
+  // The number of seats is the host's alone, with no vote. It still waits for the round to end.
+  if (changes.includes('seats') && by !== S.myId) throw new Error('Only the host can change the number of seats.');
   if (changes.includes('seats')) {
     t.addLog(`${t.players[by]?.name || 'A player'} set the table to ${clean.seats} seat${clean.seats > 1 ? 's' : ''}${t.inRound() ? ' (from the next round)' : ''}.`);
     t.applySettings({ seats: clean.seats });
@@ -3079,8 +3080,7 @@ function proposeSettings(patch) {
   if (S.role !== 'host') {
     if (!settingChanges(S.state?.settings || {}, patch).length) { toast('Nothing changed.'); return; }
     send({ t: 'propose', patch });
-    const ch = settingChanges(S.state?.settings || {}, patch);
-    toast(ch.length === 1 && ch[0] === 'seats' ? 'Seats changed. No vote needed.' : ch.includes('seats') ? 'Seats changed. The other changes go to a vote.' : 'Sent to the table for a vote.');
+    toast('Sent to the table for a vote.');
     S.settingsKey = '';
     return;
   }
