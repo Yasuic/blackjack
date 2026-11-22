@@ -1,8 +1,8 @@
 // Shared by the poker and baccarat pages: small helpers, the playing card picture, the game switch at the
 // top left, and the link between the host's browser and the players' browsers.
-import { openTable } from './shell.js?v=20261122zc';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122zc';
-import { cleanBox, cleanPiece } from './vault.js?v=20261122zc';
+import { openTable } from './shell.js?v=20261122zd';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122zd';
+import { cleanBox, cleanPiece } from './vault.js?v=20261122zd';
 export const params = new URLSearchParams(location.search);
 export const $ = (sel, el = document) => el.querySelector(sel);
 export function safeGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
@@ -48,9 +48,8 @@ export function gameSwitchHTML(current) {
 // The host of this table opens the other game's table when nobody has yet (open=1).
 export function gameUrl(game, code, isHost, from = null) {
   const q = new URLSearchParams();
-  // A blackjack table with this code exists only when the switch started from blackjack.
-  let fromBj = null; try { fromBj = sessionStorage.getItem('games-from-bj'); } catch {}
-  if (code && (game !== 'blackjack' || fromBj === code)) { q.set('room', code); q.set('go', '1'); if (isHost) q.set('open', '1'); }
+  // One office, one code: every table of it, blackjack too, opens under the same code when someone walks over.
+  if (code) { q.set('room', code); q.set('go', '1'); if (isHost) q.set('open', '1'); }
   if (from) q.set('from', from); // the room then walks you over from that table
   for (const k of ['peerhost', 'peerport', 'peerpath', 'peersecure', '3d', 'flat', 'roomdebug']) if (params.get(k)) q.set(k, params.get(k));
   const qs = q.toString();
@@ -92,7 +91,9 @@ export async function walkTo(current, g, url, code) {
   if (walking) return;
   walking = true;
   const name = GAMES[g]?.name || g;
-  walkCover(`Walking over to ${name}…`);
+  // In the 3D office you see the walk itself, so only a small note shows; elsewhere a cover says where you are going.
+  const walk3d = typeof window.__roomWalk === 'function' && !!document.querySelector('.room3d, body.room3d');
+  if (!walk3d) walkCover(`Walking over to ${name}…`);
   let amount = 0;
   const anyway = walkAnyway && walkAnyway.g === g && Date.now() - walkAnyway.t < 8000;
   if (cashOutFn && code && !anyway) {
@@ -108,6 +109,7 @@ export async function walkTo(current, g, url, code) {
   walkAnyway = null;
   if (amount > 0) safeSet(CARRY_KEY, JSON.stringify({ code, to: g, from: current, amount, cid: randomHex(6), t: Date.now() }));
   // Inside the office frame the new table is loaded behind this one and shown when ready; the link stays the same.
+  if (walk3d) { try { await window.__roomWalk(g); } catch { /* fine */ } openTable(url); return; }
   setTimeout(() => openTable(url), amount > 0 ? 250 : 120);
 }
 // The chips this browser carries to this table, if any (they are kept for 10 minutes).

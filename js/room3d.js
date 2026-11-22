@@ -218,7 +218,7 @@ function buildOffice(signText, midShift = 0, midScale = 1, skipRoom = null, live
     chrome: mk({ color: '#b9bec4', roughness: 0.25, metalness: 0.9 }),
     screen: mk({ color: '#0d0f12', roughness: 0.25, metalness: 0.2 }),
     // What the office screens show: the ARC Group logo, from the photo of it, lit like a screen that is on.
-    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261122zc'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
+    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261122zd'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
     dark: mk({ color: '#30353c', roughness: 0.6 }),
   };
   const group = new THREE.Group();
@@ -690,7 +690,11 @@ function buildOffice(signText, midShift = 0, midScale = 1, skipRoom = null, live
       cyl(0.07, 0.05, 0.05, 12, col('#e8e2d6'), 0.56, dy + 0.06, zN - 0.12, false); cyl(0.06, 0.06, 0.012, 12, col('#c9772e'), 0.56, dy + 0.09, zN - 0.12, false);
       for (let n = 0; n < 16; n++) { const x = (r3() - 0.5) * 1.3, z = zN - r3() * 0.5; if (Math.abs(x) < 0.26 && z > zN - 0.26) continue; const q = 0.035 + r3() * 0.03; box(q, q * 0.7, q, white, x, dy + q * 0.35, z, false, r3() * 3, r3() * 0.6); }
       [[0.34, 0.3, '#2f7fd1'], [0.4, 0.4, '#d13b3b'], [-0.36, 0.3, '#2aa66a'], [0.3, 0.46, '#e0a11b']].forEach(([x, z, c2], n) => { box(0.09, 0.03, 0.05, white, x, dy + 0.015, zN - z, false, n * 0.8); box(0.03, 0.031, 0.051, col(c2), x, dy + 0.0155, zN - z, false, n * 0.8); });
-      cyl(0.036, 0.03, 0.06, 12, col('#c8202a', 0.4), -0.34, dy + 0.03, zN - 0.12, false); box(0.006, 0.02, 0.006, col('#4b3621'), -0.34, dy + 0.068, zN - 0.12, false);
+      // A round red apple with a stem and a leaf, at the front left of the desk where it is easy to see.
+      emit((geoCache.apple ||= new THREE.SphereGeometry(0.042, 16, 12)), col('#c8202a', 0.35), at(-0.36, dy + 0.042, zN + 0.02), true);
+      box(0.007, 0.026, 0.007, col('#4b3621'), -0.36, dy + 0.092, zN + 0.02, false); box(0.028, 0.004, 0.014, col('#3f8f3a', 0.6), -0.347, dy + 0.098, zN + 0.02, false, 0.5);
+      // Her bottle of chili lime seasoning, always on the desk: a short clear bottle of red orange powder with a red cap and a green label.
+      { const bx = -0.5, bz = zN - 0.02; cyl(0.03, 0.03, 0.1, 14, col('#d9542b', 0.5), bx, dy + 0.05, bz); cyl(0.0305, 0.0305, 0.045, 14, col('#3a8f3e', 0.5), bx, dy + 0.055, bz, false); cyl(0.024, 0.03, 0.015, 14, col('#e8e4d8', 0.4), bx, dy + 0.107, bz, false); cyl(0.026, 0.026, 0.03, 14, col('#d3202a', 0.35), bx, dy + 0.13, bz, false); }
     }
     if (L.cars) { // tiny toy cars, parked in two tidy rows either side of the keyboard
       const tyre = col('#15171a', 0.9), glass = col('#cfe3ee', 0.3);
@@ -1011,7 +1015,7 @@ function buildStorefront() {
     lamp: lam('#c8161d', 0.6), bulb: lit('#ffe9a8'), red: lit('#c8161d'), gold: lit('#f4c542'), wood: lam('#7a5234', 0.35),
     glass: new THREE.MeshBasicMaterial({ color: '#dff3f7', transparent: true, opacity: 0.13, depthWrite: false }),
     awning: new THREE.MeshBasicMaterial({ map: canvasTexture(512, 64, (g, w, h) => { for (let i = 0; i < 16; i++) { g.fillStyle = i % 2 ? '#fff6e6' : '#f08a1c'; g.fillRect((i * w) / 16, 0, w / 16 + 1, h); } }), side: THREE.DoubleSide }),
-    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261122zc') }),
+    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261122zd') }),
     menu: new THREE.MeshBasicMaterial({ map: canvasTexture(256, 384, (g, w, h) => {
       g.fillStyle = '#c8161d'; g.fillRect(0, 0, w, h); g.fillStyle = '#f4c542'; g.fillRect(14, 14, w - 28, 44);
       const r = rng(11); g.fillStyle = '#fff3d6';
@@ -1636,6 +1640,13 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
   let walking = false;
   // The tour on joining: one fast walk round the whole office that ends in your own chair.
   let tour = null, tourW = 1;
+  // Walking between tables of the office. Leaving: the camera gets up and walks towards the other table; the
+  // pose where it stops is handed to that table's page, which starts from exactly there and walks on to its chair.
+  let walkOut = null, arrive = null;
+  const WALK_KEY = 'office-walk';
+  const poseTo = (P, T, into) => { const v = tmp2.copy(P).sub(T), r = v.length() || 1; into.t.copy(T); into.r = r; into.phi = Math.acos(Math.max(-1, Math.min(1, v.y / r))); into.theta = Math.atan2(v.x, v.z); into.yaw = 0; into.pitch = 0; };
+  const tmp2 = new THREE.Vector3();
+  const wrapPi = (x) => { while (x > Math.PI) x -= 2 * Math.PI; while (x < -Math.PI) x += 2 * Math.PI; return x; };
   const OFFC = new THREE.Vector3((ALL.x0 + ALL.x1) / 2, 150 * U, (ALL.z0 + ALL.z1) / 2);
   const ease = (x) => { x = Math.max(0, Math.min(1, x)); return x * x * (3 - 2 * x); };
   // The office is not a plain rectangle: beside the big board room, past the wall, is outdoors. Keep out of that corner too.
@@ -1984,7 +1995,24 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     }
     const k = 1 - Math.exp(-dt * rate);
     const settled = near(cur.theta, goal.theta, 2e-4) && near(cur.phi, goal.phi, 2e-4) && near(cur.r, goal.r, 0.05) && near(cur.yaw, goal.yaw, 2e-4) && near(cur.pitch, goal.pitch, 2e-4) && cur.t.distanceToSquared(goal.t) < 0.01;
-    if (tour) {
+    if (walkOut) {
+      const W = walkOut, q = Math.min(1, (now - W.t0) / W.ms), e = ease(q);
+      // From your chair up to standing height, then along the floor towards the other table, looking where you go.
+      const P = tmp.copy(W.P0).lerp(W.P1, e); P.y = W.P0.y + (W.P1.y - W.P0.y) * Math.min(1, e * 1.6);
+      const T = new THREE.Vector3().copy(W.T0).lerp(W.T1, e);
+      poseTo(P, T, cur); Object.assign(goal, { theta: cur.theta, phi: cur.phi, r: cur.r, yaw: 0, pitch: 0 }); goal.t.copy(cur.t);
+      dirty = Math.max(dirty, 2);
+      if (q >= 1 && !W.done) { W.done = true; W.res(); }
+    } else if (arrive) {
+      const A = arrive;
+      if (A.t0) {
+        const q = Math.min(1, (now - A.t0) / A.ms), e = ease(q), mix = (a, b) => a + (b - a) * e;
+        cur.theta = A.s.theta + wrapPi(goal.theta - A.s.theta) * e; cur.phi = mix(A.s.phi, goal.phi); cur.r = mix(A.s.r, goal.r); cur.yaw = goal.yaw * e; cur.pitch = goal.pitch * e;
+        cur.t.lerpVectors(A.s.t, goal.t, e);
+        if (q >= 1) arrive = null;
+      } else if (now - A.made > 15000) A.t0 = now; // shown or not, start after a while
+      dirty = Math.max(dirty, 2);
+    } else if (tour) {
       // Once round the office, looking in at its middle, then down into the chair for the last part.
       const q = Math.min(1, (now - tour.t0) / tour.ms), wv = ease((q - 0.5) / 0.5), mix = (a, b) => a + (b - a) * wv;
       tourW = wv;
@@ -2043,14 +2071,15 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     dirty--;
     posFor(cur, camera.position);
     // Never under the table top, the floor or outside the walls, whatever the numbers above say.
-    camera.position.y = Math.max(tour ? EYE + (120 * U - EYE) * tourW : seated ? 120 * U : EYE, Math.min(FLOOR + 7.5 * S, camera.position.y));
+    camera.position.y = Math.max(walkOut || arrive ? 120 * U : tour ? EYE + (120 * U - EYE) * tourW : seated ? 120 * U : EYE, Math.min(FLOOR + 7.5 * S, camera.position.y));
     const lim = ALL, ix = camera.position.x, iz = camera.position.z; // where the camera would be without the walls
-    if (tour) { keepIn(tmp.copy(camera.position)); camera.position.x += (tmp.x - camera.position.x) * (1 - tourW); camera.position.z += (tmp.z - camera.position.z) * (1 - tourW); }
+    if (walkOut || arrive) keepIn(camera.position);
+    else if (tour) { keepIn(tmp.copy(camera.position)); camera.position.x += (tmp.x - camera.position.x) * (1 - tourW); camera.position.z += (tmp.z - camera.position.z) * (1 - tourW); }
     else if (walking) keepIn(camera.position);
     else { camera.position.x = Math.max(lim.x0, Math.min(lim.x1, camera.position.x)); camera.position.z = Math.max(lim.z0, Math.min(lim.z1, camera.position.z)); }
     tmp.copy(cur.t).sub(camera.position);
     // At the table, a wall only stops the camera; the view keeps the direction it would have had, so it never swings round when the camera is held right over the point it looks at.
-    if (!tour && !walking) { tmp.x = cur.t.x - ix; tmp.z = cur.t.z - iz; }
+    if (!tour && !walking && !walkOut && !arrive) { tmp.x = cur.t.x - ix; tmp.z = cur.t.z - iz; }
     const yaw0 = Math.atan2(-tmp.x, -tmp.z), pitch0 = Math.atan2(tmp.y, Math.hypot(tmp.x, tmp.z));
     camera.rotation.set(Math.max(-1.5, Math.min(0.6, pitch0 + cur.pitch)), yaw0 + cur.yaw, 0, 'YXZ');
     // In your own chair you see your body, arms and stool when you look down, but no head in front of your eyes.
@@ -2099,7 +2128,9 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     }).catch(() => {});
   }
 
-  return {
+  // The game pages ask the room to walk you over to another table before the next table is opened.
+  window.__roomWalk = (g) => window.__roomApi?.leave(g) || Promise.resolve(false);
+  return window.__roomApi = {
     // The dealer stands on the far side. The page lays the felt out for them (dealer's cards nearest,
     // players across the top) and here it is turned half way round so it reads the right way up from there.
     setSide(s) {
@@ -2115,11 +2146,43 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     tour(ms = 2000, fromGame = null) {
       if (!homeFit || walking || matchMedia('(prefers-reduced-motion: reduce)').matches) return false;
       const F = fromGame && fromGame !== game && OTHER_TABLES[fromGame];
+      let w = null; try { w = JSON.parse(sessionStorage.getItem(WALK_KEY) || 'null'); sessionStorage.removeItem(WALK_KEY); } catch { w = null; }
+      if (F && w && w.to === game && Date.now() - w.at < 30000) {
+        // Start exactly where the walk from the other table stopped, then walk on to this chair once the page is shown.
+        const P = office.localToWorld(new THREE.Vector3(...w.p)), T = office.localToWorld(new THREE.Vector3(...w.t));
+        poseTo(P, T, cur);
+        arrive = { s: { theta: cur.theta, phi: cur.phi, r: cur.r, t: cur.t.clone() }, ms: Math.max(1600, ms), made: performance.now(), t0: null };
+        let framed = false; try { framed = window.parent !== window && !!window.parent.__office; } catch { framed = false; }
+        if (!framed) arrive.t0 = performance.now();
+        window.__officeShown = () => { if (arrive && !arrive.t0) arrive.t0 = performance.now(); touch(); };
+        touch();
+        return true;
+      }
       tour = { t0: performance.now(), ms, r: F ? 2.6 * S : Math.max(ALL.x1 - ALL.x0, ALL.z1 - ALL.z0) * 0.45, from: F ? office.localToWorld(new THREE.Vector3(-F.x, 0, -F.y)).setY(0) : null };
       touch();
       return true;
     },
-    touring: () => !!tour,
+    touring: () => !!tour || !!arrive,
+    // Get up and walk towards another table of the office. Resolves when the walk has gone far enough for the
+    // other table's page to take over; the pose is kept for it in this tab's session storage.
+    leave(toGame, ms = 1800) {
+      const T = OTHER_TABLES[toGame];
+      if (!T || toGame === game || matchMedia('(prefers-reduced-motion: reduce)').matches) return Promise.resolve(false);
+      tour = null; arrive = null;
+      const D = office.localToWorld(new THREE.Vector3(-T.x, 0, -T.y));
+      const P0 = posFor(cur, new THREE.Vector3()), here = new THREE.Vector3(goal.t.x, 0, goal.t.z);
+      const dir = new THREE.Vector3(D.x - here.x, 0, D.z - here.z), dist = dir.length() || 1; dir.divideScalar(dist);
+      const stop = here.clone().addScaledVector(dir, dist * 0.55);
+      const P1 = new THREE.Vector3(stop.x, EYE * 1.05, stop.z), T1 = new THREE.Vector3(D.x, 110 * U, D.z);
+      const T0 = cur.t.clone();
+      return new Promise((res) => {
+        walkOut = { t0: performance.now(), ms, P0, P1, T0, T1, res: () => {
+          try { sessionStorage.setItem(WALK_KEY, JSON.stringify({ to: toGame, at: Date.now(), p: office.worldToLocal(P1.clone()).toArray(), t: office.worldToLocal(T1.clone()).toArray() })); } catch { /* fine */ }
+          res(true);
+        } };
+        touch();
+      });
+    },
     // For tests: where the other tables' name tags are on the screen.
     tagsOnScreen() { const r = container.getBoundingClientRect(); camera.updateMatrixWorld(); return otherGroup.children.filter((sp) => sp.userData.go).map((sp) => { tmp.copy(sp.position).project(camera); return { go: sp.userData.go, x: Math.round(r.left + (tmp.x * 0.5 + 0.5) * r.width), y: Math.round(r.top + (-tmp.y * 0.5 + 0.5) * r.height), z: tmp.z }; }); },
     // For tests: put the camera at a point of the office plan (x, height, y in metres) looking at another.

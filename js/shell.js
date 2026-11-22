@@ -70,6 +70,7 @@ export function boot(game, start) {
     f.classList.remove('loading'); f.classList.add('on');
     const old = cur; cur = f; next = null;
     try { f.contentWindow.focus(); } catch { /* fine */ }
+    try { f.contentWindow.__officeShown?.(); } catch { /* fine */ }
     if (old) setTimeout(() => old.remove(), 500);
   };
   // A table is ready once its page has drawn something; the 3D room needs a little longer to settle.
@@ -77,9 +78,15 @@ export function boot(game, start) {
     const t0 = Date.now();
     const tick = () => {
       if (f !== next && f !== cur) return;
-      let ok = false;
-      try { const d = f.contentDocument; ok = d && d.readyState === 'complete' && d.querySelector('#app')?.children.length > 0; } catch { ok = true; }
-      if ((ok && Date.now() - t0 > 900) || Date.now() - t0 > 12000) show(f); else setTimeout(tick, 150);
+      let ok = false, waited = Date.now() - t0;
+      try {
+        const w = f.contentWindow, d = f.contentDocument;
+        // A 3D table is ready once it stands where the walk stopped (its arrival is set up); a flat page once it has drawn.
+        if (w.__officeShown) ok = true;
+        else if (w.__roomApi) ok = waited > 6000;
+        else ok = d && d.readyState === 'complete' && d.querySelector('#app')?.children.length > 0 && waited > (/[?&]from=/.test(w.location.search) && !d.body.classList.contains('room3d') && waited < 4000 ? 99999 : 900);
+      } catch { ok = true; }
+      if (ok || waited > 15000) show(f); else setTimeout(tick, 150);
     };
     f.addEventListener('load', () => setTimeout(tick, 150));
   };

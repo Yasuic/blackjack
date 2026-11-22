@@ -1,17 +1,17 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { outerLink } from './shell.js?v=20261122zc';
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe } from './game.js?v=20261122zc';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122zc';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122zc';
-import { tickSound, winSound } from './fx.js?v=20261122zc';
-import * as HX from './history.js?v=20261122zc';
-import { webglOK, initRoom } from './room3d.js?v=20261122zc';
-import { showDropped, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261122zc';
-import { makeVault, makeOpener, cleanBox, cleanPiece } from './vault.js?v=20261122zc';
-import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122zc';
-import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122zc';
+import { outerLink } from './shell.js?v=20261122zd';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe } from './game.js?v=20261122zd';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122zd';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122zd';
+import { tickSound, winSound } from './fx.js?v=20261122zd';
+import * as HX from './history.js?v=20261122zd';
+import { webglOK, initRoom } from './room3d.js?v=20261122zd';
+import { showDropped, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261122zd';
+import { makeVault, makeOpener, cleanBox, cleanPiece } from './vault.js?v=20261122zd';
+import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122zd';
+import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122zd';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -3796,6 +3796,16 @@ if (params.get('host') && safeGet('bj-host')) {
   let back = null;
   try { back = room && JSON.parse(sessGet('bj-join-' + room) || 'null'); } catch {}
   if (back && back.name && back.buyIn >= 1) startPlayer(room, back);
+  // Walked over from another table of the same office: sit straight down, and open the table if nobody has it yet.
+  else if (room && params.get('go') === '1' && S.name) {
+    let mine = null; try { mine = JSON.parse(safeGet('bj-host') || 'null'); } catch { mine = null; }
+    if (mine?.code === room) { showLanding(); startHost(true); } // your own table: open it again as it was
+    else {
+    const buy = Math.round(Number(safeGet('bj-buyin'))) || 1000;
+    if (params.get('from')) S.wantHostAt = Date.now();
+    startPlayer(room, { name: S.name, buyIn: buy >= 1 ? buy : 1000, look: readLook() });
+  }
+  }
   else showLanding();
 }
 
