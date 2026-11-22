@@ -2036,11 +2036,10 @@ function seatOrder(st) {
   const { me, isBanker } = myInfo(st);
   const n = st.seats.length;
   if (isBanker) return Array.from({ length: n }, (_, i) => i);
-  const center = Math.floor(n / 2);
-  const home = me ? me.home ?? me.seat : null;
-  const shift = home !== null && home !== undefined ? home - center : 0;
-  // First base (seat 1, dealt first) is on the dealer's left, which is the right side of the screen.
-  return Array.from({ length: n }, (_, pos) => (pos + shift + n) % n).reverse();
+  // Like a casino, on every screen: seat 1 (first base, dealt first) is on the dealer's left, which is the far
+  // right of the screen, and the numbers run right to left. The table is never turned to put your seat in the middle.
+  void me;
+  return Array.from({ length: n }, (_, pos) => pos).reverse();
 }
 
 // A seat on the felt, from the rim towards the dealer: name plate (who), betting circle with its ring
@@ -2167,7 +2166,10 @@ function seatSpots(st) {
   const box = feltBox();
   // The big middle seat is your own. Before you sit down it is simply the seat in the middle of the row.
   const home = me ? me.home ?? me.seat : null;
-  const mid = home !== null && home !== undefined && order.includes(home) ? order.indexOf(home) : order.length - 1 - Math.floor(order.length / 2);
+  // On a computer the arc is always centred on the middle seat, so every seat is at its real place. On a phone your
+  // own seat is still drawn large at the bottom; the others keep their order up the two sides.
+  const centre = order.length - 1 - Math.floor(order.length / 2);
+  const mid = box.phone && home !== null && home !== undefined && order.includes(home) ? order.indexOf(home) : centre;
   // The dealer looks at the table from the other side and has no seat there, so no seat is the big one.
   return { order, mid, box, spots: seatLayout(order.length, mid, { ...box, noFocus: box.flip || !box.phone }) };
 }
@@ -2440,7 +2442,7 @@ function seatHTML(st, s, i, focus, spot) {
   return `<div class="seat ${cls} ${many ? 'many' : ''} ${hot} ${isMe ? 'me' : ''} ${turn ? 'turn' : ''} ${inHand ? 'inhand' : ''} ${s.out ? 'out' : ''} ${s.connected ? '' : 'away'}" id="seat-${i}" ${place} ${mini || many ? 'title="Tap to see this seat large"' : ''}>
     ${hands}
     ${bets}
-    <div class="who" ${isMe ? '' : `data-throw-at="${s.playerId}" title="Tap to throw something at ${esc(s.name)}"`}><span class="name"><b class="sn" title="Seat ${i + 1}">${i + 1}</b>${s.streak >= 3 ? `<span class="fire">🔥</span>${s.streak} ` : ''}${s.playerId === st.hostId ? '♛ ' : ''}${esc(s.name)}${isMe ? ' (you)' : ''}${s.connected ? '' : ' (away)'}</span><span class="chips">${money(s.chips)}${net}</span>${ready}${isMe && st.banker?.id !== S.myId ? `<button class="seat-out-tag ${s.out ? 'on' : ''}" data-act="sit-out" data-seat="${i}" data-on="${s.out ? 0 : 1}" title="${s.out ? 'Play this seat again from the next round' : 'Skip rounds on this seat. You keep the seat, and a hand in play is still finished.'}">${s.out ? 'Sit in' : 'Sit out'}</button>` : ''}</div>
+    <div class="who" ${isMe ? '' : `data-throw-at="${s.playerId}" title="Tap to throw something at ${esc(s.name)}"`}><span class="name"><b class="sn" title="Seat ${i + 1}">${i + 1}</b>${s.streak >= 3 ? `<span class="fire">🔥</span>${s.streak} ` : ''}${s.playerId === st.hostId ? '♛ ' : ''}${esc(s.name)}${isMe ? ' (you)' : ''}${s.connected ? '' : ' (away)'}</span><span class="chips">${money(s.chips)}${net}</span>${ready}${isMe && st.banker?.id !== S.myId ? `<button class="seat-out-tag ${s.out ? 'on' : ''} ${Number(spot.x) > 60 && !spot.phone ? 'tl' : ''}" data-act="sit-out" data-seat="${i}" data-on="${s.out ? 0 : 1}" title="${s.out ? 'Play this seat again from the next round' : 'Skip rounds on this seat. You keep the seat, and a hand in play is still finished.'}">${s.out ? 'Sit in' : 'Sit out'}</button>` : ''}</div>
   </div>`;
 }
 
