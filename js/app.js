@@ -1454,9 +1454,10 @@ async function hostRounds(id = S.table.created?.id) {
   return list;
 }
 const scopeHTML = () => `<div class="hx-scope"><button class="seat-tab ${S.histScope !== 'shoe' ? 'on' : ''}" data-hx="scope" data-v="all">All hands</button><button class="seat-tab ${S.histScope === 'shoe' ? 'on' : ''}" data-hx="scope" data-v="shoe">Since last shuffle</button></div>`;
-// The small hand history panel at the left of the screen. Off until the host turns it on in the menu.
-// It only shows; rounds are saved and backed up whether it is on or off.
-const histOn = () => safeGet('bj-hist-panel') === '1';
+// The small hand history panel at the left of the screen. On for everyone by default on a computer (a phone
+// screen is too small, so there it starts off); anyone can turn it off with its × or in the menu.
+// It only shows finished rounds and the round in play as everyone sees it; rounds are saved either way.
+const histOn = () => { const v = safeGet('bj-hist-panel'); return v === '1' || (v !== '0' && innerWidth >= 700); };
 async function drawHistPanel(force) {
   let el = $('#hist-panel');
   if (!S.role || !histOn() || !S.state) { el?.remove(); S.histPanelN = null; return; }
