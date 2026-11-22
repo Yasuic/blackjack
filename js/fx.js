@@ -292,7 +292,8 @@ export function turnSound() {
 }
 
 // Win: a bright rising chime (major arpeggio with a soft bell tone) and a shower of chips.
-export function winSound(big = false) {
+// opts (roulette): level scales the loudness, pitch moves every note (0.75 is a fourth lower, softer to the ear), chips is how many chips land.
+export function winSound(big = false, { level = 1, pitch = 1, chips = big ? 8 : 5 } = {}) {
   grp = 'game';
   if (muted) return;
   const ac = audio();
@@ -304,17 +305,17 @@ export function winSound(big = false) {
     for (const [mult, lvl] of [[1, 0.16], [2, 0.05], [3.01, 0.025]]) {
       const o = ac.createOscillator();
       o.type = 'sine';
-      o.frequency.value = f * mult;
+      o.frequency.value = f * mult * pitch;
       const g = ac.createGain();
       g.gain.setValueAtTime(0.0001, t);
-      g.gain.exponentialRampToValueAtTime(lvl, t + 0.01);
+      g.gain.exponentialRampToValueAtTime(Math.max(0.0002, lvl * level), t + 0.01);
       g.gain.exponentialRampToValueAtTime(0.0001, t + 0.9);
       o.connect(g).connect(bus(ac));
       o.start(t);
       o.stop(t + 1);
     }
   });
-  setTimeout(() => chipSound(big ? 8 : 5), 260);
+  if (chips > 0) setTimeout(() => chipSound(chips), 260);
 }
 
 // ---------- Funny sounds for things thrown at players ----------

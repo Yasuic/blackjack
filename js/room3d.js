@@ -1079,7 +1079,8 @@ function buildStorefront() {
 // 'roulette' puts it in Nigel's room.
 // metres: how wide the felt is in the room (a blackjack felt is 1.61 m).
 // onGo(game): called when the player taps another game's table in the room.
-export function initRoom(container, feltEl, { phone, pixel = false, hud = null, size = null, game = 'blackjack', metres = 1.61, onGo = null } = {}) {
+// wheel: a roulette wheel lying on the felt ({ x, y } in percent of the felt, d its width in felt pixels); it gets a raised wooden bowl.
+export function initRoom(container, feltEl, { phone, pixel = false, hud = null, size = null, game = 'blackjack', metres = 1.61, onGo = null, wheel = null } = {}) {
   OVAL = game === 'poker';
   // The felt keeps the size and shape its own style sheet gives it, so the 3D table always matches the
   // flat one: the height and the rounded end are read from the page, not fixed here. On a phone the felt
@@ -1180,6 +1181,15 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
   body.castShadow = true; body.receiveShadow = true;
   scene.add(body);
 
+  // The roulette wheel's wooden bowl: a raised rim round the wheel that the page draws on the felt, with a brass edge.
+  if (wheel && wheel.d > 0) {
+    const R = wheel.d / 2, h = 0.05 * S, wx = (wheel.x / 100 - 0.5) * W, wz = (wheel.y / 100 - 0.5) * H;
+    const prof = [[R * 1.06, 0], [R * 1.07, h * 0.55], [R * 1.03, h], [R * 0.97, h * 1.02], [R * 0.93, h * 0.55], [R * 0.925, 2]].map(([r, y]) => new THREE.Vector2(r, y));
+    const bowlWood = std({ map: canvasTexture(256, 256, woodGrain('#7a4422', '#4a2410', '#a8693a', 11), [6, 1]), color: 0xffffff, roughness: 0.42, metalness: 0.05 });
+    add(new THREE.Mesh(new THREE.LatheGeometry(prof, 72), bowlWood), wx, 1, wz, true, true);
+    const lip = add(new THREE.Mesh(new THREE.TorusGeometry(R * 1.0, Math.max(1.5, R * 0.012), 6, 72), std({ color: 0xd2a850, roughness: 0.3, metalness: 0.85 })), wx, 1 + h * 1.01, wz);
+    lip.rotation.x = Math.PI / 2;
+  }
   // Pedestal legs.
   const darkWood = std(NEON ? { color: 0x16191f, roughness: 0.4, metalness: 0.5 } : { color: 0x4a2c18, roughness: 0.55, metalness: 0.05 });
   if (NEON) {
@@ -1728,7 +1738,7 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
       people.add(stoolGroup);
       for (const p of list) {
         let e, standing = false;
-        if (p.isDealer) { e = { x: 0, z: -H / 2, nx: 0, nz: -1 }; standing = true; }
+        if (p.isDealer) { e = { x: Number.isFinite(p.x) ? (p.x / 100 - 0.5) * W : 0, z: -H / 2, nx: 0, nz: -1 }; standing = true; } // a roulette croupier stands by the wheel (p.x)
         else if (p.seat === null || p.seat === undefined) continue;
         else { const i = spotsOf.findIndex((s) => s.seat === p.seat); if (i < 0) continue; e = pts[i]; }
         const fs = standing ? U : sc;
@@ -2344,6 +2354,8 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     // everybody is drawn, so nobody vanishes while you look at them from close by.
     const turned = Math.abs(cur.yaw) > 0.05 || Math.abs(cur.pitch) > 0.05 || cur.r < homeFit.r * 0.97;
     for (const f of others) { f.updateMatrixWorld(); f.visible = !seated || !!tour || turned || side === 'dealer' || (brawl && (f === brawl.a || f === brawl.b)) || !(low(f, 0.35) || edge(f)); }
+    // The other players' stools in front of you would be drawn as big shapes across the bottom of the screen: left out the same way.
+    if (stoolGroup && game === 'roulette') for (const st of stoolGroup.children) { if (st === myStool) continue; st.updateMatrixWorld(); const seat = st.children[0]; tmp.setFromMatrixPosition(seat.matrixWorld).project(camera); st.visible = !seated || !!tour || turned || side === 'dealer' || tmp.y > -0.55; }
     for (const r of racks) r.visible = true;
     if (myRack) myRack.visible = true;
     if (dbgCam) { camera.position.copy(office.localToWorld(dbgCam.p.clone())); camera.lookAt(office.localToWorld(dbgCam.t.clone())); }

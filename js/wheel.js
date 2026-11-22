@@ -47,7 +47,8 @@ export function wheelState(n, seed, t, T) {
   return { wheel, ball, r, lift, phase, T1, T2 };
 }
 
-function drawWheel(g, size, st, n, done) {
+// Paints the wheel with its ball. st: a wheelState, or { wheel } with ball null for a wheel with no ball on it.
+export function drawWheel(g, size, st, n, done) {
   const c = size / 2, R = size * 0.47;
   g.clearRect(0, 0, size, size);
   g.save(); g.translate(c, c);
@@ -83,6 +84,7 @@ function drawWheel(g, size, st, n, done) {
   gr.addColorStop(0, '#fff3c4'); gr.addColorStop(1, '#a8802f');
   g.fillStyle = gr; g.beginPath(); g.arc(0, 0, R * 0.11, 0, TAU); g.fill();
   g.restore();
+  if (st.ball === null || st.ball === undefined) { g.restore(); return; }
   // The ball, with a shadow that moves away from it while it is in the air.
   const bx = Math.sin(st.ball) * R * st.r, by = -Math.cos(st.ball) * R * st.r, br = R * 0.03 * (1 + st.lift * 0.5);
   g.fillStyle = 'rgba(0,0,0,.4)'; g.beginPath(); g.ellipse(bx + R * 0.012 + st.lift * R * 0.03, by + R * 0.014 + st.lift * R * 0.03, br, br * 0.85, 0, 0, TAU); g.fill();

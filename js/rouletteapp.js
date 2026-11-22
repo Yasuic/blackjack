@@ -2,7 +2,8 @@
 // the table (js/roulette.js); every other browser sends its bets there and is told only what it may see.
 import { outerLink } from './shell.js?v=20261122ze';
 import { RouTable, ROU_SEATS, WHEEL, colorOf, betNumbers, betName, betPays, verifySpin } from './roulette.js?v=20261122ze';
-import { showSpin } from './wheel.js?v=20261122ze';
+import { showSpin, drawWheel as paintWheel, wheelState } from './wheel.js?v=20261122ze';
+import { winSound } from './fx.js?v=20261122ze';
 import { webglOK, initRoom } from './room3d.js?v=20261122ze';
 import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122ze';
 import { showDropped, onOfficeBack, officeView, params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML } from './common.js?v=20261122ze';
@@ -290,7 +291,7 @@ function shareLink() {
 const FELT = () => {
   if (!phone()) return { W: 1240, H: 640 };
   const W = Math.max(300, Math.min(440, innerWidth - 20));
-  return { W, H: use3D() ? 640 : Math.max(380, Math.min(600, innerHeight - 56 - (S.hudH ? S.hudH + 16 : 235))) };
+  return { W, H: use3D() ? Math.round(Math.max(470, W * 1.22)) : Math.max(380, Math.min(600, innerHeight - 56 - (S.hudH ? S.hudH + 16 : 235))) };
 };
 function showTable() {
   initTopTools();
@@ -315,14 +316,14 @@ function showTable() {
     </div></div>`;
   const felt = $('#felt'), F = FELT();
   // The wheel has a layer of its own, so its turn is not cut short when the rest of the table redraws.
-  felt.innerHTML = '<div class="pk-body" id="pk-body"></div><div class="pk-body ro-layer" id="ro-layer"></div><div class="pk-body pk-fxs" id="pk-fx"></div>';
+  felt.innerHTML = '<div class="pk-body" id="pk-body"></div><div class="pk-body ro-layer" id="ro-layer"><div class="ro-bowl" id="ro-bowl"><canvas></canvas></div></div><div class="pk-body pk-fxs" id="pk-fx"></div>';
   felt.style.width = F.W + 'px'; felt.style.height = F.H + 'px';
   felt.classList.toggle('tall', F.H > F.W);
   S.reelFor = null;
   if (d3) {
     document.body.classList.add('room3d');
     try {
-      S.room = initRoom($('#room'), felt, { phone: phone(), pixel: safeGet('bj-pixel') === '1', hud: $('#hud3d'), size: F, game: 'roulette', onGo: (g) => goToGame('roulette', g, S.code || params.get('room'), S.role === 'host'), metres: F.H > F.W ? 1.3 : 2.0 });
+      S.room = initRoom($('#room'), felt, { phone: phone(), pixel: safeGet('bj-pixel') === '1', hud: $('#hud3d'), size: F, game: 'roulette', wheel: wheelGeo(F), onGo: (g) => goToGame('roulette', g, S.code || params.get('room'), S.role === 'host'), metres: F.H > F.W ? 1.3 : 2.0 });
       if (params.has('roomdebug')) window.__room = S.room;
       if (S.tourFor !== S.code) { S.tourFor = S.code; S.room.tour(params.get('from') ? 1500 : 2000, params.get('from')); }
     } catch (e) { console.error(e); S.room = null; document.body.classList.remove('room3d'); toast('The 3D room could not start on this device.'); }
@@ -340,7 +341,9 @@ function seatAt(seat) {
   const st = S.st, me = st?.players.find((p) => p.id === S.myId);
   const mine = me && me.seat >= 0 ? me.seat : 4;
   const rel = ((seat - mine + 4 + ROU_SEATS * 2) % ROU_SEATS) - 4;
-  return { x: 50 + rel * 10.5, y: 99, rel, plate: { x: 50 + rel * 10.5, y: S.room ? 92 : 76.5 } };
+  // On a long table the seats run along the layout, a little away from the wheel at the left end.
+  const x = FELT().H > FELT().W ? 50 + rel * 10.5 : 55 + rel * 9.6;
+  return { x, y: 99, rel, plate: { x, y: S.room ? 92 : 76.5 } };
 }
 // Whether the wheel is still turning for the spin on screen.
 function turning(st) {
@@ -348,32 +351,54 @@ function turning(st) {
   if (S.show?.round !== st.round) { S.show = { round: st.round, t0: Date.now() }; setTimeout(render, SPIN_MS() + 40); }
   return Date.now() - S.show.t0 < SPIN_MS();
 }
-// The wheel: a band of pockets in the order of a real wheel that runs past a marker and slows down on the number.
+// Where the wheel lies on the felt, as on a casino table: at the left end of a long table, next to the zero,
+// and at the top end of a phone's tall one. x and y in percent of the felt, d (its width) in pixels.
+function wheelGeo(F = FELT()) {
+  if (F.H > F.W) { const d = Math.round(Math.min(F.H * 0.2, F.W * 0.46)); return { x: 50, y: (F.H * 0.018 + d / 2) / F.H * 100, d }; }
+  return { x: 15.2, y: 35, d: 300 };
+}
+// The wheel on the table. While a spin is shown it turns and the ball runs, in step with the big wheel that pops up
+// (the same pure function of time, js/wheel.js); at rest the ball lies in the pocket of the last number.
 function drawWheel(st) {
-  const layer = $('#ro-layer');
-  if (!layer) return;
-  const key = st.phase === 'done' && st.spin ? 'r' + st.round : 'idle';
+  const bowl = $('#ro-bowl'), cv = bowl?.querySelector('canvas'), felt = $('#felt');
+  if (!cv || !felt) return;
+  const G = wheelGeo({ W: parseFloat(felt.style.width) || FELT().W, H: parseFloat(felt.style.height) || FELT().H });
+  bowl.style.left = G.x + '%'; bowl.style.top = G.y + '%'; bowl.style.width = bowl.style.height = G.d + 'px';
+  const px = Math.round(G.d * Math.min(2.5, Math.max(1.6, devicePixelRatio || 1)));
+  if (cv.width !== px) { cv.width = cv.height = px; S.reelFor = null; }
+  const last = st.history[st.history.length - 1];
+  const key = st.phase === 'done' && st.spin ? 'r' + st.round : 'idle' + last;
   if (S.reelFor === key) return;
   S.reelFor = key;
-  const cell = (n) => `<i class="${colorOf(n)}">${n}</i>`;
-  if (key === 'idle') {
-    const last = st.history[st.history.length - 1];
-    layer.innerHTML = `<div class="ro-wheel pk-stand idle"><div class="ro-band" style="transform:translateX(0)">${(last === undefined ? WHEEL.slice(0, 9) : [-4, -3, -2, -1, 0, 1, 2, 3, 4].map((d) => WHEEL[(WHEEL.indexOf(last) + d + 37) % 37])).map(cell).join('')}</div><span class="ro-mark"></span></div>`;
+  cancelAnimationFrame(S.wheelRaf);
+  const g = cv.getContext('2d'), T = SPIN_MS() / 1000;
+  if (key[0] === 'i') {
+    const r = S.rest && S.rest.n === last ? S.rest : { n: last, seed: 0 };
+    paintWheel(g, px, last === undefined ? { wheel: 0, ball: null } : wheelState(r.n, r.seed, T, T), last, false);
     return;
   }
-  const n = st.spin.n, at = WHEEL.indexOf(n), loops = 3;
+  const n = st.spin.n, seed = st.round;
+  S.rest = { n, seed };
   // The big wheel pops up on every screen for each spin; the ball stops on this number.
-  { const gone = Date.now() - (S.show?.t0 || Date.now()); if (gone < SPIN_MS()) showSpin({ n, seed: st.round, ms: SPIN_MS(), elapsed: gone }); }
-  const cells = [];
-  for (let k = 0; k < loops * 37 + at + 5; k++) cells.push(WHEEL[k % 37]);
-  layer.innerHTML = `<div class="ro-wheel pk-stand"><div class="ro-band" id="ro-band">${cells.map(cell).join('')}</div><span class="ro-mark"></span></div>`;
-  const band = $('#ro-band'), w = band.firstElementChild.offsetWidth || 44;
-  const target = -((loops * 37 + at) * w - 4 * w); // the winning pocket ends under the marker, which is over the fifth cell
-  const left = Math.max(0, SPIN_MS() - (Date.now() - (S.show?.t0 || Date.now())));
-  band.style.transform = 'translateX(0)';
-  void band.offsetWidth;
-  band.style.transition = left > 300 ? `transform ${left}ms cubic-bezier(.12,.62,.1,1)` : 'none';
-  band.style.transform = `translateX(${target}px)`;
+  const gone = Date.now() - (S.show?.t0 || Date.now());
+  if (gone < SPIN_MS()) showSpin({ n, seed, ms: SPIN_MS(), elapsed: gone });
+  const t0 = performance.now() - gone;
+  const frame = (now) => {
+    const t = Math.min(T, (now - t0) / 1000), w = wheelState(n, seed, t, T);
+    paintWheel(g, px, w, n, t >= w.T2);
+    if (t < T) S.wheelRaf = requestAnimationFrame(frame);
+  };
+  S.wheelRaf = requestAnimationFrame(frame);
+}
+// A win for this player: a short chime, a fuller one for a big win (a single number, or a large amount).
+function cheer(st) {
+  if (S.cheerFor === st.round || S.show?.round !== st.round) return;
+  S.cheerFor = st.round;
+  const pay = st.pays[S.myId];
+  if (!pay || !(pay.net > 0)) return;
+  // Quiet and in the middle range: the notes a fourth lower than blackjack's chime, and a few chips landing.
+  const big = pay.net >= 500 || (pay.wins || []).some((w) => /^n\d/.test(w.key));
+  winSound(big, { level: big ? 0.75 : 0.6, pitch: 0.75, chips: big ? 6 : 3 });
 }
 const numCell = (n) => `n${n}`;
 // While the wheel turns, a player's chips are shown as they were before the payout, so the number is not given away early.
@@ -399,31 +424,33 @@ function render() {
   const hit = (key) => final && betNumbers(key).includes(win);
   const cellBtn = (key, label, cls = '') => {
     const m = mine[key] || 0, all = !done && st.totals[key] ? st.totals[key] : 0;
-    return `<button class="ro-cell ${cls}${m || all ? ' has' : ''}${hit(key) ? ' won' : ''}${final && !hit(key) ? ' lost' : ''}" data-act="bet" data-spot="${key}">${label}${m ? `<span class="ro-mine">${money(m)}</span>` : all ? `<span class="ro-all">${money(all)}</span>` : ''}</button>`;
+    return `<button class="ro-cell ${cls}${m || all ? ' has' : ''}${hit(key) ? ' won' : ''}${final && !hit(key) ? ' lost' : ''}" data-act="bet" data-spot="${key}" title="${esc(betName(key))}"><b class="ro-lab">${label}</b>${m ? `<span class="ro-mine">${money(m)}</span>` : all ? `<span class="ro-all">${money(all)}</span>` : ''}</button>`;
   };
   const num = (n) => cellBtn(numCell(n), n, colorOf(n));
+  // The outside boxes, with a red and a black diamond as on a casino layout.
+  const dia = (c) => `<svg class="ro-dia" viewBox="0 0 44 22" preserveAspectRatio="none" aria-hidden="true"><path d="M22 1.5 42.5 11 22 20.5 1.5 11Z" fill="${c}" stroke="#fff" stroke-width="1.6" vector-effect="non-scaling-stroke"/></svg>`;
+  const outside = cellBtn('d1', '1st 12', 'out dz') + cellBtn('d2', '2nd 12', 'out dz') + cellBtn('d3', '3rd 12', 'out dz') +
+    cellBtn('low', '1 to 18', 'out ev') + cellBtn('even', 'EVEN', 'out ev') + cellBtn('red', dia('#c62f2f'), 'out ev') + cellBtn('black', dia('#121418'), 'out ev') + cellBtn('odd', 'ODD', 'out ev') + cellBtn('high', '19 to 36', 'out ev');
   let grid;
   if (!tall) {
-    // Lying down, as on a casino table: zero at the left, three rows of twelve, the columns' 2 to 1 at the right.
-    const rows = [3, 2, 1].map((r) => Array.from({ length: 12 }, (_, c) => num(c * 3 + r)).join('') + cellBtn('c' + r, '2 to 1', 'out')).join('');
-    grid = `<div class="ro-grid wide">${cellBtn('n0', 0, 'green zero')}${rows}
-      ${cellBtn('d1', '1st 12', 'out dz')}${cellBtn('d2', '2nd 12', 'out dz')}${cellBtn('d3', '3rd 12', 'out dz')}
-      ${cellBtn('low', '1 to 18', 'out ev')}${cellBtn('even', 'Even', 'out ev')}${cellBtn('red', '<i class="ro-dia"></i><span>Red</span>', 'out ev red')}${cellBtn('black', '<i class="ro-dia"></i><span>Black</span>', 'out ev black')}${cellBtn('odd', 'Odd', 'out ev')}${cellBtn('high', '19 to 36', 'out ev')}</div>`;
+    // Lying along the table from the wheel: the zero next to it, three rows of twelve with 1, 2, 3 nearest the zero,
+    // the columns' 2 to 1 at the far end, the dozens and the even money boxes along the players' side.
+    const rows = [3, 2, 1].map((r) => Array.from({ length: 12 }, (_, c) => num(c * 3 + r)).join('') + cellBtn('c' + r, '2 to 1', 'out col')).join('');
+    grid = `<div class="ro-grid wide">${cellBtn('n0', 0, 'green zero')}${rows}${outside}</div>`;
   } else {
-    // Upright for a phone: zero on top, twelve rows of three, dozens down the left side.
+    // A phone's tall table: the wheel at the top end, the zero under it, twelve rows of three down to the 2 to 1 boxes,
+    // and the dozens and the even money boxes down the left side.
     let rows = '';
     for (let r = 0; r < 12; r++) rows += num(r * 3 + 1) + num(r * 3 + 2) + num(r * 3 + 3);
-    grid = `<div class="ro-grid tallg">${cellBtn('n0', 0, 'green zero')}
-      ${cellBtn('d1', '1st 12', 'out dz d1')}${cellBtn('d2', '2nd 12', 'out dz d2')}${cellBtn('d3', '3rd 12', 'out dz d3')}
-      <div class="ro-nums">${rows}</div>
-      ${cellBtn('c1', '2 to 1', 'out col')}${cellBtn('c2', '2 to 1', 'out col')}${cellBtn('c3', '2 to 1', 'out col')}
-      <div class="ro-even">${cellBtn('low', '1 to 18', 'out ev')}${cellBtn('even', 'Even', 'out ev')}${cellBtn('red', '<i class="ro-dia"></i><span>Red</span>', 'out ev red')}${cellBtn('black', '<i class="ro-dia"></i><span>Black</span>', 'out ev black')}${cellBtn('odd', 'Odd', 'out ev')}${cellBtn('high', '19 to 36', 'out ev')}</div></div>`;
+    const felt = $('#felt'), FF = { W: parseFloat(felt?.style.width) || FELT().W, H: parseFloat(felt?.style.height) || FELT().H }, G = wheelGeo(FF);
+    grid = `<div class="ro-grid tallg" style="top:${(G.y + G.d / 2 / FF.H * 100 + 1.6).toFixed(2)}%">${cellBtn('n0', 0, 'green zero')}<div class="ro-nums">${rows}</div>${cellBtn('c1', '2 to 1', 'out col')}${cellBtn('c2', '2 to 1', 'out col')}${cellBtn('c3', '2 to 1', 'out col')}${outside}</div>`;
   }
   let h = grid;
   if (final) h += `<div class="ro-result pk-stand ${st.spin.color}"><b>${st.spin.n}</b><span>${st.spin.color === 'green' ? 'Zero' : st.spin.color[0].toUpperCase() + st.spin.color.slice(1)}${st.spin.n ? (st.spin.n % 2 ? ' · odd' : ' · even') : ''}</span></div>`;
   // The players along the near side (a flat phone table lists them under the table instead).
   const people = [], chips = [], stools = [];
   const flatPhone = tall && !S.room;
+  const listed = tall; // a tall table has no room for nine name plates in a row: the players are listed under it
   for (const p of st.players) {
     if (p.seat < 0) continue;
     const P = seatAt(p.seat), isMe = p.id === S.myId;
@@ -435,7 +462,7 @@ function render() {
     // The bet, and then the result, is a line inside the name plate, so it never covers a neighbour.
     const rdy = !pay && (st.ready || []).includes(p.id) ? ' ✓' : '';
     const tag = pay ? `<u class="${pay.net > 0 ? 'up' : pay.net < 0 ? 'down' : 'push'}">${pay.net > 0 ? '+' + money(pay.net) : pay.net < 0 ? '−' + money(-pay.net) : 'Even'}</u>` : staked ? `<u>Bet ${money(staked)}${rdy}</u>` : rdy ? '<u>✓</u>' : '';
-    if (!flatPhone) h += `<div class="pk-seat pk-stand ro-seat${isMe ? ' me' : ' far'}${pay && pay.net > 0 ? ' won' : ''}" style="left:${P.plate.x}%;top:${P.plate.y}%">
+    if (!listed) h += `<div class="pk-seat pk-stand ro-seat${isMe ? ' me' : ' far'}${pay && pay.net > 0 ? ' won' : ''}" style="left:${P.plate.x}%;top:${P.plate.y}%">
       ${bubble ? `<div class="pk-bubble ${bcls}">${bubble}</div>` : ''}
       <div class="pk-plate"><b>${esc(p.name)}</b>${isMe ? '<em>YOU</em>' : ''}${p.id === st.bankId ? '<em class="dl">DEALER</em>' : ''}<span>${money(shownChips(st, p, turn))}</span>${tag ? `<i class="bc-tag ro-tag">${tag}</i>` : ''}</div>
     </div>`;
@@ -446,17 +473,27 @@ function render() {
   }
   body.innerHTML = h;
   drawWheel(st);
+  if (final) cheer(st);
   S.presence = people.map((p) => ({ id: p.id, name: p.name, look: p.look, seat: p.seat, seats: p.seats }));
+  // The croupier stands across the table, between the wheel and the numbers.
+  people.push({ id: 'croupier', name: 'Croupier', look: { skin: 1, hair: 1 }, seat: null, seats: ROU_SEATS, isMe: false, isDealer: true, x: 31, bet: 0 });
   if (S.room) { S.room.setPeople(people, stools); S.room.setChips(chips); S.room.setOthers(S.others, S.views); }
-  drawHud(st, me, turn, flatPhone);
+  drawHud(st, me, turn, flatPhone, listed);
   drawMenu(st);
+  // The first view of the room is fitted before the buttons at the bottom are drawn: once they are, sit down again,
+  // so the table and the name plates stay above them.
+  if (S.room && !S.homed) {
+    S.homed = true;
+    const again = () => { if (!S.room) return; if (S.room.touring?.()) { setTimeout(again, 400); return; } S.room.home(); };
+    setTimeout(again, 300);
+  }
 }
 function lastHTML(st, turn) {
   const list = st.history.slice(-(phone() ? 12 : 18));
   if (turn) list.pop(); // the spin in play is not written before the wheel stops
   return `<div class="ro-last" title="The last numbers, newest at the right">${list.map((n) => `<i class="${colorOf(n)}">${n}</i>`).join('') || '<span>No spins yet</span>'}</div>`;
 }
-function drawHud(st, me, turn, flatPhone) {
+function drawHud(st, me, turn, flatPhone, listed) {
   const tray = $('#tray'), top = $('#hud-top');
   const isHost = S.role === 'host', done = st.phase === 'done';
   const staked = st.bets[S.myId] ? Object.values(st.bets[S.myId]).reduce((a, x) => a + x, 0) : 0;
@@ -473,7 +510,7 @@ function drawHud(st, me, turn, flatPhone) {
   if (st.bankId === S.myId && !done) status = st.betLeft !== null ? `You are the dealer · <b id="bc-left">${Math.max(0, Math.ceil((st.betLeft - (Date.now() - S.at)) / 1000))}</b> s` : 'You are the dealer. You pay the winners and take the losing bets.';
   top.innerHTML = `${bankBarHTML(st, S.myId, isHost)}<div class="status">${status}</div>`;
   let h = '';
-  if (flatPhone) h += `<div class="ro-people">${st.players.filter((p) => p.seat >= 0).map((p) => { const pay = done && !turn ? st.pays[p.id] : null; return `<span class="${p.id === S.myId ? 'me' : ''}${p.connected ? '' : ' off'}">${esc(p.name)} <b>${money(shownChips(st, p, turn))}</b>${pay ? `<em class="${pay.net > 0 ? 'up' : pay.net < 0 ? 'down' : ''}">${pay.net > 0 ? '+' : pay.net < 0 ? '−' : ''}${money(Math.abs(pay.net))}</em>` : ''}</span>`; }).join('')}</div>`;
+  if (listed) h += `<div class="ro-people">${st.players.filter((p) => p.seat >= 0).map((p) => { const pay = done && !turn ? st.pays[p.id] : null; return `<span class="${p.id === S.myId ? 'me' : ''}${p.connected ? '' : ' off'}">${esc(p.name)} <b>${money(shownChips(st, p, turn))}</b>${pay ? `<em class="${pay.net > 0 ? 'up' : pay.net < 0 ? 'down' : ''}">${pay.net > 0 ? '+' : pay.net < 0 ? '−' : ''}${money(Math.abs(pay.net))}</em>` : ''}</span>`; }).join('')}</div>`;
   h += lastHTML(st, turn);
   if (S.room) h += spinBtn('ro-spin');
   h += `<div class="bc-chips">${CHIPS.map((v) => `<button class="bc-chip c${v}${S.chip === v ? ' on' : ''}" data-act="chip" data-v="${v}">${v}</button>`).join('')}</div>`;
@@ -611,7 +648,7 @@ setInterval(() => {
 }, 250);
 let resizeT;
 addEventListener('resize', () => { clearTimeout(resizeT); resizeT = setTimeout(() => { S.reelFor = null; render(); }, 200); });
-void cardHTML; void betName; void betPays;
+void cardHTML; void betPays;
 
 // ---------- Start ----------
 (function boot() {

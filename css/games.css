@@ -344,60 +344,7 @@ body.room3d .pfelt:not(.tall) .bc-result { top: 52%; }
 body.room3d .pfelt:not(.tall) .bc-spots { top: 55%; left: 19%; right: 19%; }
 body.room3d .pfelt:not(.tall) .bc-spot b { font-size: calc(15px * var(--k)); }
 
-/* ---------- Roulette felt: a rectangle with the numbers laid out as on a casino table ---------- */
-.felt.pfelt.rfelt { border-radius: 26px 26px 12% 12% / 26px 26px 9% 9% !important; background: radial-gradient(ellipse at 50% 40%, #1c7a4a 0%, #0f5733 62%, #093c23 100%); }
-.felt.pfelt.rfelt::before, .felt.pfelt.rfelt::after { border-radius: 18px !important; }
 .ro-hero { display: inline-flex; align-items: center; justify-content: center; width: 96px; height: 96px; border-radius: 50%; background: #111; color: #fff; font: 800 44px "Space Grotesk", sans-serif; border: 6px solid var(--gold); box-shadow: 0 8px 30px rgba(0,0,0,.5); }
-.ro-layer { pointer-events: none; z-index: 2 !important; }
-.ro-wheel { left: 50%; top: 15%; width: calc(9 * 46px * var(--k)); height: calc(46px * var(--k)); overflow: hidden; border-radius: calc(10px * var(--k)); border: calc(3px * var(--k)) solid var(--gold); background: #0a0d12; box-shadow: 0 6px 22px rgba(0,0,0,.6); }
-body:not(.room3d) .ro-wheel, body:not(.room3d) .ro-result { transform: translate(-50%, -50%); }
-body:not(.room3d) .ro-wheel { top: 11%; }
-.pfelt.tall .ro-wheel { width: calc(9 * 36px); height: 36px; top: 15%; }
-body:not(.room3d) .pfelt.tall .ro-wheel { top: 6%; }
-.ro-band { display: flex; height: 100%; will-change: transform; }
-.ro-band i, .ro-last i { font-style: normal; display: flex; align-items: center; justify-content: center; color: #fff; font-family: "Space Grotesk", sans-serif; font-weight: 800; }
-.ro-band i { flex: none; width: calc(46px * var(--k)); font-size: calc(19px * var(--k)); border-right: 1px solid rgba(255,255,255,.18); box-sizing: border-box; }
-.pfelt.tall .ro-band i { width: 36px; font-size: 16px; }
-.ro-band i.red, .ro-last i.red, .ro-n.red, .ro-cell.red { background: #c62f2f; }
-.ro-band i.black, .ro-last i.black, .ro-n.black, .ro-cell.black { background: #17191f; }
-.ro-band i.green, .ro-last i.green, .ro-n.green, .ro-cell.green { background: #1f9a4d; }
-.ro-mark { position: absolute; left: 50%; top: 0; bottom: 0; width: calc(46px * var(--k)); margin-left: calc(-23px * var(--k)); border: calc(3px * var(--k)) solid #ffe08a; border-radius: calc(6px * var(--k)); box-shadow: 0 0 calc(14px * var(--k)) rgba(255,224,138,.9); box-sizing: border-box; pointer-events: none; }
-.pfelt.tall .ro-mark { width: 36px; margin-left: -18px; border-width: 3px; }
-.ro-result { left: 50%; top: 26%; display: flex; align-items: center; gap: calc(10px * var(--k)); padding: calc(4px * var(--k)) calc(16px * var(--k)) calc(4px * var(--k)) calc(6px * var(--k)); border-radius: 999px; background: rgba(8,10,14,.92); border: calc(2px * var(--k)) solid #ffe08a; box-shadow: 0 6px 24px rgba(0,0,0,.6); white-space: nowrap; z-index: 4; }
-.ro-result b { display: flex; align-items: center; justify-content: center; width: calc(46px * var(--k)); height: calc(46px * var(--k)); border-radius: 50%; color: #fff; font: 800 calc(24px * var(--k)) "Space Grotesk", sans-serif; }
-.ro-result.red b { background: #c62f2f; } .ro-result.black b { background: #17191f; border: 2px solid #777; } .ro-result.green b { background: #1f9a4d; }
-.ro-result span { color: #fff6dc; font: 700 calc(15px * var(--k)) "Space Grotesk", sans-serif; }
-body:not(.room3d) .ro-result { top: 20%; }
-body:not(.room3d) .pfelt.tall .ro-result { display: none; } /* the line under the table says the number there */
-.pfelt.tall .ro-result b { width: 38px; height: 38px; font-size: 20px; } .pfelt.tall .ro-result span { font-size: 13px; }
-/* The betting layout. */
-.ro-grid { pointer-events: auto; display: grid; gap: calc(3px * var(--k)); }
-.ro-grid.wide { left: 9%; right: 9%; top: 30%; grid-template-columns: 1.1fr repeat(12, 1fr) 1.25fr; grid-auto-rows: calc(40px * var(--k)); }
-body.room3d .ro-grid.wide { top: 29%; left: 10%; right: 10%; grid-auto-rows: calc(35px * var(--k)); }
-.ro-grid.wide .zero { grid-row: 1 / span 3; grid-column: 1; }
-.ro-grid.wide .dz { grid-column: span 4; grid-row: 4; } .ro-grid.wide .dz:first-of-type { grid-column: 2 / span 4; }
-.ro-grid.wide .ev { grid-column: span 2; grid-row: 5; } .ro-grid.wide .ev:first-of-type { grid-column: 2 / span 2; }
-.ro-grid.wide .ro-cell.dz { grid-column-end: span 4; }
-.ro-cell { position: relative; display: flex; align-items: center; justify-content: center; border: calc(1.5px * var(--k)) solid rgba(255,255,255,.55); border-radius: calc(5px * var(--k)); color: #fff; font: 800 calc(16px * var(--k)) "Space Grotesk", sans-serif; cursor: pointer; padding: 0; min-width: 0; background: rgba(0,0,0,.2); }
-.ro-cell.out { font-size: calc(12px * var(--k)); font-weight: 700; letter-spacing: .02em; background: rgba(0,0,0,.28); }
-.ro-cell:hover { filter: brightness(1.25); }
-.ro-cell.won { box-shadow: 0 0 0 calc(3px * var(--k)) #ffe08a, 0 0 calc(18px * var(--k)) rgba(255,224,138,.95); z-index: 2; }
-.ro-cell.lost { opacity: .45; }
-.ro-mine { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); min-width: calc(24px * var(--k)); height: calc(24px * var(--k)); padding: 0 calc(4px * var(--k)); border-radius: 999px; background: var(--gold); color: #1b1300; border: calc(2px * var(--k)) dashed #7a5a12; font: 800 calc(11.5px * var(--k)) "Space Grotesk", sans-serif; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(0,0,0,.6); box-sizing: border-box; }
-.ro-dot { position: absolute; right: 3px; top: 3px; width: calc(7px * var(--k)); height: calc(7px * var(--k)); border-radius: 50%; background: #9fe8ff; box-shadow: 0 0 4px #000; }
-/* Upright layout for a phone. */
-.ro-grid.tallg { left: 4%; right: 4%; top: 13%; bottom: 3%; grid-template-columns: .62fr 1fr 1fr 1fr; grid-template-rows: 1fr repeat(12, 1fr) 1fr 2.1fr; gap: 3px; }
-.ro-grid.tallg .zero { grid-column: 2 / span 3; grid-row: 1; }
-.ro-grid.tallg .d1 { grid-column: 1; grid-row: 2 / span 4; } .ro-grid.tallg .d2 { grid-column: 1; grid-row: 6 / span 4; } .ro-grid.tallg .d3 { grid-column: 1; grid-row: 10 / span 4; }
-.ro-grid.tallg .dz { writing-mode: vertical-rl; transform: rotate(180deg); font-size: 12px; }
-.ro-grid.tallg .dz .ro-mine { transform: translate(-50%, -50%) rotate(180deg); writing-mode: horizontal-tb; }
-.ro-grid.tallg .ro-nums { grid-column: 2 / span 3; grid-row: 2 / span 12; display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(12, 1fr); gap: 3px; }
-.ro-grid.tallg .col { grid-row: 14; font-size: 11px; }
-.ro-grid.tallg .ro-even { grid-column: 1 / span 4; grid-row: 15; display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: 1fr 1fr; gap: 3px; }
-.pfelt.tall .ro-cell { font-size: 15px; border-width: 1.5px; border-radius: 5px; }
-.pfelt.tall .ro-cell.out { font-size: 12px; }
-.pfelt.tall .ro-mine { min-width: 22px; height: 22px; font-size: 11px; border-width: 2px; padding: 0 3px; }
-/* Under the table. */
 .ro-last { display: flex; gap: 3px; align-items: center; justify-content: center; background: rgba(8,10,14,.8); border: 1px solid var(--line); border-radius: 10px; padding: 4px 8px; max-width: 100%; flex-wrap: wrap; }
 .ro-last i { width: 24px; height: 24px; border-radius: 50%; font-size: 11.5px; }
 .ro-last i:last-child { outline: 2px solid var(--gold); outline-offset: 1px; }
@@ -408,8 +355,6 @@ body.room3d .ro-grid.wide { top: 29%; left: 10%; right: 10%; grid-auto-rows: cal
 .ro-people span.me { border-color: var(--gold); } .ro-people span.off { opacity: .5; }
 .ro-people b { color: var(--gold); } .ro-people em { font-style: normal; margin-left: 4px; } .ro-people em.up { color: #7ef0b6; } .ro-people em.down { color: #ff8a8a; }
 .ro-seat .pk-plate { cursor: default; }
-.ro-grid.tallg [data-spot=c1] { grid-column: 2; } .ro-grid.tallg [data-spot=c2] { grid-column: 3; } .ro-grid.tallg [data-spot=c3] { grid-column: 4; }
-.pfelt.tall .ro-cell:not(.dz) .ro-mine { left: auto; right: 4px; transform: translateY(-50%); }
 .pk-sit.pk-move { opacity: .8; border-style: dashed; }
 .pk-sit.pk-move:hover { opacity: 1; }
 .pk-runask .pk-act { min-width: 110px; }
@@ -515,24 +460,11 @@ body.game-pk.room3d .html-top .felt.pfelt::after { display: none; }
 .pk-timer i { position: absolute; right: 0; top: 0; background: #14181d; animation: pk-cover linear forwards; }
 @keyframes pk-cover { to { width: 100%; } }
 
-/* Roulette layout as on a casino table: the Red and Black boxes are filled, with a diamond. */
-.ro-cell.out.red { background: #c62f2f; }
-.ro-cell.out.black { background: #101216; }
-.ro-cell .ro-dia { width: calc(11px * var(--k)); height: calc(11px * var(--k)); transform: rotate(45deg); border: calc(1.5px * var(--k)) solid rgba(255,255,255,.85); margin-right: calc(7px * var(--k)); flex: none; }
-.ro-cell.out.red .ro-dia { background: #e04545; } .ro-cell.out.black .ro-dia { background: #000; }
-/* A bet on an outside box lies at the right end of the box, so the name of the box stays readable. */
-.ro-grid.wide .ro-cell.out .ro-mine { left: auto; right: calc(4px * var(--k)); top: 50%; transform: translateY(-50%); }
-.ro-grid.wide .ro-cell.out:not(.dz):not(.ev) .ro-mine { right: 50%; top: auto; bottom: calc(1px * var(--k)); transform: translateX(50%) scale(.85); }
-.ro-grid.wide .ro-cell.out:not(.dz):not(.ev) { align-items: flex-start; padding-top: calc(2px * var(--k)); }
-.ro-cell.out.ev, .ro-cell.out.dz { justify-content: flex-start; padding-left: calc(8px * var(--k)); }
-.ro-grid.tallg .ro-cell.out.ev, .ro-grid.tallg .ro-cell.out.dz { justify-content: center; padding-left: 0; }
 /* The host's Spin now button: large and easy to hit. */
 .ro-spin { font-size: 20px; font-weight: 800; padding: 12px 44px; border-radius: 14px; letter-spacing: .04em; box-shadow: 0 6px 22px rgba(0,0,0,.5); }
 .ro-spin[disabled] { opacity: .4; }
 @media (max-width: 700px) { .ro-spin { font-size: 18px; padding: 10px 34px; width: 70%; } }
 
-.ro-cell.out.red span, .ro-cell.out.black span { display: none; }
-.ro-cell .ro-dia { width: calc(14px * var(--k)); height: calc(14px * var(--k)); margin: 0 0 0 calc(6px * var(--k)); }
 .bank-bar { flex-wrap: nowrap; max-width: 760px; }
 .bank-bar span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .bank-bar .btn { flex: none; white-space: nowrap; }
@@ -722,40 +654,12 @@ body:not(.room3d) .pfelt.tall .bc-tag u { font-size: 10px; padding: 0 5px; }
 @media (max-width: 560px) { .bc-bal i { display: none; } }
 body.room3d .pfelt:not(.tall) .bc-spot { min-height: calc(82px * var(--k)); padding-top: calc(4px * var(--k)); gap: 0; }
 body.room3d .pfelt:not(.tall) .bc-spots { top: 47.5%; }
-/* ---------- Roulette, third pass: the same standards as the blackjack table ---------- */
-.felt.pfelt.rfelt { background:
-  url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20width%3D%27220%27%20height%3D%27120%27%20viewBox%3D%270%200%20220%20120%27%3E%3Cg%20fill%3D%27none%27%20stroke%3D%27%23ffe9b0%27%20stroke-opacity%3D%27.34%27%20stroke-width%3D%272%27%3E%3Cellipse%20cx%3D%27110%27%20cy%3D%2760%27%20rx%3D%27104%27%20ry%3D%2754%27/%3E%3Cellipse%20cx%3D%27110%27%20cy%3D%2760%27%20rx%3D%2794%27%20ry%3D%2745%27%20stroke-width%3D%271%27/%3E%3C/g%3E%3Cg%20fill%3D%27%23ffe9b0%27%20fill-opacity%3D%27.42%27%20font-family%3D%27Georgia%2Cserif%27%20text-anchor%3D%27middle%27%3E%3Ctext%20x%3D%27110%27%20y%3D%2756%27%20font-size%3D%2730%27%20font-weight%3D%27700%27%20letter-spacing%3D%276%27%3EARC%3C/text%3E%3Ctext%20x%3D%27110%27%20y%3D%2780%27%20font-size%3D%2713%27%20letter-spacing%3D%275%27%3EROULETTE%3C/text%3E%3C/g%3E%3C/svg%3E") 9% 9% / 13% auto no-repeat, url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20width%3D%27220%27%20height%3D%27120%27%20viewBox%3D%270%200%20220%20120%27%3E%3Cg%20fill%3D%27none%27%20stroke%3D%27%23ffe9b0%27%20stroke-opacity%3D%27.34%27%20stroke-width%3D%272%27%3E%3Cellipse%20cx%3D%27110%27%20cy%3D%2760%27%20rx%3D%27104%27%20ry%3D%2754%27/%3E%3Cellipse%20cx%3D%27110%27%20cy%3D%2760%27%20rx%3D%2794%27%20ry%3D%2745%27%20stroke-width%3D%271%27/%3E%3C/g%3E%3Cg%20fill%3D%27%23ffe9b0%27%20fill-opacity%3D%27.42%27%20font-family%3D%27Georgia%2Cserif%27%20text-anchor%3D%27middle%27%3E%3Ctext%20x%3D%27110%27%20y%3D%2756%27%20font-size%3D%2730%27%20font-weight%3D%27700%27%20letter-spacing%3D%276%27%3EARC%3C/text%3E%3Ctext%20x%3D%27110%27%20y%3D%2780%27%20font-size%3D%2713%27%20letter-spacing%3D%275%27%3EROULETTE%3C/text%3E%3C/g%3E%3C/svg%3E") 91% 9% / 13% auto no-repeat,
-  repeating-linear-gradient(45deg, rgba(255,255,255,.028) 0 2px, transparent 2px 5px),
-  repeating-linear-gradient(-45deg, rgba(0,0,0,.05) 0 2px, transparent 2px 5px),
-  radial-gradient(ellipse at 50% 42%, #23905a 0%, #116238 55%, #093c23 100%); }
-.felt.pfelt.rfelt.tall { background:
-  repeating-linear-gradient(45deg, rgba(255,255,255,.028) 0 2px, transparent 2px 5px),
-  repeating-linear-gradient(-45deg, rgba(0,0,0,.05) 0 2px, transparent 2px 5px),
-  radial-gradient(ellipse at 50% 42%, #23905a 0%, #116238 55%, #093c23 100%); }
-.ro-cell { font-family: Inter, system-ui, sans-serif; }
-.ro-cell.out { font-size: calc(14px * var(--k)); font-weight: 800; background: rgba(0,0,0,.44); color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.7); }
-.ro-cell.out.red span, .ro-cell.out.black span { display: inline; margin-left: calc(6px * var(--k)); }
-.pfelt.tall .ro-cell.out { font-size: 12px; }
-.ro-all { position: absolute; right: calc(2px * var(--k)); top: calc(2px * var(--k)); min-width: calc(15px * var(--k)); height: calc(15px * var(--k)); padding: 0 calc(3px * var(--k)); border-radius: 999px; background: #9fe8ff; color: #06121c; font: 800 calc(10px * var(--k)) Inter, system-ui, sans-serif; display: flex; align-items: center; justify-content: center; box-shadow: 0 1px 3px rgba(0,0,0,.7); font-variant-numeric: tabular-nums; text-shadow: none; }
-.pfelt.tall .ro-all { min-width: 14px; height: 14px; font-size: 9px; right: 2px; top: 2px; padding: 0 3px; }
-.ro-grid.tallg .dz .ro-all { transform: rotate(180deg); writing-mode: horizontal-tb; }
 .ro-seat .pk-plate { min-width: 0; padding: calc(2px * var(--k)) calc(7px * var(--k)) calc(3px * var(--k)); }
 .ro-seat .pk-plate b, .ro-seat .pk-plate span { font-family: Inter, system-ui, sans-serif; }
 .ro-seat .pk-plate b { max-width: 4.6em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; margin: 0 auto; }
 .ro-seat .pk-plate em { display: none; }
 .ro-seat.me .pk-plate { border-color: var(--gold); box-shadow: 0 0 0 2px rgba(232,196,106,.5); }
-/* A box with chips on it: its words move to the left and the amount is at the right, so neither covers the other. */
-.ro-cell.has:not(.dz) { justify-content: flex-start; padding-left: calc(4px * var(--k)); }
-.ro-cell.has .ro-mine, .ro-grid.wide .ro-cell.out.has .ro-mine { left: auto; right: calc(2px * var(--k)); top: 50%; bottom: auto; transform: translateY(-50%) scale(.82); transform-origin: 100% 50%; }
-.ro-cell.has .ro-all { top: 50%; transform: translateY(-50%); }
-.ro-cell.out.red .ro-dia, .ro-cell.out.black .ro-dia { display: none; }
-.ro-cell.out.red span:not(.ro-mine):not(.ro-all), .ro-cell.out.black span:not(.ro-mine):not(.ro-all) { margin-left: 0; }
-.ro-grid.tallg .dz .ro-all { transform: rotate(180deg); top: 3px; }
-.ro-grid.wide .ro-cell.has:not(.out) { font-size: calc(14px * var(--k)); padding-left: calc(2px * var(--k)); }
-/* Flat computer roulette table: the grid higher and the name plates in one row above the buttons. */
-body:not(.room3d) .pfelt:not(.tall) .ro-grid.wide { top: 21%; grid-auto-rows: calc(38px * var(--k)); }
 @media (max-width: 560px) { .bc-acts.ro-acts { flex-wrap: wrap; row-gap: 4px; } }
-body:not(.room3d) .pfelt:not(.tall) .ro-result { display: none; }
 .ro-spin.pressed, .bc-acts .btn.primary.pressed { background: #1d6f52 !important; border-color: #7ef0b6 !important; color: #eafff5 !important; }
 /* ---------- Poker: a punch after a bad beat ---------- */
 .pk-punch { background: linear-gradient(#ff6b5e, #c62f2f) !important; border-color: #ffb3a8 !important; color: #fff !important; font-weight: 800; font-size: 17px; padding: 10px 18px; border-radius: 12px; animation: pk-pulse 0.9s ease-in-out infinite; }
@@ -835,3 +739,71 @@ body:not(.room3d) .pfelt:not(.tall) .bc-deal { top: 31%; }
 body .felt.pfelt:not(.tall) .bc-result.flat { top: 52%; transform: translate(-50%, -50%) !important; font-size: calc(14px * var(--k)); white-space: normal; max-width: 520px; text-align: center; line-height: 1.25; padding: calc(4px * var(--k)) calc(16px * var(--k)); }
 .bc-seat .pk-plate .sn { font: 800 calc(10px * var(--k)) Inter, system-ui, sans-serif; font-style: normal; color: #1b1300; background: #f2d58a; border-radius: 999px; padding: 0 calc(5px * var(--k)); margin-right: calc(4px * var(--k)); vertical-align: middle; }
 .bc-arc g.bc-c.won { fill: none; stroke: none; }
+
+/* ---------- Roulette: a casino table. The wooden wheel at the left end, the layout running along the table from it ---------- */
+.felt.pfelt.rfelt { --line: rgba(255,255,255,.92); border-radius: 30px 30px 12% 12% / 30px 30px 9% 9% !important; background:
+  repeating-linear-gradient(45deg, rgba(255,255,255,.026) 0 2px, transparent 2px 5px),
+  repeating-linear-gradient(-45deg, rgba(0,0,0,.05) 0 2px, transparent 2px 5px),
+  radial-gradient(ellipse at 55% 40%, #239a4f 0%, #15733b 52%, #0b4a26 100%); }
+.felt.pfelt.rfelt::before { border-radius: 20px 20px 11% 11% / 20px 20px 8% 8% !important; border-color: rgba(232,196,106,.45) !important; box-shadow: none !important; }
+.felt.pfelt.rfelt::after { border-radius: inherit !important; }
+.felt.pfelt.rfelt.tall { border-radius: 26px 26px 10% 10% / 26px 26px 6% 6% !important; }
+.felt.pfelt.rfelt.tall::before { border-radius: 18px 18px 9% 9% / 18px 18px 5% 5% !important; }
+.ro-layer { pointer-events: none; z-index: 1 !important; }
+.ro-bowl { position: absolute; transform: translate(-50%, -50%); border-radius: 50%; box-shadow: 0 0 0 calc(3px * var(--k)) rgba(0,0,0,.25), 0 calc(10px * var(--k)) calc(26px * var(--k)) rgba(0,0,0,.6); }
+.ro-bowl canvas { display: block; width: 100%; height: 100%; border-radius: 50%; }
+/* The layout: white lines, red and black number boxes, white type. */
+.ro-grid { pointer-events: auto; display: grid; gap: 0; z-index: 2; }
+.ro-grid.wide { left: 29.6%; right: 3.4%; top: 8%; grid-template-columns: 1.2fr repeat(12, 1fr) 1.35fr; grid-template-rows: repeat(3, calc(47px * var(--k))) calc(35px * var(--k)) calc(35px * var(--k)); }
+.ro-cell { position: relative; display: flex; align-items: center; justify-content: center; min-width: 0; padding: 0; margin: 0; border: 0; border-radius: 0; outline: calc(1.4px * var(--k)) solid var(--line); outline-offset: calc(-.7px * var(--k)); background: transparent; color: #fff; cursor: pointer; font: 700 calc(14px * var(--k)) "Space Grotesk", Inter, sans-serif; text-shadow: 0 1px 2px rgba(0,0,0,.45); }
+.ro-cell.red { background: #c62f2f; } .ro-cell.black { background: #15171c; } .ro-cell.green { background: #1f9a4d; }
+.ro-cell.out { background: transparent; font: 600 calc(12.5px * var(--k)) Georgia, "Times New Roman", serif; letter-spacing: .03em; }
+.ro-cell .ro-lab { font: inherit; display: block; white-space: nowrap; pointer-events: none; }
+.ro-cell .ro-dia { display: block; width: calc(30px * var(--k)); height: calc(15px * var(--k)); filter: drop-shadow(0 1px 2px rgba(0,0,0,.4)); }
+.ro-cell:hover { filter: brightness(1.2); }
+.ro-cell.out:hover { background: rgba(255,255,255,.08); }
+.ro-cell.won { z-index: 3; box-shadow: inset 0 0 0 calc(3px * var(--k)) #ffe08a, 0 0 calc(16px * var(--k)) rgba(255,224,138,.9); }
+.ro-cell.lost .ro-lab { opacity: .55; }
+.ro-cell.lost.red, .ro-cell.lost.black, .ro-cell.lost.green { filter: brightness(.62); }
+.ro-grid.wide .zero { grid-row: 1 / span 3; grid-column: 1; border-radius: 48% 0 0 48% / 22% 0 0 22%; }
+.ro-grid.wide [data-spot=d1] { grid-row: 4; grid-column: 2 / span 4; } .ro-grid.wide [data-spot=d2] { grid-row: 4; grid-column: 6 / span 4; } .ro-grid.wide [data-spot=d3] { grid-row: 4; grid-column: 10 / span 4; }
+.ro-grid.wide [data-spot=low] { grid-row: 5; grid-column: 2 / span 2; } .ro-grid.wide [data-spot=even] { grid-row: 5; grid-column: 4 / span 2; } .ro-grid.wide [data-spot=red] { grid-row: 5; grid-column: 6 / span 2; }
+.ro-grid.wide [data-spot=black] { grid-row: 5; grid-column: 8 / span 2; } .ro-grid.wide [data-spot=odd] { grid-row: 5; grid-column: 10 / span 2; } .ro-grid.wide [data-spot=high] { grid-row: 5; grid-column: 12 / span 2; }
+.ro-grid.wide .col { font-size: calc(11.5px * var(--k)); }
+/* Chips on a spot: one chip with the amount, in a corner of the box, and the box's name moves to the other side, so neither covers the other. */
+.ro-mine, .ro-all { position: absolute; right: calc(2px * var(--k)); bottom: calc(2px * var(--k)); min-width: calc(17px * var(--k)); height: calc(17px * var(--k)); padding: 0 calc(3px * var(--k)); box-sizing: border-box; border-radius: 999px; display: flex; align-items: center; justify-content: center; font: 800 calc(9.5px * var(--k)) Inter, system-ui, sans-serif; font-variant-numeric: tabular-nums; letter-spacing: 0; text-shadow: none; pointer-events: none; z-index: 1; }
+.ro-mine { background: radial-gradient(circle, #ffe7a3 0 52%, #e8c46a 54%); color: #2a1c00; border: calc(1.6px * var(--k)) dashed #fff7dc; box-shadow: 0 0 0 calc(1px * var(--k)) #7a5a12, 0 2px 5px rgba(0,0,0,.6); }
+.ro-all { background: #9fe8ff; color: #06121c; border: calc(1.4px * var(--k)) solid #e8fbff; box-shadow: 0 0 0 calc(1px * var(--k)) #1d5a70, 0 2px 4px rgba(0,0,0,.6); }
+.ro-cell.has:not(.out):not(.zero), .ro-cell.has.col { align-items: flex-start; justify-content: flex-start; padding: calc(3px * var(--k)) 0 0 calc(4px * var(--k)); }
+.ro-grid.wide .ro-cell.has:not(.out):not(.zero) .ro-lab { font-size: calc(12.5px * var(--k)); }
+.ro-cell.has.dz, .ro-cell.has.ev { justify-content: flex-start; padding-left: calc(7px * var(--k)); }
+.ro-cell.has.dz .ro-mine, .ro-cell.has.ev .ro-mine, .ro-cell.has.dz .ro-all, .ro-cell.has.ev .ro-all { bottom: auto; top: 50%; right: calc(4px * var(--k)); transform: translateY(-50%); }
+.ro-grid.wide .ro-cell.ev .ro-lab { font-size: calc(11.5px * var(--k)); }
+/* The phone's tall table. */
+.ro-grid.tallg { left: 3.5%; right: 3.5%; bottom: 2.4%; grid-template-columns: .5fr .5fr 1fr 1fr 1fr; grid-template-rows: repeat(14, 1fr); }
+.ro-grid.tallg .zero { grid-column: 3 / span 3; grid-row: 1; border-radius: 40% 40% 0 0 / 90% 90% 0 0; }
+.ro-grid.tallg .ro-nums { grid-column: 3 / span 3; grid-row: 2 / span 12; display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(12, 1fr); }
+.ro-grid.tallg [data-spot=c1] { grid-column: 3; grid-row: 14; } .ro-grid.tallg [data-spot=c2] { grid-column: 4; grid-row: 14; } .ro-grid.tallg [data-spot=c3] { grid-column: 5; grid-row: 14; }
+.ro-grid.tallg [data-spot=d1] { grid-column: 2; grid-row: 2 / span 4; } .ro-grid.tallg [data-spot=d2] { grid-column: 2; grid-row: 6 / span 4; } .ro-grid.tallg [data-spot=d3] { grid-column: 2; grid-row: 10 / span 4; }
+.ro-grid.tallg [data-spot=low] { grid-column: 1; grid-row: 2 / span 2; } .ro-grid.tallg [data-spot=even] { grid-column: 1; grid-row: 4 / span 2; } .ro-grid.tallg [data-spot=red] { grid-column: 1; grid-row: 6 / span 2; }
+.ro-grid.tallg [data-spot=black] { grid-column: 1; grid-row: 8 / span 2; } .ro-grid.tallg [data-spot=odd] { grid-column: 1; grid-row: 10 / span 2; } .ro-grid.tallg [data-spot=high] { grid-column: 1; grid-row: 12 / span 2; }
+.pfelt.tall .ro-cell { font-size: 15px; outline-width: 1.4px; outline-offset: -.7px; }
+.pfelt.tall .ro-cell.out { font-size: 12px; }
+.pfelt.tall .ro-cell.col { font-size: 11px; }
+.ro-grid.tallg .dz .ro-lab, .ro-grid.tallg .ev .ro-lab { writing-mode: vertical-rl; transform: rotate(180deg); }
+.ro-grid.tallg .ev .ro-dia { width: 14px; height: 30px; }
+.pfelt.tall .ro-mine, .pfelt.tall .ro-all { min-width: 18px; height: 18px; font-size: 9.5px; padding: 0 3px; border-width: 1.5px; }
+.ro-grid.tallg .ro-cell.has:not(.out), .ro-grid.tallg .ro-cell.has.col { align-items: center; padding: 0 0 0 5px; }
+.ro-grid.tallg .ro-cell.has:not(.out) .ro-mine, .ro-grid.tallg .ro-cell.has:not(.out) .ro-all, .ro-grid.tallg .ro-cell.has.col .ro-mine, .ro-grid.tallg .ro-cell.has.col .ro-all { bottom: auto; top: 50%; transform: translateY(-50%); }
+.ro-grid.tallg .ro-cell.has.dz, .ro-grid.tallg .ro-cell.has.ev { justify-content: flex-start; align-items: center; padding: 0 0 0 3px; }
+.ro-grid.tallg .ro-cell.has.dz .ro-mine, .ro-grid.tallg .ro-cell.has.ev .ro-mine, .ro-grid.tallg .ro-cell.has.dz .ro-all, .ro-grid.tallg .ro-cell.has.ev .ro-all { right: 2px; bottom: auto; top: 50%; transform: translateY(-50%); }
+/* The number that came up: a disc standing on the felt in the 3D room (the flat tables say it in the line under the table). */
+.ro-result { left: 64%; top: 76%; display: flex; align-items: center; gap: calc(10px * var(--k)); padding: calc(4px * var(--k)) calc(16px * var(--k)) calc(4px * var(--k)) calc(6px * var(--k)); border-radius: 999px; background: rgba(8,10,14,.92); border: calc(2px * var(--k)) solid #ffe08a; box-shadow: 0 6px 24px rgba(0,0,0,.6); white-space: nowrap; z-index: 4; pointer-events: none; }
+.ro-result b { display: flex; align-items: center; justify-content: center; width: calc(40px * var(--k)); height: calc(40px * var(--k)); border-radius: 50%; color: #fff; font: 800 calc(21px * var(--k)) "Space Grotesk", sans-serif; }
+.ro-result.red b { background: #c62f2f; } .ro-result.black b { background: #17191f; border: 2px solid #777; } .ro-result.green b { background: #1f9a4d; }
+.ro-result span { color: #fff6dc; font: 700 calc(14px * var(--k)) "Space Grotesk", sans-serif; }
+body:not(.room3d) .ro-result, .pfelt.tall .ro-result { display: none; }
+.ro-cell.zero .ro-mine, .ro-cell.zero .ro-all { right: 50%; transform: translateX(50%); bottom: calc(6px * var(--k)); }
+.ro-grid.tallg .ro-cell.zero .ro-mine, .ro-grid.tallg .ro-cell.zero .ro-all { right: calc(6px * var(--k)); bottom: auto; top: 50%; transform: translateY(-50%); }
+.ro-last i { font-style: normal; display: flex; align-items: center; justify-content: center; color: #fff; font-family: "Space Grotesk", sans-serif; font-weight: 800; }
+.ro-last i.red, .ro-n.red { background: #c62f2f; } .ro-last i.black, .ro-n.black { background: #17191f; } .ro-last i.green, .ro-n.green { background: #1f9a4d; }
