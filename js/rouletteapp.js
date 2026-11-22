@@ -1,12 +1,12 @@
 // The roulette page: a European roulette table for up to 9 in Nigel's room. The host's browser runs
 // the table (js/roulette.js); every other browser sends its bets there and is told only what it may see.
-import { RouTable, ROU_SEATS, WHEEL, colorOf, betNumbers, betName, betPays, verifySpin } from './roulette.js?v=20261122q';
-import { showSpin } from './wheel.js?v=20261122q';
-import { webglOK, initRoom } from './room3d.js?v=20261122q';
-import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122q';
-import { showDropped, params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML } from './common.js?v=20261122q';
+import { RouTable, ROU_SEATS, WHEEL, colorOf, betNumbers, betName, betPays, verifySpin } from './roulette.js?v=20261122r';
+import { showSpin } from './wheel.js?v=20261122r';
+import { webglOK, initRoom } from './room3d.js?v=20261122r';
+import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122r';
+import { showDropped, params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML } from './common.js?v=20261122r';
 
-import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261122q';
+import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261122r';
 const PREFIX = 'bjt-ro-';
 // A settings change by vote (js/vote.js): any player at the table may ask, every other player at the table who is online has to say yes.
 const VOTE = {
@@ -201,7 +201,7 @@ function watchHost() {
   const list = st.players.filter((p) => p.connected && p.id !== st.hostId).sort((a, b) => (a.seat < 0 ? 99 : a.seat) - (b.seat < 0 ? 99 : b.seat) || (a.id < b.id ? -1 : 1));
   let rank = list.findIndex((p) => p.id === S.myId);
   if (rank < 0) rank = list.length;
-  S.takeT = setTimeout(() => { S.takeT = null; if (S.role === 'guest' && S.nohost) takeOver(); }, 1500 + rank * 4000);
+  S.takeT = setTimeout(() => { S.takeT = null; if (S.role === 'guest' && S.nohost) takeOver(); }, 30000 + rank * 4000); // the host gets 30 seconds to come back first
 }
 function takeOver() {
   const st = S.st;

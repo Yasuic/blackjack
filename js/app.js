@@ -1,16 +1,16 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261122q';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122q';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122q';
-import { tickSound, winSound } from './fx.js?v=20261122q';
-import * as HX from './history.js?v=20261122q';
-import { webglOK, initRoom } from './room3d.js?v=20261122q';
-import { showDropped, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261122q';
-import { makeVault, makeOpener, cleanBox, cleanPiece } from './vault.js?v=20261122q';
-import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122q';
-import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122q';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261122r';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122r';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122r';
+import { tickSound, winSound } from './fx.js?v=20261122r';
+import * as HX from './history.js?v=20261122r';
+import { webglOK, initRoom } from './room3d.js?v=20261122r';
+import { showDropped, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261122r';
+import { makeVault, makeOpener, cleanBox, cleanPiece } from './vault.js?v=20261122r';
+import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122r';
+import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122r';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -20,6 +20,7 @@ const ROOM_PREFIX = 'bjt-';
 // so the new host never has to wait for the old host's address to be released.
 const hostAddr = (g) => ROOM_PREFIX + S.code + (g > 0 ? '-' + g : '');
 const CHIPS = [1, 5, 25, 100, 500];
+const HOST_WAIT = 30000; // how long the players wait for a host who dropped before one of them takes the table
 const VOTE_SECONDS = 12; // short, so one player away from the screen does not hold the table up for long
 
 const S = {
@@ -359,7 +360,8 @@ function maybeTakeOver() {
   S.noHostAt ||= now;
   const at = snap ? snap.order.indexOf(S.myId) : -1;
   const rank = snap ? (at < 0 ? snap.order.length + 1 : at) : 2;
-  if (now - S.noHostAt < (snap ? 2000 + rank * 4000 : 6000 + rank * 6000)) return;
+  // The host gets 30 seconds to come back (a reload, a short drop) before another browser takes the table.
+  if (now - S.noHostAt < (snap ? HOST_WAIT + rank * 4000 : 6000 + rank * 6000)) return;
   S.taking = true;
   const newGen = snap ? g + 1 : 0;
   const peer = new Peer(hostAddr(newGen), peerOptions());
