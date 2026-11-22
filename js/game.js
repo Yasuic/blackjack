@@ -1164,7 +1164,20 @@ export class Table {
 
   // ---- Dealing ----
   // How many cards the next step takes from the shoe. The host asks for exactly that many keys.
+  // "Network security breached": a guest's browser saw card keys taken that were not used for dealt cards.
+  // The table stops dealing and playing until the host resumes it. Bets and chat still work.
+  halt() {
+    if (this.halted) return;
+    this.halted = { at: Date.now() };
+    this.addLog('Network security breached. The game is paused.');
+  }
+  resume() {
+    if (!this.halted) return;
+    this.halted = null;
+    this.addLog('The host resumed the game.');
+  }
   dealCount() {
+    if (this.halted) return 0;
     if (this.phase !== 'betting' || !this.canDeal()) return 0;
     const n = this.seats.filter((seat) => {
       if (!seat) return false;
@@ -1174,6 +1187,7 @@ export class Table {
     return n ? 2 * n + 2 : 0;
   }
   deal() {
+    if (this.halted) throw new Error('The game is paused: network security breached.');
     if (this.phase === 'settled') this.startBetting();
     if (!this.banker && !this.frozen) throw new Error('Nobody is the dealer. Someone has to sit as the dealer, or the host can deal with frozen balances.');
     this.dealerAutoBuy();
@@ -1257,6 +1271,7 @@ export class Table {
   }
 
   insurance(clientId, take, seatIdx) {
+    if (this.halted) throw new Error('The game is paused: network security breached.');
     if (this.phase !== 'insurance') throw new Error('Insurance is not offered now.');
     const { p, seat, idx } = this.mustSeat(clientId, seatIdx);
     if (!seat.hands.length || seat.insuranceDecided) return;
@@ -1345,7 +1360,7 @@ export class Table {
 
   // ---- Player actions ----
   allowedActions(clientId) {
-    if (this.phase !== 'playing' || !this.turn) return [];
+    if (this.halted || this.phase !== 'playing' || !this.turn) return [];
     const p = this.players[clientId];
     if (!p || this.seats[this.turn.seat]?.playerId !== clientId) return [];
     const seat = this.seats[this.turn.seat];
@@ -1414,6 +1429,7 @@ export class Table {
 
   // Host can stand a slow or disconnected player's current hand.
   skipTurn() {
+    if (this.halted) return;
     if (this.phase !== 'playing' || !this.turn) return;
     this.ev('stand (by the table: time ran out or the host skipped)', this.seats[this.turn.seat].playerId, `hand ${this.turn.hand + 1}`);
     this.seats[this.turn.seat].hands[this.turn.hand].done = true;
@@ -1429,7 +1445,7 @@ export class Table {
     return h && handTotal(h.cards).total <= 11 && this.allowedActions(seat.playerId).includes('hit') ? 1 : 0;
   }
   awayMove() {
-    if (this.phase !== 'playing' || !this.turn) return null;
+    if (this.halted || this.phase !== 'playing' || !this.turn) return null;
     const seat = this.seats[this.turn.seat], h = seat.hands[this.turn.hand];
     if (handTotal(h.cards).total <= 11 && this.allowedActions(seat.playerId).includes('hit')) {
       this.ev('hit (by the table: 11 or less, player is away or out of time)', seat.playerId, `hand ${this.turn.hand + 1}`);
@@ -1467,7 +1483,7 @@ export class Table {
 
   // The dealer draws one card at a time so players can watch. Returns true while more cards are needed.
   dealerNeedsCard() {
-    if (this.phase !== 'dealer') return false;
+    if (this.halted || this.phase !== 'dealer') return false;
     const anyLive = this.seats.some((s) => s && s.hands.some((h) => !h.surrendered && handTotal(h.cards).total <= 21 && !isBlackjack(h)));
     const anyBustBet = this.seats.some((s) => s && s.hands.length && s.bet.sides.bustIt);
     if (!anyLive && !anyBustBet) return false;
@@ -1478,6 +1494,7 @@ export class Table {
   }
 
   dealerStep() {
+    if (this.halted) return;
     if (this.dealerNeedsCard()) {
       this.dealer.cards.push(this.draw());
       return true;
@@ -1673,6 +1690,7 @@ export class Table {
       },
       ledger: Object.values(this.players).map((p) => ({ id: p.id, name: p.name, totalIn: p.totalIn ?? this.settings.startChips, chips: p.chips, houseNet: p.houseNet || 0, connected: p.connected, kicked: !!p.kicked })),
       buyIns: (this.buyIns || []).filter((b) => b.playerId === forClientId).map((b) => ({ id: b.id, amount: b.amount })),
+      halted: !!this.halted,
       fair: this.fair && {
         nextCommit: this.fair.next.commit,
         cards: this.fair.cards || 0, // how many cards have been opened with the guests' keys so far
@@ -1690,8 +1708,8 @@ export class Table {
 
   // Save and restore so the host can refresh the page without losing the table.
   toJSON() {
-    const { settings, seats, players, phase, dealer, turn, round, roundsSinceShuffle, log, shoe, shoeSize, banker, bankerNet, pendingBanker, buyIns, runCount, hostId, pendingSettings, frozen, fair, hist, evts, created, frozenSnap, shuffleNext, bankerLeaving } = this;
-    return { settings, seats, players, phase, dealer, turn, round, roundsSinceShuffle, log, shoe: packShoe(shoe), shoeSize, banker, bankerNet, pendingBanker, buyIns, runCount, hostId, pendingSettings, frozen, fair, hist, evts, created, frozenSnap, shuffleNext, bankerLeaving };
+    const { settings, seats, players, phase, dealer, turn, round, roundsSinceShuffle, log, shoe, shoeSize, banker, bankerNet, pendingBanker, buyIns, runCount, hostId, pendingSettings, frozen, fair, hist, evts, created, frozenSnap, shuffleNext, bankerLeaving, halted } = this;
+    return { settings, seats, players, phase, dealer, turn, round, roundsSinceShuffle, log, shoe: packShoe(shoe), shoeSize, banker, bankerNet, pendingBanker, buyIns, runCount, hostId, pendingSettings, frozen, fair, hist, evts, created, frozenSnap, shuffleNext, bankerLeaving, halted };
   }
   static fromJSON(obj) {
     const t = new Table(obj.settings);

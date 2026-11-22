@@ -1744,3 +1744,7 @@ body.in-room #conn-pill { max-width: 104px; overflow: hidden; white-space: nowra
 .fair-how { margin: 6px 0 10px; border: 1px solid rgba(232,196,106,.3); border-radius: 10px; padding: 6px 10px; }
 .fair-how > summary { cursor: pointer; font-weight: 700; color: var(--gold); }
 .fair-how .fair-p { margin: 6px 0 0; }
+#breach-cover { position: fixed; left: 0; right: 0; bottom: 0; top: 0; z-index: 72; background: rgba(6,8,12,.6); display: flex; align-items: center; justify-content: center; padding: 0 12px; }
+.breach-box { max-width: min(420px, 100%); padding: 16px 20px; border-radius: 14px; background: rgba(40,12,12,.97); border: 2px solid #ff6b6b; color: #fff; text-align: center; box-shadow: 0 10px 40px rgba(0,0,0,.6); display: grid; gap: 8px; justify-items: center; }
+.breach-box b { font-size: 20px; letter-spacing: .5px; color: #ff8f8f; }
+.breach-box span { font-size: 14px; }

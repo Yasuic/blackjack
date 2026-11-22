@@ -1,16 +1,16 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe } from './game.js?v=20261122v';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122v';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122v';
-import { tickSound, winSound } from './fx.js?v=20261122v';
-import * as HX from './history.js?v=20261122v';
-import { webglOK, initRoom } from './room3d.js?v=20261122v';
-import { showDropped, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261122v';
-import { makeVault, makeOpener, cleanBox, cleanPiece } from './vault.js?v=20261122v';
-import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122v';
-import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122v';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe } from './game.js?v=20261122w';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122w';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122w';
+import { tickSound, winSound } from './fx.js?v=20261122w';
+import * as HX from './history.js?v=20261122w';
+import { webglOK, initRoom } from './room3d.js?v=20261122w';
+import { showDropped, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261122w';
+import { makeVault, makeOpener, cleanBox, cleanPiece } from './vault.js?v=20261122w';
+import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122w';
+import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122w';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -610,6 +610,8 @@ function onHostMessage(conn, msg) {
   if (msg.t === 'keys') { gotNonce(msg, conn.clientId); return; }
   // Any player may take over as host, with no vote: this browser hands the whole table to theirs and joins as a player.
   if (msg.t === 'host-ask') { handHostTo(conn); return; }
+  // A guest's browser found card keys taken that were not used for dealt cards: the game pauses for everyone.
+  if (msg.t === 'breach') { hostDo((t) => t.halt()); return; }
   // The player walks to another table of the office and takes their chips along (common.js walkTo).
   if (msg.t === 'cashout') {
     let amount = 0, err = null;
@@ -803,15 +805,20 @@ const moveCount = (msg, id) => (t) => (msg.t === 'action' ? (id && !t.allowedAct
 //    this browser gave out) plus one. Asking for card 40 while card 12 is next is refused.
 // 2. Every key given out must be used for a card the table really deals within 5 seconds. A host that asks for
 //    keys and does not deal (to look at the cards first) is caught: this browser warns its player and tells the table.
+// What went wrong is not named on screen: everyone sees "Network security breached" and the game pauses.
 function keyAlarm(text) {
-  (S.fair ||= { mine: {}, cur: {}, checks: {} }).alert = text;
-  toast(text + ' Tap the badge at the top right.');
-  try { send({ t: 'chat', text: '⚠️ ' + text }); } catch {}
+  console.warn('[fair] ' + text);
+  const F = (S.fair ||= { mine: {}, cur: {}, checks: {} });
+  const first = !F.alert;
+  F.alert = 'Network security breached.';
+  try { send({ t: 'breach' }); } catch {}
+  if (first) { try { send({ t: 'chat', text: '⚠️ Network security breached. The game is paused.' }); } catch {} }
   render();
 }
 function serveKeys(msg) {
   const from = Number(msg.from), count = Number(msg.count), st = S.state;
   const betting = !st || st.phase === 'betting' || st.phase === 'settled';
+  // During play at most two cards per ask (a split takes two at once).
   const most = betting ? 2 * (st?.seats?.length || 7) + 2 : 2;
   if (!Number.isInteger(from) || from < 1 || !Number.isInteger(count) || count < 1 || count > most) {
     keyAlarm('The host\'s browser asked for more card keys than the table needed. My browser refused.');
@@ -3242,6 +3249,22 @@ function fairWatch(st) {
     if (!ok) toast(`Shuffle check failed for shoe ${L.n}. Tap "Provably fair" at the top right.`);
   }
 }
+// The pause after "Network security breached": a notice over the table for everyone, and Resume for the host.
+function drawBreach(st) {
+  let el = document.getElementById('breach-cover');
+  const on = !!st?.halted;
+  if (!on) { el?.remove(); return; }
+  if (!el) {
+    el = document.createElement('div'); el.id = 'breach-cover'; el.setAttribute('role', 'alert');
+    el.innerHTML = '<div class="breach-box"><b>Network security breached</b><span>The game is paused.</span><button class="btn gold" data-act="h-resume" hidden>Resume game</button></div>';
+    el.addEventListener('click', (e) => { const b = e.target.closest('[data-act=h-resume]'); if (b) { e.stopPropagation(); runAct(b); } });
+    document.body.appendChild(el);
+  }
+  el.querySelector('[data-act=h-resume]').hidden = S.role !== 'host';
+  const bar = document.querySelector('.topbar');
+  el.style.top = (bar ? Math.max(0, Math.round(bar.getBoundingClientRect().bottom)) : 0) + 'px';
+}
+setInterval(() => drawBreach(S.state), 400);
 function fairHTML() {
   const f = S.state?.fair, F = S.fair;
   if (!f || !F) return '<h3>🔐 Provably fair</h3><p>No shoe yet.</p>';
@@ -3250,10 +3273,10 @@ function fairHTML() {
     <p class="fair-p">One shuffle sets the whole shoe. The order comes from a hidden code in the host's browser mixed with hidden codes from the players' browsers, so no single person picked it and nobody can read it early. Each card can only be opened at the moment it is dealt. When a shoe is finished, your browser checks that the shuffle was the one promised at the start.</p>`;
   h += `<details class="fair-how"><summary>How nobody sees the next cards</summary>
     <p class="fair-p">Each card needs two things to be opened: the host's hidden code and a key from a seated guest's browser. The key is new for every card, and only the guest's browser can make it.</p>
-    <p class="fair-p">A guest's browser gives the host the key for the next card only, never for cards further ahead. If the host's browser asks for a later card, the guest's browser refuses and says so in the chat.</p>
-    <p class="fair-p">Every key a guest gives out has to be used for a card the table really deals within 5 seconds. If the host's browser takes a key and does not deal that card (to look at it first), the guest's browser warns its player and posts a ⚠️ line in the chat for the whole table.</p>
+    <p class="fair-p">A guest's browser gives the host keys for the next cards only, at most two at a time (a split takes two). It never gives keys for cards further ahead.</p>
+    <p class="fair-p">Every key a guest gives out has to be used for a card the table really deals within 5 seconds. If a key is asked for out of turn, or taken and not used for a dealt card (to look at the card first), the guest's browser stops the game for everyone with "Network security breached".</p>
     <p class="fair-p">With no guest seated, the host's browser makes the keys itself.</p></details>`;
-  if (F.alert) h += `<div class="fair-box"><b>❌ ${typeof F.alert === 'string' ? esc(F.alert) : 'The host\'s browser asked for more card keys than the table needed.'}</b><div>A normal table never does this, so the host's copy of the game may have been changed to look at cards early.</div></div>`;
+  if (F.alert) h += `<div class="fair-box"><b>❌ Network security breached.</b><div>The game was paused.</div></div>`;
   if (f.current) {
     const c = f.current, mine = F.mine[c.commit];
     h += `<div class="fair-box"><b>Shoe ${c.n} (in play now)</b>
@@ -3458,6 +3481,7 @@ function runAct(el) {
     }
     case 'undo': if (S.undo.length) { S.mainChips.pop(); const last = S.undo.pop(); chipSound(); placeBet(last); } break;
     case 'rebet': doRebet(); break;
+    case 'h-resume': if (S.role === 'host') { if (S.timer) { clearTimeout(S.timer.handle); S.timer = null; } hostDo((t) => t.resume()); } break;
     case 'auto-rebet': S.autoRebet = !S.autoRebet; safeSet('bj-autorebet', S.autoRebet ? '1' : '0'); toast(S.autoRebet ? 'Auto rebet on: each round your last bets go down and you are dealt in by yourself.' : 'Auto rebet off.'); render(); autoRebetStep(); break;
     case 'keys': $('#modal-body').innerHTML = keysHTML(); $('#modal').showModal(); break;
     case 'history': showHistory(); break;
