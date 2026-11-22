@@ -434,27 +434,17 @@ export function potSound() {
 // Loud made up sounds, built from tones and noise in the browser. No recording and nobody's voice.
 function horn(ac, out, t, dur, base, level) {
   // An air horn: three reedy notes at once, a touch out of tune, through a nasal filter.
-  const f = ac.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = base * 3.2; f.Q.value = 0.7;
+  const f = ac.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = base * 2.2; f.Q.value = 0.8;
   const g = ac.createGain();
   g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(level, t + 0.02);
   g.gain.setValueAtTime(level, t + dur - 0.05); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
   f.connect(g).connect(out);
-  for (const m of [1, 1.26, 1.5, 2.01]) {
+  for (const m of [1, 1.26, 1.5]) {
     const o = ac.createOscillator(); o.type = 'sawtooth';
     o.frequency.setValueAtTime(base * m * 0.94, t); o.frequency.exponentialRampToValueAtTime(base * m, t + 0.05);
     o.detune.value = (Math.random() - 0.5) * 24;
     o.connect(f); o.start(t); o.stop(t + dur + 0.02);
   }
-}
-function boom(ac, out, t, f0, f1, dur, level) {
-  const o = ac.createOscillator(); o.type = 'sine';
-  o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + dur * 0.8);
-  const sh = ac.createWaveShaper(), c = new Float32Array(257);
-  for (let i = 0; i < 257; i++) { const x = i / 128 - 1; c[i] = Math.tanh(3 * x); }
-  sh.curve = c;
-  const g = ac.createGain();
-  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(level, t + 0.012); g.gain.setValueAtTime(level, t + dur * 0.35); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-  o.connect(sh).connect(g).connect(out); o.start(t); o.stop(t + dur + 0.02);
 }
 function hiss(ac, out, t, dur, level, type, f0, f1, q = 1) {
   const n = ac.createBufferSource(); n.buffer = noise(ac); n.loop = true;
@@ -469,36 +459,38 @@ export function shoutSound(kind) {
   const ac = audio();
   if (!ac) return;
   const t = ac.currentTime + 0.01;
-  // A limiter, so many presses at once get loud but never crackle.
-  const out = ac.createDynamicsCompressor();
-  out.threshold.value = -14; out.ratio.value = 12; out.attack.value = 0.002; out.release.value = 0.15;
-  const master = ac.createGain(); master.gain.value = 0.7;
-  out.connect(master).connect(ac.destination);
+  // Everything goes through one path that keeps the sound in the middle: nothing under about 200 Hz (no rumble),
+  // nothing sharp above about 3 kHz, a limiter so many presses at once never crackle, and a low volume.
+  const out = ac.createBiquadFilter(); out.type = 'highpass'; out.frequency.value = 200; out.Q.value = 0.5;
+  const top = ac.createBiquadFilter(); top.type = 'lowpass'; top.frequency.value = 3000; top.Q.value = 0.5;
+  const lim = ac.createDynamicsCompressor();
+  lim.threshold.value = -20; lim.ratio.value = 10; lim.attack.value = 0.003; lim.release.value = 0.12;
+  const master = ac.createGain(); master.gain.value = 0.32;
+  out.connect(top).connect(lim).connect(master).connect(ac.destination);
   if (kind === 'bus') {
-    // Three air horn blasts, a siren that climbs, then a deep boom.
-    horn(ac, out, t, 0.13, 440, 0.34); horn(ac, out, t + 0.17, 0.13, 440, 0.34); horn(ac, out, t + 0.34, 0.62, 440, 0.4);
-    const o = ac.createOscillator(), l = ac.createOscillator(), lg = ac.createGain(), g = ac.createGain();
-    o.type = 'square'; o.frequency.setValueAtTime(320, t + 0.34); o.frequency.exponentialRampToValueAtTime(1500, t + 0.95);
-    l.frequency.value = 17; lg.gain.value = 45; l.connect(lg).connect(o.frequency);
-    g.gain.setValueAtTime(0.0001, t + 0.34); g.gain.exponentialRampToValueAtTime(0.11, t + 0.5); g.gain.exponentialRampToValueAtTime(0.0001, t + 1.0);
-    o.connect(g).connect(out); o.start(t + 0.34); l.start(t + 0.34); o.stop(t + 1.02); l.stop(t + 1.02);
-    hiss(ac, out, t + 0.34, 0.66, 0.12, 'highpass', 900, 7000);
-    boom(ac, out, t + 0.98, 190, 38, 0.9, 0.7);
-    hiss(ac, out, t + 0.98, 0.35, 0.3, 'lowpass', 5000, 300);
+    // Two short horn toots and one longer one, with a soft whoop that climbs under the last.
+    horn(ac, out, t, 0.09, 330, 0.3); horn(ac, out, t + 0.12, 0.09, 330, 0.3); horn(ac, out, t + 0.24, 0.34, 392, 0.34);
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = 'triangle'; o.frequency.setValueAtTime(330, t + 0.24); o.frequency.exponentialRampToValueAtTime(880, t + 0.56);
+    g.gain.setValueAtTime(0.0001, t + 0.24); g.gain.exponentialRampToValueAtTime(0.16, t + 0.34); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.6);
+    o.connect(g).connect(out); o.start(t + 0.24); o.stop(t + 0.62);
   } else if (kind === 'split') {
-    // A record scratch back and forth, a cut, then a bass drop with two claps.
-    const cuts = [[0, 0.09, 700, 2600], [0.1, 0.08, 2600, 600], [0.2, 0.07, 800, 3200], [0.28, 0.12, 3200, 500]];
+    // A short record scratch back and forth, then two soft knocks.
+    const cuts = [[0, 0.08, 500, 1500], [0.09, 0.07, 1500, 450], [0.18, 0.1, 550, 1700]];
     for (const [d, len, a, b] of cuts) {
-      hiss(ac, out, t + d, len, 2.2, 'bandpass', a, b, 4);
-      const o = ac.createOscillator(), g = ac.createGain(); o.type = 'sawtooth';
-      o.frequency.setValueAtTime(a / 3, t + d); o.frequency.exponentialRampToValueAtTime(b / 3, t + d + len);
-      g.gain.setValueAtTime(0.0001, t + d); g.gain.exponentialRampToValueAtTime(0.4, t + d + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + d + len);
+      hiss(ac, out, t + d, len, 1.2, 'bandpass', a, b, 3);
+      const o = ac.createOscillator(), g = ac.createGain(); o.type = 'triangle';
+      o.frequency.setValueAtTime(a / 2, t + d); o.frequency.exponentialRampToValueAtTime(b / 2, t + d + len);
+      g.gain.setValueAtTime(0.0001, t + d); g.gain.exponentialRampToValueAtTime(0.3, t + d + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + d + len);
       o.connect(g).connect(out); o.start(t + d); o.stop(t + d + len + 0.02);
     }
-    boom(ac, out, t + 0.46, 240, 30, 1.1, 0.75);
-    for (const d of [0.46, 0.7]) { hiss(ac, out, t + d, 0.16, 0.45, 'bandpass', 1800, 1200, 1.2); hiss(ac, out, t + d + 0.012, 0.12, 0.3, 'highpass', 2500, 2500); }
-    // Two falling laser notes over the drop.
-    for (const d of [0.52, 0.76]) { const o = ac.createOscillator(), g = ac.createGain(); o.type = 'triangle'; o.frequency.setValueAtTime(1900, t + d); o.frequency.exponentialRampToValueAtTime(260, t + d + 0.2); g.gain.setValueAtTime(0.0001, t + d); g.gain.exponentialRampToValueAtTime(0.14, t + d + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + d + 0.22); o.connect(g).connect(out); o.start(t + d); o.stop(t + d + 0.25); }
+    for (const [d, f] of [[0.32, 420], [0.44, 320]]) {
+      const o = ac.createOscillator(), g = ac.createGain(); o.type = 'sine';
+      o.frequency.setValueAtTime(f, t + d); o.frequency.exponentialRampToValueAtTime(f * 0.7, t + d + 0.1);
+      g.gain.setValueAtTime(0.0001, t + d); g.gain.exponentialRampToValueAtTime(0.5, t + d + 0.008); g.gain.exponentialRampToValueAtTime(0.0001, t + d + 0.13);
+      o.connect(g).connect(out); o.start(t + d); o.stop(t + d + 0.15);
+      hiss(ac, out, t + d, 0.05, 0.25, 'bandpass', 1200, 900, 1);
+    }
   }
-  setTimeout(() => master.disconnect(), 2600);
+  setTimeout(() => master.disconnect(), 1500);
 }
