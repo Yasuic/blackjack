@@ -1,15 +1,28 @@
 // The poker page: a Texas Hold'em table for up to 9 in the big meeting room. The host's browser runs
 // the table (js/poker.js); every other browser sends its moves there and is told only what it may see.
-import { PokerTable, POKER_SEATS, pokerDeck, cardText } from './poker.js?v=20261122i';
-import { sha256 } from './game.js?v=20261122i';
-import { botMove, isBot, BOT_NAMES } from './pokerbot.js?v=20261122i';
-import { chipSound, cardSound, hitSound, standSound, potSound, tickSound, turnSound, punchSound } from './fx.js?v=20261122i';
-import { webglOK, initRoom } from './room3d.js?v=20261122i';
-import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122i';
-import { params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame } from './common.js?v=20261122i';
+import { PokerTable, POKER_SEATS, pokerDeck, cardText } from './poker.js?v=20261122j';
+import { sha256 } from './game.js?v=20261122j';
+import { botMove, isBot, BOT_NAMES } from './pokerbot.js?v=20261122j';
+import { chipSound, cardSound, hitSound, standSound, potSound, tickSound, turnSound, punchSound } from './fx.js?v=20261122j';
+import { webglOK, initRoom } from './room3d.js?v=20261122j';
+import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122j';
+import { params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame } from './common.js?v=20261122j';
 
-import { shareHidden, startHold } from './vault.js?v=20261122i';
+import { shareHidden, startHold } from './vault.js?v=20261122j';
+import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261122j';
 const PREFIX = 'bjt-pk-';
+// A settings change by vote (js/vote.js): any player at the table may ask, every other player at the table who is online has to say yes.
+const VOTE = {
+  labels: { smallBlind: ['Small blind'], bigBlind: ['Big blind'], ante: ['Ante'], startStack: ['Starting chips'], turnTimer: ['Seconds per turn'], timeBank: ['Time bank'],
+    sevenDeuce: ['7-2 bounty'], bombPotEvery: ['Bomb pot every'], bombPotAnte: ['Bomb pot ante'], runTimes: ['Run it'], straddle: ['Straddle'], autoStart: ['Deal by itself'], doubleBoard: ['Two boards'],
+    game: ['Game', (v) => (v === 'plo' ? 'Omaha' : "Hold'em")], bombGame: ['Bomb pot game', (v) => (v === 'plo' ? 'Omaha' : v === 'nlh' ? "Hold'em" : 'same as the table')], bombBoards: ['Bomb pot boards', (v) => (v ? String(v) : 'same as the table')], showSpeed: ['Showdown speed'] },
+  seated: (id) => S.table.seatOf(id) >= 0,
+  voters: (by) => S.table.seats.filter((x) => x && x.id !== by && !isBot(x.id) && S.table.players[x.id]?.connected).map((x) => x.id),
+  name: (id) => S.table.players[id]?.name || 'A player',
+  canApply: () => !S.table.inHand(),
+  apply: (patch) => S.table.updateSettings(patch),
+  log: (text) => S.table.addLog(text),
+};
 const app = $('#app');
 const S = { name: safeGet('bj-name') || '', myId: getClientId(), code: null, role: null, table: null, st: null, net: null, room: null,
   conn: ['Connecting', false], raiseTo: null, raiseFor: '', seedFor: '', boardSeen: { hand: -1, n: 0 }, doneAt: 0, started: false, paused: false, at: 0, goneAt: {}, autoAway: {} };
@@ -160,6 +173,8 @@ function hostMsg(id, m) {
 function doMove(id, m) {
   const t = S.table;
   switch (m.t) {
+    case 'propose': votePropose(t, VOTE, id, m.patch); break;
+    case 'vote': voteCast(t, VOTE, id, !!m.yes); break;
     case 'sit': t.sit(id, Number(m.seat), m.buyIn); break;
     case 'move': t.moveSeat(id, Number(m.seat)); break;
     case 'stand': t.standUp(id); break;
@@ -234,10 +249,10 @@ function showPunch(st) {
 function push() {
   const t = S.table;
   if (!t) return;
-  for (const id of S.net.ids()) S.net.send(id, { t: 'state', st: t.publicState(id) });
+  for (const id of S.net.ids()) S.net.send(id, { t: 'state', st: { ...t.publicState(id), vote: voteView(t, VOTE, id) } });
   // The deck and the cards nobody else may see go along locked, so the same deck goes on if this browser leaves.
   shareHidden(S, S.net, t.seats.filter((x) => x && x.id !== S.myId && !isBot(x.id) && t.players[x.id]?.connected).map((x) => x.id), t.hidden());
-  S.st = t.publicState(S.myId);
+  S.st = { ...t.publicState(S.myId), vote: voteView(t, VOTE, S.myId) };
   keepMine(S.st);
   S.at = Date.now();
   try { safeSet('pk-host', JSON.stringify({ code: S.code, table: { ...t, log: t.log.slice(-60), hist: t.hist.slice(-40) } })); } catch {}
@@ -246,6 +261,7 @@ function push() {
 function hostClock() {
   const t = S.table;
   if (!t) return;
+  if (voteTick(t, VOTE)) push();
   const now = Date.now();
   if (t.waitCards) {
     const miss = t.missingCards().map((i) => t.seats[i].id);
@@ -641,6 +657,7 @@ function playSounds(st) {
   } catch { /* sound is never worth an error */ }
 }
 function render() {
+  drawVote(S.st?.vote, send);
   const body = $('#pk-body');
   if (!body) return;
   const st = S.st ? beatView(S.st) : S.st;
@@ -947,8 +964,8 @@ function drawMenu(st) {
     <button class="menu-item" data-act="test-trip" data-who="Henry" data-kind="visit" data-note="Henry walks over to Felix.">🗣 Henry visits Felix</button>
     <button class="menu-item" data-act="test-trip" data-who="any" data-kind="coffee" data-note="Somebody leaves for a coffee.">☕ Coffee run</button>` : '<div class="menu-note">The office people show in the 3D room only.</div>'}` : ''}
     <button class="menu-item" data-act="bbview">👁 Amounts shown in: ${bbOn() ? 'big blinds' : 'chips'}</button>
-    ${isHost ? `<button class="menu-item" data-act="settings">⚙️ Table settings</button>
-    <button class="menu-item" data-act="players">👥 Players</button>
+    ${isHost || st.seats.some((x) => x && x.id === S.myId) ? `<button class="menu-item" data-act="settings" data-note="${isHost ? '' : 'Everyone else at the table votes on your change.'}">⚙️ Table settings</button>` : ''}
+    ${isHost ? `    <button class="menu-item" data-act="players">👥 Players</button>
     ${st.seats.some((x) => !x) ? '<button class="menu-item" data-act="bot-add">🤖 Add a computer player</button>' : ''}${st.seats.some((x) => x && String(x.id).startsWith('bot-')) ? '<button class="menu-item" data-act="bot-clear">🤖 Remove computer players</button>' : ''}
     <button class="menu-item" data-act="bomb">💣 Bomb pot next hand: ${st.bombNext ? 'on' : 'off'}</button>
     <button class="menu-item" data-act="pause">${S.paused ? '▶️ Resume dealing' : '⏸️ Pause after this hand'}</button>` : ''}
@@ -986,7 +1003,7 @@ function settingsHTML(st) {
     <label>Bomb pot game<select id="ps-bombGame">${[['same', 'Same as the table'], ['nlh', "Hold'em"], ['plo', 'Omaha (PLO)']].map(([v, l]) => `<option value="${v}"${s.bombGame === v ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
     <label>Bomb pot boards<select id="ps-bombBoards">${[[0, 'Same as the table'], [1, 'One board'], [2, 'Two boards']].map(([v, l]) => `<option value="${v}"${s.bombBoards === v ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
     ${tick('straddle', 'Straddle allowed')}${tick('autoStart', 'Deal the next hand automatically')}
-    <button class="btn primary" data-act="save-settings">Save</button>
+    <button class="btn primary" data-act="save-settings">${S.role === 'host' ? 'Save' : 'Ask for a vote'}</button>
     <p class="hint">Changes made during a hand start with the next hand.</p></div>`;
 }
 function playersHTML(st) {
@@ -1126,7 +1143,8 @@ document.addEventListener('click', (e) => {
       for (const k of ['straddle', 'autoStart', 'doubleBoard']) patch[k] = $('#ps-' + k).checked;
       patch.game = $('#ps-game').value; patch.bombGame = $('#ps-bombGame').value; patch.bombBoards = Number($('#ps-bombBoards').value);
       patch.showSpeed = $('#ps-showSpeed').value;
-      if (t.inHand()) { S.pendingSettings = patch; toast('Saved. The new settings start with the next hand.'); }
+      if (S.role !== 'host') { send({ t: 'propose', patch }); toast('Sent. Everyone else at the table votes.'); }
+      else if (t.inHand()) { S.pendingSettings = patch; toast('Saved. The new settings start with the next hand.'); }
       else { try { t.updateSettings(patch); toast('Settings saved.'); } catch (er) { toast(er.message); } push(); }
       $('#modal').close();
       break;

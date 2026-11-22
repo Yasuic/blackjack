@@ -1,12 +1,23 @@
 // The baccarat page: a punto banco table for up to 9 in the small meeting room. The host's browser runs
 // the table (js/baccarat.js); every other browser sends its bets there and is told only what it may see.
-import { BacTable, BAC_SEATS, BAC_SPOTS, BAC_KEYS, verifyShoe, cardText } from './baccarat.js?v=20261122i';
-import { webglOK, initRoom } from './room3d.js?v=20261122i';
-import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122i';
-import { params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML } from './common.js?v=20261122i';
+import { BacTable, BAC_SEATS, BAC_SPOTS, BAC_KEYS, verifyShoe, cardText } from './baccarat.js?v=20261122j';
+import { webglOK, initRoom } from './room3d.js?v=20261122j';
+import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122j';
+import { params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML } from './common.js?v=20261122j';
 
-import { shareHidden, startHold } from './vault.js?v=20261122i';
+import { shareHidden, startHold } from './vault.js?v=20261122j';
+import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261122j';
 const PREFIX = 'bjt-bc-';
+// A settings change by vote (js/vote.js): any player at the table may ask, every other player at the table who is online has to say yes.
+const VOTE = {
+  labels: { minBet: ['Smallest bet'], maxBet: ['Largest bet on Player or Banker'], maxSide: ['Largest bet on Tie or a pair'], startChips: ['Chips for a new player'], betTime: ['Seconds to the deal', (v) => (v ? String(v) : 'deal by hand')], decks: ['Decks'] },
+  seated: (id) => { const p = S.table.players[id]; return !!p && !p.kicked && p.seat >= 0; },
+  voters: (by) => Object.values(S.table.players).filter((p) => p.id !== by && p.connected && !p.kicked && p.seat >= 0).map((p) => p.id),
+  name: (id) => S.table.players[id]?.name || 'A player',
+  canApply: () => S.table.phase === 'betting' && !S.table.canDeal(),
+  apply: (patch) => S.table.updateSettings(patch),
+  log: (text) => S.table.addLog(text),
+};
 const app = $('#app');
 const S = { name: safeGet('bj-name') || '', myId: getClientId(), code: null, role: null, table: null, st: null, net: null, room: null,
   conn: ['Connecting', false], chip: Number(safeGet('bc-chip')) || 5, seedFor: '', at: 0, paused: false, show: null };
@@ -90,6 +101,8 @@ function hostMsg(id, m) {
 function doMove(id, m) {
   const t = S.table;
   switch (m.t) {
+    case 'propose': votePropose(t, VOTE, id, m.patch); break;
+    case 'vote': voteCast(t, VOTE, id, !!m.yes); break;
     case 'bet': t.bet(id, String(m.spot), m.amount); break;
     case 'clear': t.clearBets(id); break;
     case 'rebet': t.rebet(id); break;
@@ -126,10 +139,10 @@ function showFx(fromId, e) {
 function push() {
   const t = S.table;
   if (!t) return;
-  for (const id of S.net.ids()) S.net.send(id, { t: 'state', st: t.publicState(id) });
+  for (const id of S.net.ids()) S.net.send(id, { t: 'state', st: { ...t.publicState(id), vote: voteView(t, VOTE, id) } });
   // The shoe and the cards nobody has seen go along locked, so the same shoe goes on if this browser leaves.
   shareHidden(S, S.net, Object.values(t.players).filter((p) => p.id !== S.myId && p.seat >= 0 && p.connected && !p.kicked).map((p) => p.id), t.hidden());
-  S.st = t.publicState(S.myId);
+  S.st = { ...t.publicState(S.myId), vote: voteView(t, VOTE, S.myId) };
   S.at = Date.now();
   try { safeSet('bc-host', JSON.stringify({ code: S.code, table: { ...t, log: t.log.slice(-60) } })); } catch {}
   render();
@@ -139,6 +152,7 @@ const showMs = () => 4500; // every card is already face up when a round is done
 function hostClock() {
   const t = S.table;
   if (!t) return;
+  if (voteTick(t, VOTE)) push();
   const now = Date.now();
   if (S.pendingSettings && t.phase === 'betting' && !t.canDeal()) { t.updateSettings(S.pendingSettings); S.pendingSettings = null; push(); }
   if (t.phase === 'betting') {
@@ -305,6 +319,7 @@ const spotName = (k) => BAC_SPOTS[k].name;
 // While the cards come out, a player's chips are shown as they were before the payout, so the result is not given away early.
 const shownChips = (st, p, final) => (st.phase === 'done' && !final && st.pays[p.id] ? Math.round((p.chips - st.pays[p.id].back) * 100) / 100 : p.chips);
 function render() {
+  drawVote(S.st?.vote, send);
   const body = $('#pk-body');
   if (!body) return;
   const st = S.st;
@@ -423,8 +438,8 @@ function drawMenu(st) {
     <button class="menu-item" data-act="log">📝 Round log</button>
     <button class="menu-item" data-act="fair">🔐 Fair shoe</button>
     <button class="menu-item" data-act="rules">📖 Rules and payouts</button>
-    ${isHost ? `<button class="menu-item" data-act="settings">⚙️ Table settings</button>
-    <button class="menu-item" data-act="players">👥 Players</button>
+    ${isHost || (st.players.find((p) => p.id === S.myId)?.seat ?? -1) >= 0 ? `<button class="menu-item" data-act="settings" data-note="${isHost ? '' : 'Everyone else at the table votes on your change.'}">⚙️ Table settings</button>` : ''}
+    ${isHost ? `    <button class="menu-item" data-act="players">👥 Players</button>
     <button class="menu-item" data-act="pause">${S.paused ? '▶️ Deal by the clock again' : '⏸️ Stop the clock (deal by hand)'}</button>` : ''}
     <button class="menu-item" data-act="view3d">🧊 3D room: ${use3D() ? 'on' : 'off'}</button>
     ${S.room ? '<button class="menu-item" data-act="walk">🚶 Walk around</button><button class="menu-item" data-act="view-reset">🪑 Back to my seat</button>' : ''}
@@ -446,7 +461,7 @@ function settingsHTML(st) {
     ${num('minBet', 'Smallest bet')}${num('maxBet', 'Largest bet on Player or Banker')}${num('maxSide', 'Largest bet on Tie or a pair')}${num('startChips', 'Chips for a new player')}
     <label>Seconds from the first bet to the deal<select id="bs-betTime">${[0, 8, 10, 15, 20, 30, 45, 60].map((v) => `<option value="${v}"${v === s.betTime ? ' selected' : ''}>${v ? v : 'Deal by hand'}</option>`).join('')}</select></label>
     <label>Decks in the shoe<select id="bs-decks">${[6, 8].map((v) => `<option value="${v}"${v === s.decks ? ' selected' : ''}>${v}</option>`).join('')}</select></label>
-    <button class="btn primary" data-act="save-settings">Save</button>
+    <button class="btn primary" data-act="save-settings">${S.role === 'host' ? 'Save' : 'Ask for a vote'}</button>
     <p class="hint">Changes start when no bets are on the table. A new number of decks starts with the next shoe.</p></div>`;
 }
 function playersHTML(st) {
@@ -525,7 +540,8 @@ document.addEventListener('click', (e) => {
     case 'save-settings': {
       const patch = {};
       for (const k of ['minBet', 'maxBet', 'maxSide', 'startChips', 'betTime', 'decks']) patch[k] = Number($('#bs-' + k).value);
-      if (t.canDeal() || t.phase !== 'betting') { S.pendingSettings = patch; toast('Saved. The new settings start when no bets are on the table.'); }
+      if (S.role !== 'host') { send({ t: 'propose', patch }); toast('Sent. Everyone else at the table votes.'); }
+      else if (t.canDeal() || t.phase !== 'betting') { S.pendingSettings = patch; toast('Saved. The new settings start when no bets are on the table.'); }
       else { t.updateSettings(patch); toast('Settings saved.'); push(); }
       $('#modal').close();
       break;
