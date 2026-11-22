@@ -1,16 +1,17 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe } from './game.js?v=20261122za';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122za';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122za';
-import { tickSound, winSound } from './fx.js?v=20261122za';
-import * as HX from './history.js?v=20261122za';
-import { webglOK, initRoom } from './room3d.js?v=20261122za';
-import { showDropped, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261122za';
-import { makeVault, makeOpener, cleanBox, cleanPiece } from './vault.js?v=20261122za';
-import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122za';
-import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122za';
+import { outerLink } from './shell.js?v=20261122zb';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe } from './game.js?v=20261122zb';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122zb';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122zb';
+import { tickSound, winSound } from './fx.js?v=20261122zb';
+import * as HX from './history.js?v=20261122zb';
+import { webglOK, initRoom } from './room3d.js?v=20261122zb';
+import { showDropped, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261122zb';
+import { makeVault, makeOpener, cleanBox, cleanPiece } from './vault.js?v=20261122zb';
+import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122zb';
+import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122zb';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -120,6 +121,8 @@ function peerOptions() {
   if (!host) return { debug: 1, config };
   return { host, port: Number(params.get('peerport') || 443), path: params.get('peerpath') || '/', secure: params.get('peersecure') !== '0', debug: 1 };
 }
+// The link friends get: inside the office it is the office link, which never changes as you walk between tables.
+const inviteLink = () => outerLink(shareLink(), 'blackjack');
 function shareLink() {
   const q = new URLSearchParams();
   q.set('room', S.code);
@@ -1762,7 +1765,7 @@ function render(note) {
     pill.textContent = S.online ? `Table ${S.code}${S.role === 'player' && S.viaRelay ? ' · backup path' : ''}` : (S.role === 'host' ? 'Opening...' : 'Offline');
   }
   const share = $('#share');
-  if (share && share.value !== shareLink()) share.value = shareLink();
+  if (share && share.value !== inviteLink()) share.value = inviteLink();
   if (S.role === 'host') $('#offline-note')?.remove(); // this browser took the table over: the note is out of date
   // A guest whose host has gone away: say why, since the table lives in the host's browser tab.
   if (S.role !== 'host') {
@@ -3372,7 +3375,7 @@ function runAct(el) {
       break;
     }
     case 'copy': {
-      const link = shareLink();
+      const link = inviteLink();
       (navigator.clipboard?.writeText(link) || Promise.reject()).then(() => toast('Invite link copied. Send it to your friends.'), () => { $('#share').select(); toast('Copy the link from the box.'); });
       break;
     }

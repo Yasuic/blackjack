@@ -1,7 +1,8 @@
 // Shared by the poker and baccarat pages: small helpers, the playing card picture, the game switch at the
 // top left, and the link between the host's browser and the players' browsers.
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122za';
-import { cleanBox, cleanPiece } from './vault.js?v=20261122za';
+import { openTable } from './shell.js?v=20261122zb';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122zb';
+import { cleanBox, cleanPiece } from './vault.js?v=20261122zb';
 export const params = new URLSearchParams(location.search);
 export const $ = (sel, el = document) => el.querySelector(sel);
 export function safeGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
@@ -106,7 +107,8 @@ export async function walkTo(current, g, url, code) {
   }
   walkAnyway = null;
   if (amount > 0) safeSet(CARRY_KEY, JSON.stringify({ code, to: g, from: current, amount, cid: randomHex(6), t: Date.now() }));
-  setTimeout(() => { location.href = url; }, amount > 0 ? 250 : 120);
+  // Inside the office frame the new table is loaded behind this one and shown when ready; the link stays the same.
+  setTimeout(() => openTable(url), amount > 0 ? 250 : 120);
 }
 // The chips this browser carries to this table, if any (they are kept for 10 minutes).
 export function carryFor(game, code) {

@@ -1,12 +1,13 @@
 // The roulette page: a European roulette table for up to 9 in Nigel's room. The host's browser runs
 // the table (js/roulette.js); every other browser sends its bets there and is told only what it may see.
-import { RouTable, ROU_SEATS, WHEEL, colorOf, betNumbers, betName, betPays, verifySpin } from './roulette.js?v=20261122za';
-import { showSpin } from './wheel.js?v=20261122za';
-import { webglOK, initRoom } from './room3d.js?v=20261122za';
-import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122za';
-import { showDropped, params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML } from './common.js?v=20261122za';
+import { outerLink } from './shell.js?v=20261122zb';
+import { RouTable, ROU_SEATS, WHEEL, colorOf, betNumbers, betName, betPays, verifySpin } from './roulette.js?v=20261122zb';
+import { showSpin } from './wheel.js?v=20261122zb';
+import { webglOK, initRoom } from './room3d.js?v=20261122zb';
+import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122zb';
+import { showDropped, params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML } from './common.js?v=20261122zb';
 
-import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261122za';
+import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261122zb';
 const PREFIX = 'bjt-ro-';
 // A settings change by vote (js/vote.js): any player at the table may ask, every other player at the table who is online has to say yes.
 const VOTE = {
@@ -274,6 +275,8 @@ function send(m) {
   if (S.role === 'host') { try { doMove(S.myId, m); } catch (e) { toast(e.message); } push(); }
   else if (!S.net?.send(m)) toast('Not connected to the host right now.');
 }
+// The link friends get: inside the office it is the office link, which never changes as you walk between tables.
+const inviteLink = () => outerLink(shareLink(), 'roulette');
 function shareLink() {
   const q = new URLSearchParams();
   q.set('room', S.code);
@@ -496,7 +499,7 @@ function drawMenu(st) {
   if (!el) return;
   const isHost = S.role === 'host';
   el.innerHTML = `
-    <div class="menu-invite"><div class="menu-title">🔗 Invite link</div><div class="share"><input id="share" readonly value="${esc(shareLink())}" /><button class="btn small" data-act="copy">Copy</button></div></div>
+    <div class="menu-invite"><div class="menu-title">🔗 Invite link</div><div class="share"><input id="share" readonly value="${esc(inviteLink())}" /><button class="btn small" data-act="copy">Copy</button></div></div>
     <button class="menu-item" data-act="ledger">📒 Ledger</button>
     ${S.role === 'guest' ? '<button class="menu-item" data-act="become-host" title="The table moves to your browser. No vote.">👑 Become host</button>' : ''}
     <button class="menu-item" data-act="log">📝 Spin log</button>
@@ -543,7 +546,7 @@ function fairHTML(st) {
 
 // ---------- Clicks ----------
 function copyLink() {
-  const link = shareLink();
+  const link = inviteLink();
   (navigator.clipboard?.writeText(link) || Promise.reject()).then(() => toast('Invite link copied.')).catch(() => { modal(`<h3>Invite link</h3><input readonly value="${esc(link)}" style="width:100%" />`); });
 }
 document.addEventListener('click', (e) => {

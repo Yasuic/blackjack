@@ -8,19 +8,19 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Libre+Baskerville:wght@700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/style.css?v=20261122za" />
-  <link rel="stylesheet" href="css/games.css?v=20261122za" />
+  <link rel="stylesheet" href="css/style.css?v=20261122zb" />
+  <link rel="stylesheet" href="css/games.css?v=20261122zb" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect x='18' y='8' width='64' height='84' rx='10' fill='white' stroke='%23222' stroke-width='4'/><text x='50' y='66' font-size='48' text-anchor='middle' fill='%23222'>9</text></svg>" />
 </head>
 <body class="game-poker game-rou">
   <div id="app"></div>
   <div id="toast" class="toast" hidden></div>
   <dialog id="modal"><div id="modal-body"></div><form method="dialog"><button class="btn">Close</button></form></dialog>
-  <link rel="modulepreload" href="js/game.js?v=20261122za" />
-  <link rel="modulepreload" href="js/room3d.js?v=20261122za" />
+  <link rel="modulepreload" href="js/game.js?v=20261122zb" />
+  <link rel="modulepreload" href="js/room3d.js?v=20261122zb" />
   <link rel="modulepreload" href="lib/three.module.js" />
   <link rel="modulepreload" href="lib/CSS3DRenderer.js" />
   <script src="lib/peerjs.min.js"></script>
-  <script type="module" src="js/rouletteapp.js?v=20261122za"></script>
+  <script type="module">import { boot } from './js/shell.js?v=20261122zb'; boot('roulette', () => import('./js/rouletteapp.js?v=20261122zb'));</script>
 </body>
 </html>
