@@ -1,14 +1,14 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261122c';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122c';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122c';
-import { tickSound, winSound } from './fx.js?v=20261122c';
-import * as HX from './history.js?v=20261122c';
-import { webglOK, initRoom } from './room3d.js?v=20261122c';
-import { watchOffice } from './common.js?v=20261122c';
-import { chipSound, cardSound, hitSound, standSound, throwSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122c';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261122d';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122d';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122d';
+import { tickSound, winSound } from './fx.js?v=20261122d';
+import * as HX from './history.js?v=20261122d';
+import { webglOK, initRoom } from './room3d.js?v=20261122d';
+import { watchOffice } from './common.js?v=20261122d';
+import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122d';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -3474,7 +3474,7 @@ function showHurry({ from, name, say }) {
   el.style.setProperty('--tilt', (Math.random() * 16 - 8).toFixed(1) + 'deg');
   document.body.appendChild(el);
   setTimeout(() => el.remove(), 1500);
-  hitSound();
+  if (say === 'bus' || say === 'split') shoutSound(say); else hitSound();
 }
 // The Hurry up button stays right beside the Reactions button, wherever that is on this screen.
 function placeHurry() {

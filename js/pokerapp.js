@@ -1,16 +1,17 @@
 // The poker page: a Texas Hold'em table for up to 9 in the big meeting room. The host's browser runs
 // the table (js/poker.js); every other browser sends its moves there and is told only what it may see.
-import { PokerTable, POKER_SEATS, pokerDeck, cardText } from './poker.js?v=20261122c';
-import { sha256 } from './game.js?v=20261122c';
-import { botMove, isBot, BOT_NAMES } from './pokerbot.js?v=20261122c';
-import { chipSound, cardSound, hitSound, standSound, potSound, tickSound, turnSound } from './fx.js?v=20261122c';
-import { webglOK, initRoom } from './room3d.js?v=20261122c';
-import { params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame } from './common.js?v=20261122c';
+import { PokerTable, POKER_SEATS, pokerDeck, cardText } from './poker.js?v=20261122d';
+import { sha256 } from './game.js?v=20261122d';
+import { botMove, isBot, BOT_NAMES } from './pokerbot.js?v=20261122d';
+import { chipSound, cardSound, hitSound, standSound, potSound, tickSound, turnSound } from './fx.js?v=20261122d';
+import { webglOK, initRoom } from './room3d.js?v=20261122d';
+import { params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame } from './common.js?v=20261122d';
 
 const PREFIX = 'bjt-pk-';
 const app = $('#app');
 const S = { name: safeGet('bj-name') || '', myId: getClientId(), code: null, role: null, table: null, st: null, net: null, room: null,
   conn: ['Connecting', false], raiseTo: null, raiseFor: '', seedFor: '', boardSeen: { hand: -1, n: 0 }, doneAt: 0, started: false, paused: false, at: 0, goneAt: {}, autoAway: {} };
+try { S.testMode = localStorage.getItem('pk-test') === '1'; } catch {}
 if (params.has('roomdebug')) { window.__P = S; window.__pk = { push: () => push(), render: () => render(), ring: () => ({ g: ringMeasure(), key: S.ringKey, plan: S.ringPlan }) }; }
 const phone = () => innerWidth < 700;
 const bbOn = () => safeGet('pk-bb') === '1';
@@ -148,7 +149,7 @@ function doMove(id, m) {
     case 'vaway': t.voteAway(id, String(m.id), !!m.on); break;
     case 'fx': relayFx(id, m.e); break;
     case 'show': t.showCards(id, m.which); break;
-    case 'punch': t.punchWinner(id); break;
+    case 'punch': t.punchWinner(id, !!m.test); break;
     case 'rabbit': t.rabbitHunt(id); break;
     case 'straddle': t.setStraddle(id, !!m.on); break;
     case 'runs': t.setRuns(id, m.n); break;
@@ -291,7 +292,8 @@ function hostClock() {
   const r = t.result;
   // A punch after a bad beat: the table stops for 5 seconds while everyone watches. While a player may still
   // punch, the next hand waits 4 seconds longer. A computer player with a bad beat punches most of the time.
-  if (t.phase === 'done' && t.punch) { if (now - t.punch.at < PUNCH_MS + 700) return; }
+  if (!t.inHand() && t.punch && now - t.punch.at < PUNCH_MS + 700) return;
+  if (t.phase === 'done' && t.punch) { /* the punch is over */ }
   else if (t.phase === 'done' && t.beats && Object.keys(t.beats).length) {
     for (const i of Object.keys(t.beats)) { const x = t.seats[i]; if (x && isBot(x.id) && now - S.doneAt > BEAT_MS + SHOW_MS + 1300 && (t.handNo + Number(i)) % 4 !== 0) { try { t.punchWinner(x.id); push(); } catch {} return; } }
     if (now - S.doneAt < endWait(r) + 4000) return;
@@ -621,7 +623,7 @@ function render() {
     return;
   }
   playSounds(st);
-  if (st.punch && S.punched !== st.handNo + ':' + st.punch.from) { S.punched = st.handNo + ':' + st.punch.from; showPunch(st); }
+  if (st.punch && S.punched !== st.punch.at) { S.punched = st.punch.at; if (st.punch.left > 400) showPunch(st); }
   const { mySeat, at, rel } = seatLayout(st);
   const ring = useRing(), plan = ring ? ringNow() : null;
   { const f = $('#felt'); if (f) { f.classList.toggle('ring', ring); if (plan) { f.style.setProperty('--k', plan.k.toFixed(3)); f.style.setProperty('--rb', plan.board.toFixed(2) + '%'); f.style.setProperty('--rp', plan.pot.toFixed(2) + '%'); } else { f.style.removeProperty('--k'); f.style.removeProperty('--rb'); f.style.removeProperty('--rp'); } } }
@@ -907,6 +909,15 @@ function drawMenu(st) {
     <button class="menu-item" data-act="dl-hands">⬇️ Download hand history</button>
     <button class="menu-item" data-act="fair">🔐 Fair deck</button>
     <button class="menu-item" data-act="rules">📖 Table rules</button>
+    <button class="menu-item" data-act="test-mode">🧪 Test mode: ${S.testMode ? 'on' : 'off'}</button>
+    ${S.testMode ? `<div class="menu-head">Test</div>
+    ${mySeatNow(st) ? '<button class="menu-item" data-act="test-punch">👊 Punch the next player</button>' : '<div class="menu-note">Take a seat to test the punch.</div>'}
+    ${S.room ? `<button class="menu-item" data-act="test-talk">💬 Everyone says a line</button>
+    <button class="menu-item" data-act="test-trip" data-who="Jeff" data-kind="nap" data-note="Jeff walks to the sofa for a nap.">😴 Jeff naps on the sofa</button>
+    <button class="menu-item" data-act="test-trip" data-who="Nigel" data-kind="visit" data-note="Nigel walks over to Allie.">🧹 Nigel visits Allie</button>
+    <button class="menu-item" data-act="test-trip" data-who="Gordon" data-kind="visit" data-note="Gordon walks over to Yuya.">🗣 Gordon visits Yuya</button>
+    <button class="menu-item" data-act="test-trip" data-who="Henry" data-kind="visit" data-note="Henry walks over to Felix.">🗣 Henry visits Felix</button>
+    <button class="menu-item" data-act="test-trip" data-who="any" data-kind="coffee" data-note="Somebody leaves for a coffee.">☕ Coffee run</button>` : '<div class="menu-note">The office people show in the 3D room only.</div>'}` : ''}
     <button class="menu-item" data-act="bbview">👁 Amounts shown in: ${bbOn() ? 'big blinds' : 'chips'}</button>
     ${isHost ? `<button class="menu-item" data-act="settings">⚙️ Table settings</button>
     <button class="menu-item" data-act="players">👥 Players</button>
@@ -1038,6 +1049,10 @@ document.addEventListener('click', (e) => {
     case 'raise-step': { const o = st.options; if (o?.canRaise) setRaise(Math.max(o.minTo, Math.min(o.maxTo, Math.max(o.minTo, Math.min(o.maxTo, S.raiseTo)) + Number(el.dataset.d) * (st.settings.bigBlind || 1)))); break; }
     case 'show': send({ t: 'show', which: el.dataset.w === undefined ? 'both' : Number(el.dataset.w) }); break;
     case 'punch': send({ t: 'punch' }); break;
+    case 'test-mode': S.testMode = !S.testMode; try { localStorage.setItem('pk-test', S.testMode ? '1' : '0'); } catch {} drawMenu(S.st); break;
+    case 'test-punch': closeMenu(); send({ t: 'punch', test: true }); break;
+    case 'test-talk': S.room?.debugTalk?.(); toast('Everyone at a desk says a line. Press again for the next line.'); break;
+    case 'test-trip': S.room?.debugTrip?.(el.dataset.who, el.dataset.kind); toast(el.dataset.note || 'On the way.'); break;
     case 'rabbit': send({ t: 'rabbit' }); break;
     case 'away': { const s = st.seats.find((x) => x && x.id === S.myId); send({ t: 'away', on: !s.out }); break; }
     case 'straddle': { const s = st.seats.find((x) => x && x.id === S.myId); send({ t: 'straddle', on: !s.straddle }); break; }

@@ -2,8 +2,8 @@
 // rim, slows, drops, bounces off the frets and settles in the pocket of the number the host's spin gave.
 // The path is worked out backwards from that pocket, so the ball always ends on the real number, and it is a pure
 // function of the time since the spin started, so every screen shows the same motion.
-import { WHEEL, colorOf } from './roulette.js?v=20261122c';
-const fx = typeof window !== 'undefined' ? import('./fx.js?v=20261122c') : null; // sounds need a browser; the tests load this file without one
+import { WHEEL, colorOf } from './roulette.js?v=20261122d';
+const fx = typeof window !== 'undefined' ? import('./fx.js?v=20261122d') : null; // sounds need a browser; the tests load this file without one
 
 const TAU = Math.PI * 2, STEP = TAU / 37;
 const COLORS = { red: '#c62f2f', black: '#17191f', green: '#1f9a4d' };

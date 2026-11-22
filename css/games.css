@@ -767,3 +767,5 @@ body:not(.room3d) .pk-pow { transform: translate(-50%, -50%) rotate(var(--rot, 0
 body:not(.room3d) .felt.pk-brawl { animation: pk-shake .16s 1.2s linear infinite; }
 @keyframes pk-shake { 0% { translate: 0 0; } 25% { translate: 3px -2px; } 50% { translate: -3px 2px; } 75% { translate: 2px 2px; } 100% { translate: 0 0; } }
 @media (prefers-reduced-motion: reduce) { body:not(.room3d) .felt.pk-brawl { animation: none; } }
+.menu-head { padding: 8px 14px 4px; font: 800 11px Inter, system-ui, sans-serif; letter-spacing: .12em; text-transform: uppercase; color: #ffd27a; background: var(--panel); border-left: 1px solid var(--line); border-right: 1px solid var(--line); }
+.menu-note { padding: 8px 14px; font-size: 12px; color: #b9c2bd; background: var(--panel); border: 1px solid var(--line); border-top: none; }

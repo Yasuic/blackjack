@@ -416,6 +416,13 @@ PokerTable.noChances = true; PokerTable.autoRun = false;
   const after = t.publicState('p2');
   ok(after.punch && after.punch.from === 0 && after.punch.to === 1 && after.punch.left > 4000 && after.punch.left <= 5000, 'everyone is told who punches whom, for 5 seconds');
   threw = false; try { t.punchWinner('p0'); } catch { threw = true; } ok(threw, 'one punch per bad beat');
+  // The test punch from the menu: between hands only, on the next player round the table, no chips move.
+  { const sum = t.seats.reduce((n, x) => n + (x ? x.stack : 0), 0);
+    t.punch.at -= 6000; t.punchWinner('p1', true);
+    ok(t.punch.test && t.punch.from === t.seatOf('p1') && t.punch.to !== t.punch.from && t.seats[t.punch.to], 'a test punch goes to the next player');
+    ok(t.publicState('p0').punch?.left > 4000, 'everyone is told about a test punch');
+    threw = false; try { t.punchWinner('p0', true); } catch { threw = true; } ok(threw, 'no second punch while one runs');
+    ok(t.seats.reduce((n, x) => n + (x ? x.stack : 0), 0) === sum, 'a punch moves no chips'); }
   ok(tot(t) === 3000, 'a punch moves no chips');
   t.startHand(); ok(!t.publicState('p0').punch && !t.publicState('p0').canPunch, 'the next hand starts clean');
 }

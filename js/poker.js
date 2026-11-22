@@ -1,6 +1,6 @@
 // No-limit Texas Hold'em for up to 9 players. Pure rules: the host's browser owns one PokerTable and
 // every action goes through it. Nothing here touches the page or the network.
-import { SUITS, RANKS, sha256, fairSeed, fairShoe, MAX_CHIPS } from './game.js?v=20261122c';
+import { SUITS, RANKS, sha256, fairSeed, fairShoe, MAX_CHIPS } from './game.js?v=20261122d';
 
 export const POKER_SEATS = 9;
 export const POKER_DEFAULTS = {
@@ -832,9 +832,21 @@ export class PokerTable {
   static restore(j) { const t = new PokerTable(); Object.assign(t, j); return t; }
   // Rabbit hunt: the cards that would have come, when the hand ended before the river. One look per hand, shown to all.
   // After a bad beat the loser may punch the winner: the table stops for 5 seconds while everyone watches.
-  punchWinner(id) {
-    const i = this.seatOf(id), b = this.beats?.[i];
-    if (this.phase !== 'done' || !b || this.punch || !this.seats[b.by]) throw new Error('There is nobody to punch.');
+  punchWinner(id, test = false) {
+    const i = this.seatOf(id);
+    const busy = this.punch && Date.now() - this.punch.at < 5600;
+    if (test) {
+      // A try out from the menu's test mode: between hands, on the next player round the table.
+      if (i < 0 || this.inHand() || busy) throw new Error('Wait for the hand to end.');
+      let to = -1;
+      for (let k = 1; k < this.seats.length; k++) { const q = (i + k) % this.seats.length; if (this.seats[q]) { to = q; break; } }
+      if (to < 0) throw new Error('There is nobody to punch.');
+      this.punch = { from: i, to, at: Date.now(), hand: this.handNo, test: true };
+      this.addLog(`${this.name(i)} tries out a punch on ${this.name(to)} (test).`);
+      return;
+    }
+    const b = this.beats?.[i];
+    if (this.phase !== 'done' || !b || busy || !this.seats[b.by]) throw new Error('There is nobody to punch.');
     this.punch = { from: i, to: b.by, at: Date.now(), hand: this.handNo };
     this.beats = {};
     this.addLog(`${this.name(i)} punches ${this.name(b.by)} after a bad beat.`);
@@ -861,7 +873,7 @@ export class PokerTable {
     const me = this.seatOf(forId);
     return {
       game: 'poker', settings: this.settings, phase: this.phase, handNo: this.handNo, button: this.button, board: this.board, board2: this.dbl ? this.board2 || [] : null, plo: !!this.plo, dbl: !!this.dbl, rabbit2: this.rabbit2 || null, bomb: !!this.bomb,
-      pot: this.pot, minRaise: this.minRaise, pending: this.pending, moved: this.moved || 0, mySalt: me >= 0 ? this.seats[me].salt || null : null, wait: this.waitCards ? this.missingCards().map((i) => this.name(i)) : undefined, potTotal: this.potTotal(), swept: this.swept || null, canPunch: done && me >= 0 && this.beats?.[me] && !this.punch ? { to: this.beats[me].by, pct: this.beats[me].pct } : null, punch: done && this.punch ? { from: this.punch.from, to: this.punch.to, hand: this.punch.hand, left: Math.max(0, 5000 - (Date.now() - this.punch.at)) } : null, pots: this.inHand() || done ? this.potsNow() : [], currentBet: this.currentBet, turn: this.turn,
+      pot: this.pot, minRaise: this.minRaise, pending: this.pending, moved: this.moved || 0, mySalt: me >= 0 ? this.seats[me].salt || null : null, wait: this.waitCards ? this.missingCards().map((i) => this.name(i)) : undefined, potTotal: this.potTotal(), swept: this.swept || null, canPunch: done && me >= 0 && this.beats?.[me] && !this.punch ? { to: this.beats[me].by, pct: this.beats[me].pct } : null, punch: !this.inHand() && this.punch && this.seats[this.punch.from] && this.seats[this.punch.to] ? { from: this.punch.from, to: this.punch.to, hand: this.punch.hand, at: this.punch.at, left: Math.max(0, 5000 - (Date.now() - this.punch.at)) } : null, pots: this.inHand() || done ? this.potsNow() : [], currentBet: this.currentBet, turn: this.turn,
       turnLeft: this.turn !== null && this.settings.turnTimer ? Math.max(0, this.settings.turnTimer * 1000 - (Date.now() - (this.turnStarted || Date.now()))) : null,
       hostId: this.hostId, awayVotes: this.awayVotes || {}, canStart: this.canStart(), bombNext: this.bombNext, result: this.result, rabbit: this.rabbit, allInRun: !!this.allInRun && !done ? true : undefined,
       runAsk: this.runAsk && !this.runAsk.done ? { by: this.runAsk.by, max: this.runAsk.max, n: this.runAsk.n, yes: this.runAsk.yes, need: this.runAsk.need, left: Math.max(0, 20000 - (Date.now() - this.runAsk.at)) } : undefined,
