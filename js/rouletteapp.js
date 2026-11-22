@@ -1,12 +1,12 @@
 // The roulette page: a European roulette table for up to 9 in Nigel's room. The host's browser runs
 // the table (js/roulette.js); every other browser sends its bets there and is told only what it may see.
-import { RouTable, ROU_SEATS, WHEEL, colorOf, betNumbers, betName, betPays, verifySpin } from './roulette.js?v=20261122j';
-import { showSpin } from './wheel.js?v=20261122j';
-import { webglOK, initRoom } from './room3d.js?v=20261122j';
-import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122j';
-import { params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML } from './common.js?v=20261122j';
+import { RouTable, ROU_SEATS, WHEEL, colorOf, betNumbers, betName, betPays, verifySpin } from './roulette.js?v=20261122k';
+import { showSpin } from './wheel.js?v=20261122k';
+import { webglOK, initRoom } from './room3d.js?v=20261122k';
+import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122k';
+import { showDropped, params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML } from './common.js?v=20261122k';
 
-import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261122j';
+import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261122k';
 const PREFIX = 'bjt-ro-';
 // A settings change by vote (js/vote.js): any player at the table may ask, every other player at the table who is online has to say yes.
 const VOTE = {
@@ -554,3 +554,6 @@ void cardHTML; void betName; void betPays;
 // The other tables of the office: who plays there is drawn at their table in the room.
 S.others = {};
 watchOffice('roulette', () => S.code, (g, list) => { S.others[g] = list.filter((p) => p.id.split('#')[0] !== S.myId); S.room?.setOthers(S.others); });
+
+// "Connection dropped" notice and blocked buttons while this browser has no link to the table (common.js showDropped).
+setInterval(() => showDropped((S.role === 'guest' && !!S.st && !!S.conn && S.conn[1] === false && document.body.classList.contains('in-room'))), 400);

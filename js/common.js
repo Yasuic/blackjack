@@ -1,7 +1,7 @@
 // Shared by the poker and baccarat pages: small helpers, the playing card picture, the game switch at the
 // top left, and the link between the host's browser and the players' browsers.
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122j';
-import { cleanBox, cleanPiece } from './vault.js?v=20261122j';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122k';
+import { cleanBox, cleanPiece } from './vault.js?v=20261122k';
 export const params = new URLSearchParams(location.search);
 export const $ = (sel, el = document) => el.querySelector(sel);
 export function safeGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
@@ -70,6 +70,24 @@ export function goToGame(current, g, code, isHost) {
   if (g === current || !GAMES[g]) return;
   if (!goAsk || goAsk.g !== g || Date.now() - goAsk.t > 4000) { goAsk = { g, t: Date.now() }; toast(`Tap again to walk over to ${GAMES[g].name}.`); return; }
   location.href = gameUrl(g, code, isHost, current);
+}
+
+// ---------- "Connection dropped" ----------
+// While this browser has no link to the table, its moves go nowhere. A clear notice says so and a see-through
+// cover over the table blocks every button below the top bar, so nobody plays on without knowing. It goes
+// away the moment the link is back.
+export function showDropped(on, text = 'Your moves are not being sent. Trying to connect again…') {
+  let el = document.getElementById('conn-drop');
+  if (!on) { if (el) { el.remove(); document.body.classList.remove('conn-dropped'); } return; }
+  if (!el) {
+    el = document.createElement('div'); el.id = 'conn-drop'; el.setAttribute('role', 'alert');
+    el.innerHTML = '<div class="conn-drop-box"><b>Connection dropped</b><span></span></div>';
+    for (const ev of ['click', 'pointerdown', 'pointerup', 'touchstart', 'wheel']) el.addEventListener(ev, (e) => { e.stopPropagation(); if (ev === 'click' || ev === 'wheel') e.preventDefault(); }, { passive: false });
+    document.body.appendChild(el); document.body.classList.add('conn-dropped');
+  }
+  const span = el.querySelector('span'); if (span.textContent !== text) span.textContent = text;
+  const bar = document.querySelector('.topbar');
+  el.style.top = (bar ? Math.max(0, Math.round(bar.getBoundingClientRect().bottom)) : 0) + 'px';
 }
 
 // ---------- The link between browsers ----------

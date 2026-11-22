@@ -1,16 +1,16 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261122j';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122j';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122j';
-import { tickSound, winSound } from './fx.js?v=20261122j';
-import * as HX from './history.js?v=20261122j';
-import { webglOK, initRoom } from './room3d.js?v=20261122j';
-import { watchOffice } from './common.js?v=20261122j';
-import { makeVault, makeOpener, cleanBox, cleanPiece } from './vault.js?v=20261122j';
-import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122j';
-import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122j';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261122k';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122k';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122k';
+import { tickSound, winSound } from './fx.js?v=20261122k';
+import * as HX from './history.js?v=20261122k';
+import { webglOK, initRoom } from './room3d.js?v=20261122k';
+import { showDropped, watchOffice } from './common.js?v=20261122k';
+import { makeVault, makeOpener, cleanBox, cleanPiece } from './vault.js?v=20261122k';
+import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122k';
+import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122k';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -3869,3 +3869,6 @@ function goGame(game) {
 // The other tables of the office: who plays there is drawn at their table in the room.
 S.others = {};
 watchOffice('blackjack', () => S.code, (g, list) => { S.others[g] = list.filter((p) => p.id.split('#')[0] !== S.myId); S.room?.setOthers(S.others); });
+
+// "Connection dropped" notice and blocked buttons while this browser has no link to the table (common.js showDropped).
+setInterval(() => showDropped(S.role === 'player' && !S.online && !!S.state && !S.kicked), 400);
