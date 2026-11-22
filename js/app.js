@@ -1,16 +1,16 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261122r';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122r';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122r';
-import { tickSound, winSound } from './fx.js?v=20261122r';
-import * as HX from './history.js?v=20261122r';
-import { webglOK, initRoom } from './room3d.js?v=20261122r';
-import { showDropped, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261122r';
-import { makeVault, makeOpener, cleanBox, cleanPiece } from './vault.js?v=20261122r';
-import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122r';
-import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122r';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261122s';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122s';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122s';
+import { tickSound, winSound } from './fx.js?v=20261122s';
+import * as HX from './history.js?v=20261122s';
+import { webglOK, initRoom } from './room3d.js?v=20261122s';
+import { showDropped, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261122s';
+import { makeVault, makeOpener, cleanBox, cleanPiece } from './vault.js?v=20261122s';
+import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122s';
+import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122s';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -341,6 +341,34 @@ function snapMsg(conn) {
 }
 // A player's browser found no host at the table's address. After a short wait (longer for players
 // further down the list, so only one steps up) it opens the table itself.
+// After a forced take over the table runs at the next address. Players still linked to the old host, and the old
+// host's browser itself, look there every 15 seconds and move over when someone answers.
+setInterval(() => {
+  const peer = S.peer;
+  if (!peer || peer.disconnected || peer.destroyed || S.taking || S.kicked || S.handing) return;
+  if (!(S.role === 'host' || (S.role === 'player' && S.online))) return;
+  const g = (S.gen || 0) + 1, code = S.code;
+  let c = null;
+  try { c = peer.connect(hostAddr(g), { reliable: true }); } catch { c = null; }
+  if (!c) return;
+  const stop = setTimeout(() => { try { c.close(); } catch {} }, 8000);
+  c.on('error', () => clearTimeout(stop));
+  c.on('open', () => {
+    clearTimeout(stop);
+    if (S.code !== code || S.peer !== peer) { try { c.close(); } catch {} return; }
+    if (S.role === 'host') {
+      try { c.close(); } catch {}
+      for (const x of Object.values(S.conns || {})) { try { x.close(); } catch {} }
+      try { peer.destroy(); } catch {}
+      demoteToPlayer(g);
+      return;
+    }
+    if (S.role !== 'player' || (S.gen || 0) + 1 !== g) { try { c.close(); } catch {} return; }
+    const old = S.conn; S.conn = null; S.online = false; try { old?.close(); } catch {}
+    S.gen = g; wireGuestConn(c);
+    toast('The table moved to another player\'s browser.');
+  });
+}, 15000);
 // "Become host" from the menu or the connection notice: the host's browser hands the table over, or, when the
 // host's browser is gone, this browser takes the table at once. The table never changes host on its own.
 function askBecomeHost() {
@@ -356,11 +384,17 @@ function askBecomeHost() {
   send({ t: 'host-ask' }); toast('Asking the host\'s browser for the table…');
   S.askHostT = setTimeout(() => { S.askHostT = null; if (S.role === 'player' && !S.taking && S.online) toast('The host\'s browser did not answer. Its tab may be asleep. If it drops, press Become host again.'); }, 8000);
 }
-function maybeTakeOver() {
-  if (S.role !== 'player' || S.kicked || S.taking || S.conn?.open || S.online) return;
+// force: "Force take over (AFK HOST)". The host's browser is still there but does not answer (asleep, frozen or
+// an old version). This browser opens the table at the next address from its last copy; the other players'
+// browsers look for the next address and move there, and the old host's browser joins as a player when it wakes.
+function maybeTakeOver(force = false) {
+  if (S.role !== 'player' || S.kicked || S.taking) return;
+  if (!force && (S.conn?.open || S.online)) return;
   let snap = null;
   try { snap = S.snap ? JSON.parse(S.snap) : null; } catch {}
+  if (force && !snap) { toast('This browser has no copy of the table yet. Wait for one round, then try again.'); return; }
   const g = snap ? S.gen || 0 : 0, now = Date.now();
+  if (!force) {
   const dead = (x) => now - (S.dead?.[hostAddr(x)] || 0) < 30000;
   // Two signs that the host is gone: the meeting point says nobody holds the table's address, or the
   // second path is open and no host answers there. The first is the only one a brand new joiner may use.
@@ -381,16 +415,19 @@ function maybeTakeOver() {
   // The host gets 30 seconds to come back (a reload, a short drop) before another browser takes the table.
   // A player who pressed Become host does not wait the 30 seconds (the checks above still make sure nobody holds the table).
   if (now - S.noHostAt < (want ? 1500 : snap ? HOST_WAIT + rank * 4000 : 6000 + rank * 6000)) return;
+  }
+  if (force) { const c = S.conn; S.conn = null; S.online = false; try { c?.close(); } catch {} for (const x of S.probes || []) { try { x.close(); } catch {} } S.probes = []; }
   S.taking = true;
   const newGen = snap ? g + 1 : 0;
   const peer = new Peer(hostAddr(newGen), peerOptions());
-  const fail = () => { try { peer.destroy(); } catch {} S.taking = false; S.noHostAt = Date.now(); };
+  const fail = () => { try { peer.destroy(); } catch {} S.taking = false; S.noHostAt = Date.now(); if (force) toast('Someone else already took the table over. You stay at it as a player.'); };
   const timer = setTimeout(fail, 12000);
   peer.on('error', () => { clearTimeout(timer); fail(); });
   peer.on('open', () => {
     // Someone else got there first while this address was opening: stay a player.
-    if (S.online || S.conn?.open) { clearTimeout(timer); fail(); S.noHostAt = null; return; }
+    if (!force && (S.online || S.conn?.open)) { clearTimeout(timer); fail(); S.noHostAt = null; return; }
     clearTimeout(timer);
+    if (force) { const c = S.conn; S.conn = null; S.online = false; try { c?.close(); } catch {} }
     peer.removeAllListeners('error');
     let table = null;
     try { if (snap) table = Table.fromJSON(snap.table); } catch { table = null; }
@@ -1004,6 +1041,7 @@ async function tryRelay() {
   } finally { S.relayBusy = false; }
 }
 function connectToHost() {
+  if (S.taking) return; // this browser is opening the table itself
   if (params.get('relay') === 'only') return; // for testing the second path on its own
   if (!S.peer || S.peer.disconnected || S.peer.destroyed) return;
   S.lastTry = Date.now();
@@ -1294,7 +1332,7 @@ function buildLayout() {
           ${fold('m-settings', '⚙️ Game settings', '<div id="host-settings"></div>')}
           ${fold('m-log', '📝 Table log', `<div id="host-log" class="log"></div>
             ${fold('m-logs', 'Logs', `<button class="menu-item" data-act="hist-panel" title="A small list of the hands at the left of the screen.">🕘 Hand history: ${histOn() ? 'on' : 'off'}</button>`, true)}`)}` : `
-          ${fold('m-players', '👥 Players', '<button class="menu-item" data-act="become-host" title="The table moves to your browser. No vote: the host\'s browser hands it over.">👑 Become host</button><div id="guest-players" class="player-list"></div>')}
+          ${fold('m-players', '👥 Players', '<button class="menu-item" data-act="become-host" title="The table moves to your browser. No vote: the host\'s browser hands it over.">👑 Become host</button><button class="menu-item" data-act="force-host" title="For a host who is away and whose browser does not answer. The table opens in your browser and everyone moves there.">⚡ Force take over (AFK HOST)</button><div id="guest-players" class="player-list"></div>')}
           ${fold('m-settings', '⚙️ Game settings', '<div class="hint" style="margin-bottom:8px">Any seated player can change the settings. Everyone else has to vote yes.</div><div id="host-settings"></div>')}
           ${fold('m-log', '📝 Table log', `<div id="host-log" class="log"></div>
             ${fold('m-logs', 'Logs', `<button class="menu-item" data-act="hist-panel" title="A small list of the hands at the left of the screen.">🕘 Hand history: ${histOn() ? 'on' : 'off'}</button>`, true)}`)}`}
@@ -3399,6 +3437,7 @@ function runAct(el) {
     case 'buyin-open': openBuyIn(); break;
     case 'office': showOffice(S.code, S.myId); break;
     case 'become-host': askBecomeHost(); break;
+    case 'force-host': if (S.role === 'player' && !S.taking) { toast('Taking the table over…'); maybeTakeOver(true); } break;
     case 'ledger-toggle': { const l = $('#ledger'); l.classList.toggle('closed'); safeSet('bj-ledger', l.classList.contains('closed') ? '0' : '1'); renderLedger(S.state); break; }
     case 'buyin-answer': hostDo((t) => t.answerBuyIn(Number(el.dataset.id), el.dataset.yes === '1')); break;
     case 'throw-open': openThrowPanel(el); break;
