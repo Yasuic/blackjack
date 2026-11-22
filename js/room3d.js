@@ -210,7 +210,7 @@ function buildOffice(signText, midShift = 0, midScale = 1, skipRoom = null, live
     chrome: mk({ color: '#b9bec4', roughness: 0.25, metalness: 0.9 }),
     screen: mk({ color: '#0d0f12', roughness: 0.25, metalness: 0.2 }),
     // What the office screens show: the ARC Group logo, from the photo of it, lit like a screen that is on.
-    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261122m'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
+    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261122n'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
     dark: mk({ color: '#30353c', roughness: 0.6 }),
   };
   const group = new THREE.Group();
@@ -970,7 +970,7 @@ function buildStorefront() {
     lamp: lam('#c8161d', 0.6), bulb: lit('#ffe9a8'), red: lit('#c8161d'), gold: lit('#f4c542'), wood: lam('#7a5234', 0.35),
     glass: new THREE.MeshBasicMaterial({ color: '#dff3f7', transparent: true, opacity: 0.13, depthWrite: false }),
     awning: new THREE.MeshBasicMaterial({ map: canvasTexture(512, 64, (g, w, h) => { for (let i = 0; i < 16; i++) { g.fillStyle = i % 2 ? '#fff6e6' : '#f08a1c'; g.fillRect((i * w) / 16, 0, w / 16 + 1, h); } }), side: THREE.DoubleSide }),
-    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261122m') }),
+    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261122n') }),
     menu: new THREE.MeshBasicMaterial({ map: canvasTexture(256, 384, (g, w, h) => {
       g.fillStyle = '#c8161d'; g.fillRect(0, 0, w, h); g.fillStyle = '#f4c542'; g.fillRect(14, 14, w - 28, 44);
       const r = rng(11); g.fillStyle = '#fff3d6';
@@ -1130,25 +1130,46 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
   // Padded leather rail around the felt.
   const railShape = tableShape(W, H, RAIL);
   railShape.holes.push(tableShape(W, H, -4));
-  const leather = std({ color: 0x3a2116, roughness: 0.42, metalness: 0.0 });
+  // Blackjack has a modern look: a dark graphite body, a charcoal rail, a thin teal neon line and LED light
+  // underneath that glows on the floor. The other games keep the classic wood and brass.
+  const NEON = game === 'blackjack';
+  const NEON_C = 0x3fe6d6;
+  const leather = std(NEON ? { color: 0x1b1f27, roughness: 0.5, metalness: 0.05 } : { color: 0x3a2116, roughness: 0.42, metalness: 0.0 });
   const rail = flat(new THREE.Mesh(
     new THREE.ExtrudeGeometry(railShape, { depth: 6, bevelEnabled: true, bevelThickness: 14, bevelSize: 14, bevelSegments: 6, curveSegments: 72 }), leather), 0);
   rail.castShadow = true; rail.receiveShadow = true;
   scene.add(rail);
   // Thin brass line where the rail meets the wood.
-  const brass = std({ color: 0xd2a850, roughness: 0.28, metalness: 0.85 });
+  const brass = std(NEON ? { color: 0xb9c3cf, roughness: 0.25, metalness: 0.9 } : { color: 0xd2a850, roughness: 0.28, metalness: 0.85 });
+  const neonLine = NEON ? new THREE.MeshStandardMaterial({ color: 0x0c2b2a, emissive: NEON_C, emissiveIntensity: 0.9, roughness: 0.4 }) : brass;
   const trimShape = tableShape(W, H, RAIL + 20);
   trimShape.holes.push(tableShape(W, H, RAIL - 2));
-  scene.add(flat(new THREE.Mesh(new THREE.ExtrudeGeometry(trimShape, { depth: 7, bevelEnabled: false, curveSegments: 72 }), brass), -7));
+  scene.add(flat(new THREE.Mesh(new THREE.ExtrudeGeometry(trimShape, { depth: 7, bevelEnabled: false, curveSegments: 72 }), neonLine), -7));
   // Wooden table body.
   const woodTex = canvasTexture(256, 256, woodGrain('#8a5530', '#5a3015', '#b47a48', 3), [1 / 320, 1 / 320]);
-  const wood = std({ map: woodTex, color: 0xffffff, roughness: 0.48, metalness: 0.05 });
+  const wood = NEON ? std({ color: 0x23272f, roughness: 0.38, metalness: 0.45 }) : std({ map: woodTex, color: 0xffffff, roughness: 0.48, metalness: 0.05 });
   const body = flat(new THREE.Mesh(new THREE.ExtrudeGeometry(tableShape(W, H, RAIL + 16), { depth: 84, bevelEnabled: true, bevelThickness: 6, bevelSize: 6, bevelSegments: 2, curveSegments: 72 }), wood), -97);
   body.castShadow = true; body.receiveShadow = true;
   scene.add(body);
 
   // Pedestal legs.
-  const darkWood = std({ color: 0x4a2c18, roughness: 0.55, metalness: 0.05 });
+  const darkWood = std(NEON ? { color: 0x16191f, roughness: 0.4, metalness: 0.5 } : { color: 0x4a2c18, roughness: 0.55, metalness: 0.05 });
+  if (NEON) {
+    // A faint neon line just inside the rail, around the edge of the cloth.
+    const edge = tableShape(W, H, -3); edge.holes.push(tableShape(W, H, -9));
+    const edgeMesh = flat(new THREE.Mesh(new THREE.ShapeGeometry(edge, 72), new THREE.MeshBasicMaterial({ color: NEON_C, transparent: true, opacity: 0.4, depthWrite: false })), 2);
+    edgeMesh.renderOrder = 4; scene.add(edgeMesh);
+    // The LED strip under the table top, and its glow on the floor.
+    const led = tableShape(W, H, RAIL + 12); led.holes.push(tableShape(W, H, RAIL - 2));
+    scene.add(flat(new THREE.Mesh(new THREE.ShapeGeometry(led, 72), new THREE.MeshBasicMaterial({ color: NEON_C, side: THREE.DoubleSide })), -100));
+    const cv = document.createElement('canvas'); cv.width = cv.height = 256;
+    const cx = cv.getContext('2d'), g = cx.createRadialGradient(128, 128, 30, 128, 128, 128);
+    g.addColorStop(0, 'rgba(63,230,214,0.55)'); g.addColorStop(0.55, 'rgba(63,230,214,0.22)'); g.addColorStop(1, 'rgba(63,230,214,0)');
+    cx.fillStyle = g; cx.fillRect(0, 0, 256, 256);
+    const glowTex = new THREE.CanvasTexture(cv); glowTex.colorSpace = THREE.SRGBColorSpace;
+    const glow = flat(new THREE.Mesh(new THREE.PlaneGeometry(W * 1.35, H * 1.6), new THREE.MeshBasicMaterial({ map: glowTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })), FLOOR + 2);
+    glow.renderOrder = 1; scene.add(glow);
+  }
   for (const x of [-W * 0.27, W * 0.27]) {
     add(new THREE.Mesh(new THREE.CylinderGeometry(40 * U, 58 * U, -FLOOR - 97, 10), darkWood), x, (FLOOR - 97) / 2, -H * 0.04, true, false);
     add(new THREE.Mesh(new THREE.CylinderGeometry(120 * U, 150 * U, 22, 12), darkWood), x, FLOOR + 11, -H * 0.04, true, true);

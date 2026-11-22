@@ -1694,3 +1694,10 @@ body.room3d .room.seat-locked { cursor: default; }
 .dealer-big { flex-wrap: wrap; row-gap: 6px; border-top: 1px solid rgba(255,255,255,.08); padding-top: 8px; margin-top: 6px; }
 .dealer-big .dealer-big-title { font-weight: 800; color: var(--gold); margin-right: 6px; white-space: nowrap; }
 .dealer-big input { width: 74px; }
+
+/* Blackjack: a modern table with a thin teal neon rim and LED glow underneath (the other games keep their own look). */
+body:not(.game-poker) .felt:not(.in3d) {
+  box-shadow: 0 0 0 10px #161a22, 0 0 0 12px rgba(63,230,214,.55), 0 0 22px 12px rgba(63,230,214,.16), 0 34px 60px -8px rgba(40,220,200,.32), 0 18px 50px rgba(0,0,0,.6), inset 0 0 80px rgba(0,0,0,.45);
+}
+body:not(.game-poker) .felt::before { border-color: rgba(63,230,214,.28); box-shadow: 0 0 10px rgba(63,230,214,.12); }
+body:not(.game-poker) .spot { box-shadow: 0 0 10px rgba(63,230,214,.22), inset 0 0 8px rgba(63,230,214,.10); }
