@@ -22,7 +22,8 @@ export const DEFAULT_SETTINGS = {
   betTimer: 20,          // seconds for betting before the dealer deals on its own (0 = off)
   turnTimer: 30,
   peekCost: 10,          // price to see the next card in the shoe
-  sideBets: ['hot3', 'bustIt', 'twentyOnePlus3'], // side bets offered at this table         // seconds per decision before the dealer stands for you (0 = off)
+  sideBets: ['hot3', 'bustIt', 'twentyOnePlus3'], // side bets offered at this table
+  bigBet: null,          // 'Big Bets Sometimes': { limit, per, hands, since } or null when off         // seconds per decision before the dealer stands for you (0 = off)
 };
 
 // ---------- Side bets ----------
@@ -432,6 +433,47 @@ export class Table {
   }
 
   // The player who is the dealer pays every winner, so the dealer may set the largest main bet. Between rounds only.
+  // "Big Bets Sometimes": the dealer lets each player bet above the normal maximum a few times, and those
+  // chances run out after a set number of hands, then start again. The hand being bet on now (in a round it is
+  // the round in play, between rounds it is the one about to be dealt) decides which window a bet falls in.
+  bigHand() { return this.inRound() ? this.round : this.round + 1; }
+  bigWindow() {
+    const b = this.settings.bigBet;
+    if (!b || !b.hands) return 0;
+    return Math.floor((this.bigHand() - (b.since || 0)) / b.hands);
+  }
+  // How many big bets this player has left in the window that the current hand is in.
+  bigLeft(clientId) {
+    const b = this.settings.bigBet, p = this.players[clientId];
+    if (!b || !b.per || !p) return 0;
+    const used = p.bigWin === this.bigWindow() ? (p.bigUsed || 0) : 0;
+    return Math.max(0, b.per - used);
+  }
+  // Hands left in this window, counting the hand being bet on or played now. At 1 this is the last hand before the big bets come back.
+  bigHandsLeft() {
+    const b = this.settings.bigBet;
+    if (!b || !b.hands) return 0;
+    return (b.since || 0) + (this.bigWindow() + 1) * b.hands - this.bigHand(); // counts the hand being bet on or played now
+  }
+  // The dealer turns the feature on or off and sets its three numbers. hands and per must be at least 1,
+  // and the big amount must be above the normal maximum bet. Passing null (or any missing number) turns it off.
+  setBigBet(clientId, cfg) {
+    if (this.banker !== clientId) throw new Error('Only the dealer sets Big Bets Sometimes.');
+    if (this.phase !== 'betting' && this.phase !== 'settled') throw new Error('Change this between rounds.');
+    const name = this.players[clientId].name;
+    if (!cfg || cfg.off) { if (this.settings.bigBet) { this.settings = { ...this.settings, bigBet: null }; this.addLog(`${name}, the dealer, turned Big Bets Sometimes off.`); this.ev('big bets off', clientId); } return; }
+    const limit = Math.round(Number(cfg.limit)), per = Math.round(Number(cfg.per)), hands = Math.round(Number(cfg.hands));
+    if (!(limit > this.settings.maxBet)) throw new Error(`The big bet amount has to be above the normal maximum of ${this.settings.maxBet}.`);
+    if (!(per >= 1)) throw new Error('Each player needs at least 1 big bet.');
+    if (!(hands >= 1)) throw new Error('The number of hands has to be at least 1.');
+    if (limit > 1e9) throw new Error('That big bet amount is too large.');
+    // A fresh window starts from the hand being bet on now, and everyone's used count goes back to zero.
+    for (const q of Object.values(this.players)) { q.bigUsed = 0; q.bigWin = 0; }
+    this.settings = { ...this.settings, bigBet: { limit, per, hands, since: this.bigHand() } };
+    this.addLog(`${name}, the dealer, set Big Bets Sometimes: up to ${per} bet${per === 1 ? '' : 's'} of ${limit} each, every ${hands} hand${hands === 1 ? '' : 's'}.`);
+    this.ev('big bets on', clientId, `${per} x ${limit} / ${hands}`);
+  }
+
   setDealerMax(clientId, amount, sideAmount) {
     if (this.banker !== clientId) throw new Error('Only the dealer sets the maximum bets.');
     if (this.phase !== 'betting' && this.phase !== 'settled') throw new Error('Change the maximum bets between rounds.');
@@ -448,9 +490,15 @@ export class Table {
       if (!seat || seat.hands.length) continue;
       const sides = {};
       for (const [k, v] of Object.entries(seat.bet.sides || {})) if (Math.min(v, side) > 0) sides[k] = Math.min(v, side);
-      seat.bet = { ...seat.bet, main: Math.min(seat.bet.main, max), sides };
+      seat.bet = { ...seat.bet, main: Math.min(seat.bet.main, seat.bet.big && this.settings.bigBet ? this.settings.bigBet.limit : max), sides };
     }
     const name = this.players[clientId].name;
+    // A big bet has to be above the normal maximum. If the new maximum reaches it, big bets are switched off.
+    if (this.settings.bigBet && max >= this.settings.bigBet.limit) {
+      this.settings = { ...this.settings, bigBet: null };
+      for (const seat of this.seats) if (seat && !seat.hands.length && seat.bet.big) seat.bet = { ...seat.bet, big: false, main: Math.min(seat.bet.main, max) };
+      this.addLog(`Big Bets Sometimes is off, because the maximum bet is now ${max}, the same as or above the big bet amount.`);
+    }
     if (max !== was.maxBet) { this.addLog(`${name}, the dealer, set the maximum bet to ${max}.`); this.ev('dealer set maximum bet', clientId, String(max)); }
     if (side !== was.maxSideBet) { this.addLog(`${name}, the dealer, set the maximum side bet to ${side}.`); this.ev('dealer set maximum side bet', clientId, String(side)); }
   }
@@ -853,10 +901,19 @@ export class Table {
     }
     // Chips can go down one at a time; the minimum only counts once you say you are ready.
     if (bet.ready && main < s.minBet) throw new Error(`Minimum bet is ${s.minBet}. Add more chips before you deal in.`);
-    if (main > s.maxBet) throw new Error(`Maximum bet is ${s.maxBet}.`);
+    let big = false;
+    if (main > s.maxBet) {
+      const b = s.bigBet;
+      if (!b || !bet.big) throw new Error(`Maximum bet is ${s.maxBet}.`);
+      if (main > b.limit) throw new Error(`A big bet is at most ${b.limit}.`);
+      // How many big bets this player has put down on their other seats for this hand already.
+      const othersBig = this.seatsOf(clientId).filter((i) => i !== idx && this.seats[i].bet.main > s.maxBet).length;
+      if (this.bigLeft(clientId) - othersBig < 1) throw new Error('You have no big bets left this window.');
+      big = true;
+    }
     const total = main + sumValues(sides);
     if (total + this.otherStakes(clientId, idx) > p.chips) throw new Error('Not enough chips.');
-    seat.bet = target === null ? { main, sides } : { main, sides, target };
+    seat.bet = target === null ? { main, sides, big } : { main, sides, target, big };
     if (main || Object.values(sides).some(Boolean)) this.rabbit = false; // a new round has begun: the look at the next card is over
     seat.ready = main > 0 && !!bet.ready;
     // The number the player's browser gave this bet. It comes back in their state, so the browser
@@ -1044,6 +1101,14 @@ export class Table {
         p.lastBet = { main: seat.bet.main, sides: { ...seat.bet.sides }, targetId: this.seats[seat.bet.target]?.playerId ?? null };
         if (p.lastRound !== this.round) { p.lastRound = this.round; p.lastBets = {}; }
         p.lastBets[i] = p.lastBet;
+        // A big bet used up one of this player's chances. Reset their count when the window has rolled over.
+        if (seat.bet.big && this.settings.bigBet) {
+          const wi = this.bigWindow();
+          if (p.bigWin !== wi) { p.bigWin = wi; p.bigUsed = 0; }
+          p.bigUsed = (p.bigUsed || 0) + 1;
+          this.addLog(`${p.name} made a big bet of ${seat.bet.main} (big bet ${p.bigUsed} of ${this.settings.bigBet.per} this window).`);
+          this.ev('big bet', seat.playerId, String(seat.bet.main));
+        }
         seat.hands = [newHand(seat.bet.main)];
         seat.staked = stake;
         seat.returned = 0;
@@ -1493,9 +1558,10 @@ export class Table {
           hands: s.hands.map((h) => ({ ...h, ...handTotal(h.cards), blackjack: isBlackjack(h) })),
         };
       }),
-      players: Object.values(this.players).filter((p) => !p.kicked).map((p) => ({ id: p.id, name: p.name, look: p.look, chips: p.chips, seat: p.seat, seats: this.seatsOf(p.id), connected: p.connected, leaving: !!p.leaving, boughtIn: p.boughtIn || 0, totalIn: p.totalIn ?? this.settings.startChips, left: !!p.kicked })),
+      players: Object.values(this.players).filter((p) => !p.kicked).map((p) => ({ id: p.id, name: p.name, look: p.look, chips: p.chips, seat: p.seat, seats: this.seatsOf(p.id), connected: p.connected, leaving: !!p.leaving, boughtIn: p.boughtIn || 0, totalIn: p.totalIn ?? this.settings.startChips, left: !!p.kicked, bigLeft: this.bigLeft(p.id) })),
       hostId: this.hostId || null,
       bankerLeaving: !!this.bankerLeaving,
+      big: this.settings.bigBet ? { limit: this.settings.bigBet.limit, per: this.settings.bigBet.per, hands: this.settings.bigBet.hands, handsLeft: this.bigHandsLeft(), yourLeft: this.bigLeft(forClientId) } : null,
       count: !this.settings.countTraining ? null : {
         running: (this.runCount || 0) - (hide && hole ? hiLo(hole) : 0),
         decksLeft: (this.shoe.length + (hide && hole ? 1 : 0)) / 52,

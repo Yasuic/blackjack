@@ -1,16 +1,16 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261122l';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122l';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122l';
-import { tickSound, winSound } from './fx.js?v=20261122l';
-import * as HX from './history.js?v=20261122l';
-import { webglOK, initRoom } from './room3d.js?v=20261122l';
-import { showDropped, watchOffice } from './common.js?v=20261122l';
-import { makeVault, makeOpener, cleanBox, cleanPiece } from './vault.js?v=20261122l';
-import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122l';
-import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122l';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261122m';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122m';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122m';
+import { tickSound, winSound } from './fx.js?v=20261122m';
+import * as HX from './history.js?v=20261122m';
+import { webglOK, initRoom } from './room3d.js?v=20261122m';
+import { showDropped, watchOffice } from './common.js?v=20261122m';
+import { makeVault, makeOpener, cleanBox, cleanPiece } from './vault.js?v=20261122m';
+import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122m';
+import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122m';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -603,6 +603,7 @@ function runAction(id, msg, onError) {
       case 'leave-dealer': t.leaveDealer(id); break;
       case 'leave-later': t.leaveLater(id, msg.on !== false); break;
       case 'dealer-max': t.setDealerMax(id, msg.amount, msg.side); break;
+      case 'dealer-big': t.setBigBet(id, msg.off ? { off: true } : { limit: msg.limit, per: msg.per, hands: msg.hands }); break;
       case 'dealer-shuffle': t.dealerShuffle(id); break;
       case 'seed': t.setClientSeed(id, msg.seed); return; // nothing on the table changes, so no update is sent
       default: return;
@@ -1095,7 +1096,7 @@ function placeBet(bet, ready = false) {
   // main bet. It only copies to seats that held the same main bet before (or nothing), and only when
   // chips are added. Taking chips off one seat changes that seat alone, so the bets can still differ.
   const copy = [];
-  if (b.main > prev && !ready && (me.seats || []).length > 1) {
+  if (b.main > prev && !ready && (me.seats || []).length > 1 && b.main <= st.settings.maxBet) { // a big bet is a choice for one seat: it is not copied
     let left = me.chips - (me.seats || []).reduce((a, i) => a + (i === at ? b.main + Object.values(b.sides).reduce((x, y) => x + y, 0) : betTotal(st.seats[i].bet)), 0);
     for (const i of me.seats) {
       const o = st.seats[i];
@@ -1112,7 +1113,7 @@ function placeBet(bet, ready = false) {
   }
   S.hold = true;
   try {
-    send({ t: 'bet', main: b.main, sides: b.sides, target: b.target, ready, seq: S.pend.seq, seat: at, auto: !!S.auto?.on });
+    send({ t: 'bet', main: b.main, sides: b.sides, target: b.target, ready, seq: S.pend.seq, seat: at, auto: !!S.auto?.on, big: b.main > st.settings.maxBet });
     for (const m of copy) send(m);
   } finally {
     // The host's own moves run one after another in a queue: draw once, after the last of them.
@@ -1607,7 +1608,7 @@ function render(note) {
   const prev = S.prevView;
   if (prev && st.round !== prev.round) { S.undo = []; S.mainChips = []; S.sideChips = {}; }
   // Once the cards are dealt, the picked chip is put down, so the next round starts with none picked.
-  if (prev && prev.phase !== st.phase && !(st.phase === 'betting' || st.phase === 'settled')) S.chip = null;
+  if (prev && prev.phase !== st.phase && !(st.phase === 'betting' || st.phase === 'settled')) { S.chip = null; S.bigOn = false; } // the Big bet switch is for one hand only
   // The dealer sees the table from the dealer's side: dealer at the bottom, players across the top.
   S.presence = roomPeople(st)[0].filter((p) => !p.isDealer && p.seat !== null).map((p) => ({ id: p.id, name: p.name, look: p.look, seat: p.seat, seats: p.seats }));
   if (S.room) S.room.setSide(myInfo(st).isBanker ? 'dealer' : 'player');
@@ -2370,12 +2371,35 @@ function spotAreaHTML(st, s, i, isMe, mainAmt) {
 }
 // How much of a chip can still be bet: never more than the chips left, the table maximum for the main
 // bet, or the side bet maximum. Returns 0 (with a short message) when nothing more fits.
+// "Big Bets Sometimes": one line under the table limits, and the switch beside the betting buttons.
+function bigLineHTML(st) {
+  const b = st.big;
+  if (!b) return '';
+  return `<span class="big-line" title="The dealer lets each player bet up to ${money(b.limit)} a few times. Unused big bets expire when the hands run out, then they come back.">Big bets up to ${money(b.limit)}: ${b.yourLeft} of ${b.per} left, ${b.handsLeft} hand${b.handsLeft === 1 ? '' : 's'} until they reset</span>`;
+}
+function bigBtnHTML(st) {
+  const b = st.big;
+  if (!b) return '';
+  if (!b.yourLeft && !S.bigOn) return `<button class="btn" disabled title="No big bets left until they reset">Big bet <small>(none left, reset in ${b.handsLeft} hand${b.handsLeft === 1 ? '' : 's'})</small></button>`;
+  // The counts are on the button too, because the 3D room hides the table limits while betting.
+  const count = `${b.yourLeft} left, resets in ${b.handsLeft} hand${b.handsLeft === 1 ? '' : 's'}`;
+  return `<button class="btn big-btn ${S.bigOn ? 'gold' : ''}" data-act="big-bet" title="Lets this hand's bet go up to ${money(b.limit)}. Uses one big bet if the bet is above ${money(st.settings.maxBet)} when the cards are dealt.">${S.bigOn ? `Big bet on: up to ${money(b.limit)}` : 'Big bet'} <small>(${count})</small></button>`;
+}
+// The most a main bet on my current seat may be: the normal maximum, or the big bet amount while the Big bet switch
+// is on and I still have a big bet left (my other seats' big bets this hand count against it).
+function mainCap(st) {
+  const s = st.settings, b = st.big;
+  if (!S.bigOn || !b) return s.maxBet ?? Infinity;
+  const me = st.players.find((p) => p.id === S.myId);
+  const othersBig = (me?.seats || []).filter((i) => i !== me.seat && (st.seats[i]?.bet?.main || 0) > s.maxBet).length;
+  return b.yourLeft - othersBig >= 1 ? b.limit : s.maxBet;
+}
 function fitBet(v, where) {
   const st = S.state, me = st.players.find((p) => p.id === S.myId), seat = st.seats[me.seat];
   const left = me.chips - betTotal(seat.bet);
-  const cap = where === 'main' ? (st.settings.maxBet ?? Infinity) - seat.bet.main : (st.settings.maxSideBet ?? Infinity) - (seat.bet.sides[where] || 0);
+  const cap = where === 'main' ? mainCap(st) - seat.bet.main : (st.settings.maxSideBet ?? Infinity) - (seat.bet.sides[where] || 0);
   const put = Math.max(0, Math.min(v, left, cap));
-  if (!put) toast(left <= 0 ? 'All your chips are already bet.' : 'That bet is at the table maximum.');
+  if (!put) toast(left <= 0 ? 'All your chips are already bet.' : where === 'main' && st.big && !S.bigOn && st.big.yourLeft > 0 ? `That bet is at the table maximum. Tap "Big bet" to go up to ${money(st.big.limit)}.` : 'That bet is at the table maximum.');
   else if (put < v) toast(`Bet ${money(put)}: that is all that fits.`);
   return put;
 }
@@ -2730,7 +2754,8 @@ function trayInner(st) {
   if (isBanker) {
     if (!(ph === 'betting' || ph === 'settled')) return '';
     return `<div class="tray-msg">${st.banker.chips < 0 ? `You are the dealer and you owe ${money(-st.banker.chips)} chips. Tap your balance to buy in.` : 'You are the dealer. Your chips pay winners and collect losing bets.'}</div>
-      <div class="actions dealer-max"><label for="dealer-max">Max bet</label><input id="dealer-max" type="number" inputmode="numeric" min="${st.settings.minBet}" step="1" value="${st.settings.maxBet}" /><label for="dealer-max-side">Max side bet</label><input id="dealer-max-side" type="number" inputmode="numeric" min="0" step="1" value="${st.settings.maxSideBet}" /><button class="btn small" data-act="dealer-max">Set</button><button class="btn" data-act="leave-dealer">Leave dealer seat</button></div>`;
+      <div class="actions dealer-max"><label for="dealer-max">Max bet</label><input id="dealer-max" type="number" inputmode="numeric" min="${st.settings.minBet}" step="1" value="${st.settings.maxBet}" /><label for="dealer-max-side">Max side bet</label><input id="dealer-max-side" type="number" inputmode="numeric" min="0" step="1" value="${st.settings.maxSideBet}" /><button class="btn small" data-act="dealer-max">Set</button><button class="btn" data-act="leave-dealer">Leave dealer seat</button></div>
+      <div class="actions dealer-max dealer-big"><span class="dealer-big-title" title="Each player may bet above the maximum a few times. Unused ones expire after the hands, then they come back.">Big Bets Sometimes</span><label for="big-limit">Big bet up to</label><input id="big-limit" type="number" inputmode="numeric" min="${st.settings.maxBet + 1}" step="1" value="${st.big?.limit ?? st.settings.maxBet * 4}" /><label for="big-per">Big bets each</label><input id="big-per" type="number" inputmode="numeric" min="1" step="1" value="${st.big?.per ?? 2}" /><label for="big-hands">Every</label><input id="big-hands" type="number" inputmode="numeric" min="1" step="1" value="${st.big?.hands ?? 10}" /><label>hands</label><button class="btn small ${st.big ? '' : 'gold'}" data-act="dealer-big">${st.big ? 'Update' : 'Turn on'}</button>${st.big ? '<button class="btn small" data-act="dealer-big-off">Turn off</button>' : ''}</div>`;
   }
   if (!seat) {
     return `<div class="tray-msg">${S.role === 'host' ? 'You are hosting. Press "Sit here" to play, or "Ask to be dealer" to be the bank.' : 'Press "Sit here" on an empty seat to play, or "Ask to be dealer" to be the bank.'} You have ${money(me.chips)} chips.</div>${askOutHTML(st)}`;
@@ -2757,7 +2782,7 @@ function trayInner(st) {
   if (ph === 'betting') {
     const b = seat.bet;
     const s = st.settings;
-    const limits = `<small>Table limits</small><span>Bet ${money(s.minBet)} to ${money(s.maxBet)}</span>${sideKeys(st).length ? `<span>Side bets up to ${money(s.maxSideBet)}</span>` : ''}`;
+    const limits = `<small>Table limits</small><span>Bet ${money(s.minBet)} to ${money(s.maxBet)}</span>${sideKeys(st).length ? `<span>Side bets up to ${money(s.maxSideBet)}</span>` : ''}${bigLineHTML(st)}`;
     // With no bet down there is nothing to clear, so that place offers last round's bet again.
     const rebet = st.rebet && !betTotal(b) ? `<button class="btn gold rebet-btn" data-act="rebet" title="Bet the same as last round (B)">↻ Rebet ${money(rebetSum(st))}${rebetHands(st)}</button>` : '';
     return `
@@ -2775,6 +2800,7 @@ function trayInner(st) {
         
         ${sideKeys(st).length ? '<button class="btn" data-act="sides-plus" title="Adds 1 to every side bet on all your hands">+1 all side bets</button>' : ''}
         ${rebet || `<button class="btn" data-act="clear" ${(myInfo(st).me?.seats || []).some((i) => betTotal(st.seats[i]?.bet)) || betTotal(b) ? '' : 'disabled'}>Clear all</button>`}
+        ${bigBtnHTML(st)}
         <button class="btn danger" data-act="stand-up">${(myInfo(st).me?.seats || []).length > 1 ? `Leave seat ${myInfo(st).me.seat + 1}` : 'Leave seat'}</button>
         ${(myInfo(st).me?.seats || []).length > 1 ? '<button class="btn danger" data-act="stand-up-all">Leave all seats</button>' : ''}
       </div>`;
@@ -3239,6 +3265,14 @@ function runAct(el) {
     case 'view-pad': safeSet('bj-view-pad', viewPadOn() ? '0' : '1'); if (!viewPadOn() && S.room?.walking?.()) S.room.walk(false); document.body.classList.toggle('view-hidden', !viewPadOn()); for (const b of document.querySelectorAll('.menu-item[data-act=view-pad]')) b.textContent = '🎥 View buttons: ' + (viewPadOn() ? 'on' : 'off'); break;
     case 'hist-panel': safeSet('bj-hist-panel', histOn() ? '0' : '1'); drawHistPanel(true); for (const b of document.querySelectorAll('.menu-item[data-act=hist-panel]')) b.textContent = '🕘 Hand history: ' + (histOn() ? 'on' : 'off'); break;
     case 'export': showExport(); break;
+    case 'big-bet': {
+      S.bigOn = !S.bigOn;
+      // Switching off with a bet above the normal maximum: cut it down to the maximum.
+      if (!S.bigOn && bet.main > st.settings.maxBet) { S.undo.push(structuredClone(seat.bet)); bet.main = st.settings.maxBet; S.mainChips = []; sendBet(); }
+      else render();
+      if (S.bigOn) toast(`Big bet on for this hand: your bet can go up to ${money(st.big.limit)}.`);
+      break;
+    }
     case 'double-bet': {
       S.undo.push(structuredClone(seat.bet));
       S.mainChips = S.mainChips.concat(S.mainChips);
@@ -3276,6 +3310,15 @@ function runAct(el) {
     case 'leave-dealer': send({ t: 'leave-dealer' }); break;
     case 'leave-later': send({ t: 'leave-later', on: el.dataset.on !== '1' }); break;
     case 'd-shuffle': send({ t: 'dealer-shuffle' }); toast(st.phase === 'betting' || st.phase === 'settled' ? 'The shoe was shuffled.' : 'The shoe will be shuffled before the next hand.'); break;
+    case 'dealer-big': {
+      const limit = Math.round(Number($('#big-limit')?.value)), per = Math.round(Number($('#big-per')?.value)), hands = Math.round(Number($('#big-hands')?.value));
+      if (!(limit > st.settings.maxBet)) { toast(`The big bet has to be above the maximum bet of ${money(st.settings.maxBet)}.`); break; }
+      if (!(per >= 1) || !(hands >= 1)) { toast('Big bets each and the number of hands have to be at least 1.'); break; }
+      send({ t: 'dealer-big', limit, per, hands });
+      toast(`Big Bets Sometimes: ${per} bet${per === 1 ? '' : 's'} of up to ${money(limit)} each, every ${hands} hand${hands === 1 ? '' : 's'}.`);
+      break;
+    }
+    case 'dealer-big-off': send({ t: 'dealer-big', off: true }); toast('Big Bets Sometimes is off.'); break;
     case 'dealer-max': {
       const v = Math.round(Number($('#dealer-max')?.value)), sv = Math.round(Number($('#dealer-max-side')?.value));
       if (!(v >= st.settings.minBet)) { toast(`The maximum bet cannot be below the minimum bet of ${money(st.settings.minBet)}.`); break; }
