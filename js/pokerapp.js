@@ -17,7 +17,7 @@ const PREFIX = 'bjt-pk-';
 const VOTE = {
   labels: { smallBlind: ['Small blind'], bigBlind: ['Big blind'], ante: ['Ante'], startStack: ['Starting chips'], turnTimer: ['Seconds per turn'], timeBank: ['Time bank'],
     sevenDeuce: ['7-2 bounty'], bombPotEvery: ['Bomb pot every'], bombPotAnte: ['Bomb pot ante'], runTimes: ['Run it'], straddle: ['Straddle'], autoStart: ['Deal by itself'], doubleBoard: ['Two boards'],
-    game: ['Game', (v) => (v === 'plo' ? 'Omaha' : "Hold'em")], bombGame: ['Bomb pot game', (v) => (v === 'plo' ? 'Omaha' : v === 'nlh' ? "Hold'em" : 'same as the table')], bombBoards: ['Bomb pot boards', (v) => (v ? String(v) : 'same as the table')], showSpeed: ['Showdown speed'] },
+    game: ['Game', (v) => (v === 'plo' ? 'Omaha' : "Hold'em")], bombGame: ['Bomb pot game', (v) => (v === 'plo' ? 'Omaha' : v === 'nlh' ? "Hold'em" : 'same as the table')], bombBoards: ['Bomb pot boards', (v) => (v ? String(v) : 'same as the table')], showSpeed: ['Showdown speed'], botLevel: ['Bots', (v) => (v === 'hard' ? 'Hard' : 'Easy')] },
   seated: (id) => S.table.seatOf(id) >= 0,
   voters: (by) => S.table.seats.filter((x) => x && x.id !== by && !isBot(x.id) && S.table.players[x.id]?.connected).map((x) => x.id),
   name: (id) => S.table.players[id]?.name || 'A player',
@@ -1185,6 +1185,7 @@ function settingsHTML(st) {
     <label>Seconds per decision<select id="ps-turnTimer">${[0, 10, 15, 20, 30, 45, 60, 90].map((v) => `<option value="${v}"${v === s.turnTimer ? ' selected' : ''}>${v ? v : 'No clock'}</option>`).join('')}</select></label>
     ${num('timeBank', 'Time bank per player, in seconds (0 = none)')}${num('sevenDeuce', '7-2 bounty per player (0 = off)')}${num('bombPotEvery', 'Bomb pot every N hands (0 = off)')}${num('bombPotAnte', 'Bomb pot size, in big blinds', 1)}${num('runTimes', 'Run it: most times a player may ask for (1 = always once)', 1)}<label>All in showdown speed<select id="ps-showSpeed">${['fast', 'normal', 'long'].map((v) => `<option value="${v}"${v === s.showSpeed ? ' selected' : ''}>${v[0].toUpperCase() + v.slice(1)}</option>`).join('')}</select></label>
     <label>Game<select id="ps-game"><option value="nlh"${s.game === 'nlh' ? ' selected' : ''}>No limit Hold'em (2 cards)</option><option value="plo"${s.game === 'plo' ? ' selected' : ''}>Pot limit Omaha (4 cards)</option></select></label>
+    <label>Bots<select id="ps-botLevel"><option value="easy"${s.botLevel !== 'hard' ? ' selected' : ''}>Easy</option><option value="hard"${s.botLevel === 'hard' ? ' selected' : ''}>Hard</option></select></label>
     ${tick('doubleBoard', 'Two boards every hand (each board plays for half the pot)')}
     <label>Bomb pot game<select id="ps-bombGame">${[['same', 'Same as the table'], ['nlh', "Hold'em"], ['plo', 'Omaha (PLO)']].map(([v, l]) => `<option value="${v}"${s.bombGame === v ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
     <label>Bomb pot boards<select id="ps-bombBoards">${[[0, 'Same as the table'], [1, 'One board'], [2, 'Two boards']].map(([v, l]) => `<option value="${v}"${s.bombBoards === v ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
@@ -1329,7 +1330,7 @@ document.addEventListener('click', (e) => {
       for (const k of ['smallBlind', 'bigBlind', 'ante', 'startStack', 'turnTimer', 'timeBank', 'sevenDeuce', 'bombPotEvery', 'bombPotAnte', 'runTimes']) patch[k] = Number($('#ps-' + k).value);
       for (const k of ['straddle', 'autoStart', 'doubleBoard']) patch[k] = $('#ps-' + k).checked;
       patch.game = $('#ps-game').value; patch.bombGame = $('#ps-bombGame').value; patch.bombBoards = Number($('#ps-bombBoards').value);
-      patch.showSpeed = $('#ps-showSpeed').value;
+      patch.showSpeed = $('#ps-showSpeed').value; patch.botLevel = $('#ps-botLevel').value;
       if (S.role !== 'host') { send({ t: 'propose', patch }); toast('Sent. Everyone else at the table votes.'); }
       else if (t.inHand()) { S.pendingSettings = patch; toast('Saved. The new settings start with the next hand.'); }
       else { try { t.updateSettings(patch); toast('Settings saved.'); } catch (er) { toast(er.message); } push(); }
@@ -1374,6 +1375,11 @@ document.addEventListener('pointermove', (e) => {
 const dragStop = () => { const was = S.drag?.on; if (was) S.dragEnd = Date.now(); S.drag = null; $('#pk-gauge')?.remove(); if (was && S.raiseOpen !== S.raiseFor) { S.raiseOpen = S.raiseFor; render(); } };
 document.addEventListener('pointerup', dragStop);
 document.addEventListener('pointercancel', dragStop);
+// The host's bot level is saved as soon as it is picked; it only changes how the computer players play, so also during a hand.
+document.addEventListener('change', (e) => {
+  if (e.target.id !== 'ps-botLevel' || S.role !== 'host' || !S.table) return;
+  try { S.table.updateSettings({ botLevel: e.target.value }, true); toast(`Bots: ${e.target.value === 'hard' ? 'Hard' : 'Easy'}.`); push(); } catch (er) { toast(er.message); }
+});
 document.addEventListener('input', (e) => {
   if (e.target.id === 'raise-range') setRaise(e.target.value, 'range');
   else if (e.target.id === 'raise-num') setRaise(e.target.value, 'num');

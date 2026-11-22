@@ -22,6 +22,7 @@ export const POKER_DEFAULTS = {
   doubleBoard: false, // two boards are dealt and each plays for half the pot
   bombGame: 'same',   // the game of a bomb pot: same as the table, nlh or plo
   bombBoards: 0,      // boards in a bomb pot: 0 = same as the table, 1 or 2
+  botLevel: 'easy',   // computer players: easy, or hard (they play like a poker solver)
   runTimes: 10,       // when everyone is all in before the river, the rest of the board is dealt this many times (1 to 10) and the pot is shared between the runs
 };
 
@@ -178,6 +179,7 @@ export class PokerTable {
     s.doubleBoard = !!s.doubleBoard;
     s.bombGame = ['same', 'nlh', 'plo'].includes(s.bombGame) ? s.bombGame : 'same';
     s.bombBoards = [0, 1, 2].includes(Number(s.bombBoards)) ? Number(s.bombBoards) : 0;
+    s.botLevel = s.botLevel === 'hard' ? 'hard' : 'easy';
     s.showSpeed = ['fast', 'normal', 'long'].includes(s.showSpeed) ? s.showSpeed : 'fast';
     this.settings = s;
   }

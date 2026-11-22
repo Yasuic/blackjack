@@ -1,6 +1,7 @@
 // Computer players for the poker table. They are run by the host's browser, in the same way as a player's own moves.
 // A bot looks only at what a player in its seat could see: its own cards, the board, the bets and the stacks.
 // It never reads another seat's cards or the cards still to come.
+import { botMoveHard } from './pokergto.js?v=20261122z';
 const VAL = { 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 7: 7, 8: 8, 9: 9, 10: 10, J: 11, Q: 12, K: 13, A: 14 };
 export const BOT_NAMES = ['Ava', 'Max', 'Zoe', 'Leo', 'Mia', 'Sam', 'Kai', 'Uma'];
 export const isBot = (id) => String(id).startsWith('bot-');
@@ -48,7 +49,13 @@ function after(t, cards, board) {
   return Math.min(1, s);
 }
 // The bot's move for the seat whose turn it is: { a: 'fold' | 'check' | 'call' | 'bet' | 'raise', amount }.
+// With the table set to "Bots: Hard" the hard bot (js/pokergto.js) plays; when it cannot (Omaha, two boards)
+// or anything goes wrong, this easy play is used.
 export function botMove(t, id, rnd = Math.random) {
+  if (t.settings?.botLevel === 'hard') { try { const m = botMoveHard(t, id, rnd); if (m) return m; } catch { /* the easy bot plays */ } }
+  return botMoveEasy(t, id, rnd);
+}
+export function botMoveEasy(t, id, rnd = Math.random) {
   const o = t.options(id);
   if (!o) return null;
   const seat = t.seats[t.seatOf(id)], bb = t.settings.bigBlind || 1, pre = t.board.length === 0;
