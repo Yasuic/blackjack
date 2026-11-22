@@ -1,6 +1,6 @@
 // No-limit Texas Hold'em for up to 9 players. Pure rules: the host's browser owns one PokerTable and
 // every action goes through it. Nothing here touches the page or the network.
-import { SUITS, RANKS, sha256, fairSeed, fairShoe, MAX_CHIPS } from './game.js?v=20261122b';
+import { SUITS, RANKS, sha256, fairSeed, fairShoe, MAX_CHIPS } from './game.js?v=20261122c';
 
 export const POKER_SEATS = 9;
 export const POKER_DEFAULTS = {
@@ -679,6 +679,21 @@ export class PokerTable {
     // Each player's numbers: hands dealt, hands with chips put in by choice before the flop (VPIP), hands raised
     // before the flop (PFR), showdowns reached and showdowns won. Bomb pots have no betting before the flop and are left out of VPIP and PFR.
     const wonSeats = new Set(wins.map((w) => w.seat));
+    // A bad beat: a hand that loses at the showdown after being at least 65% to win on the flop or the turn,
+    // or that loses with a full house or better. Only that player is told (they may punch the winner); a
+    // losing hand that stays face down is not given away to the others.
+    this.beats = {}; this.punch = null;
+    if (showdown && R === 1 && !this.dbl && this.board.length === 5 && !PokerTable.noChances && wins.length) {
+      const full = this.board, top = {};
+      try {
+        for (const n of [3, 4]) { this.board = full.slice(0, n); const c = this.chances(live); for (const i of live) top[i] = Math.max(top[i] || 0, c.pct[i] || 0); }
+      } finally { this.board = full; }
+      for (const i of live) {
+        if (wonSeats.has(i)) continue;
+        const strong = /^(Full house|Four of a kind|Straight flush|Royal flush)/.test(hands[0][i].name || '');
+        if ((top[i] || 0) >= 65 || strong) this.beats[i] = { by: wins[0].seat, pct: Math.round(top[i] || 0) };
+      }
+    }
     if (showdown) {
       for (const i of order) {
         if (!live.includes(i)) continue;
@@ -816,6 +831,14 @@ export class PokerTable {
   // The whole table as plain data (the host's browser keeps it, so a reload carries on), and back again.
   static restore(j) { const t = new PokerTable(); Object.assign(t, j); return t; }
   // Rabbit hunt: the cards that would have come, when the hand ended before the river. One look per hand, shown to all.
+  // After a bad beat the loser may punch the winner: the table stops for 5 seconds while everyone watches.
+  punchWinner(id) {
+    const i = this.seatOf(id), b = this.beats?.[i];
+    if (this.phase !== 'done' || !b || this.punch || !this.seats[b.by]) throw new Error('There is nobody to punch.');
+    this.punch = { from: i, to: b.by, at: Date.now(), hand: this.handNo };
+    this.beats = {};
+    this.addLog(`${this.name(i)} punches ${this.name(b.by)} after a bad beat.`);
+  }
   rabbitHunt(id) {
     if (!this.settings.rabbitHunt) throw new Error('Rabbit hunting is off at this table.');
     if (this.phase !== 'done' || !this.result?.early || this.rabbit) return;
@@ -838,7 +861,7 @@ export class PokerTable {
     const me = this.seatOf(forId);
     return {
       game: 'poker', settings: this.settings, phase: this.phase, handNo: this.handNo, button: this.button, board: this.board, board2: this.dbl ? this.board2 || [] : null, plo: !!this.plo, dbl: !!this.dbl, rabbit2: this.rabbit2 || null, bomb: !!this.bomb,
-      pot: this.pot, minRaise: this.minRaise, pending: this.pending, moved: this.moved || 0, mySalt: me >= 0 ? this.seats[me].salt || null : null, wait: this.waitCards ? this.missingCards().map((i) => this.name(i)) : undefined, potTotal: this.potTotal(), swept: this.swept || null, pots: this.inHand() || done ? this.potsNow() : [], currentBet: this.currentBet, turn: this.turn,
+      pot: this.pot, minRaise: this.minRaise, pending: this.pending, moved: this.moved || 0, mySalt: me >= 0 ? this.seats[me].salt || null : null, wait: this.waitCards ? this.missingCards().map((i) => this.name(i)) : undefined, potTotal: this.potTotal(), swept: this.swept || null, canPunch: done && me >= 0 && this.beats?.[me] && !this.punch ? { to: this.beats[me].by, pct: this.beats[me].pct } : null, punch: done && this.punch ? { from: this.punch.from, to: this.punch.to, hand: this.punch.hand, left: Math.max(0, 5000 - (Date.now() - this.punch.at)) } : null, pots: this.inHand() || done ? this.potsNow() : [], currentBet: this.currentBet, turn: this.turn,
       turnLeft: this.turn !== null && this.settings.turnTimer ? Math.max(0, this.settings.turnTimer * 1000 - (Date.now() - (this.turnStarted || Date.now()))) : null,
       hostId: this.hostId, awayVotes: this.awayVotes || {}, canStart: this.canStart(), bombNext: this.bombNext, result: this.result, rabbit: this.rabbit, allInRun: !!this.allInRun && !done ? true : undefined,
       runAsk: this.runAsk && !this.runAsk.done ? { by: this.runAsk.by, max: this.runAsk.max, n: this.runAsk.n, yes: this.runAsk.yes, need: this.runAsk.need, left: Math.max(0, 20000 - (Date.now() - this.runAsk.at)) } : undefined,

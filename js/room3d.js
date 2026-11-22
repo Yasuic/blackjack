@@ -210,7 +210,7 @@ function buildOffice(signText, midShift = 0, midScale = 1, skipRoom = null, live
     chrome: mk({ color: '#b9bec4', roughness: 0.25, metalness: 0.9 }),
     screen: mk({ color: '#0d0f12', roughness: 0.25, metalness: 0.2 }),
     // What the office screens show: the ARC Group logo, from the photo of it, lit like a screen that is on.
-    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261122b'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
+    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261122c'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
     dark: mk({ color: '#30353c', roughness: 0.6 }),
   };
   const group = new THREE.Group();
@@ -957,7 +957,7 @@ function buildStorefront() {
     lamp: lam('#c8161d', 0.6), bulb: lit('#ffe9a8'), red: lit('#c8161d'), gold: lit('#f4c542'), wood: lam('#7a5234', 0.35),
     glass: new THREE.MeshBasicMaterial({ color: '#dff3f7', transparent: true, opacity: 0.13, depthWrite: false }),
     awning: new THREE.MeshBasicMaterial({ map: canvasTexture(512, 64, (g, w, h) => { for (let i = 0; i < 16; i++) { g.fillStyle = i % 2 ? '#fff6e6' : '#f08a1c'; g.fillRect((i * w) / 16, 0, w / 16 + 1, h); } }), side: THREE.DoubleSide }),
-    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261122b') }),
+    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261122c') }),
     menu: new THREE.MeshBasicMaterial({ map: canvasTexture(256, 384, (g, w, h) => {
       g.fillStyle = '#c8161d'; g.fillRect(0, 0, w, h); g.fillStyle = '#f4c542'; g.fillRect(14, 14, w - 28, 44);
       const r = rng(11); g.fillStyle = '#fff3d6';
@@ -1356,6 +1356,7 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
   let peopleRev = 0, flipped = false; // flipped: the felt is laid out for the dealer and turned to face them
   let peopleKey = '', figs = new Map(), stoolGroup = null, myFig = null, myStool = null, sidePts = [], seatEdge = new Map();
   let lastPeople = null, lastChips = null;
+  let brawl = null; // { from, to, t0, ms, ... }: see punch()
   let others = [];
   function setPeople(list = [], stools = null) {
     lastPeople = [list, stools];
@@ -1902,6 +1903,28 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
       cur.t.lerp(goal.t, k);
       dirty = Math.max(dirty, 2);
     }
+    // A punch after a bad beat: one figure gets up, goes round the table to another, punches, and goes back.
+    if (brawl) {
+      const B = brawl, a = figs.get(B.from), b = figs.get(B.to), q = (now - B.t0) / B.ms;
+      if (!a || !b || q >= 1 || a !== B.a || b !== B.b) {
+        if (B.a.parent) { B.a.position.copy(B.p0); B.a.rotation.set(0, B.r0, 0); for (const arm of B.a.userData.arms) { arm.rotation.x = 0; arm.position.z = 0; } B.a.visible = true; B.a.userData.label.visible = true; }
+        if (B.b.parent) { B.b.position.copy(B.bp0); B.b.rotation.set(0, B.br0, 0); }
+        brawl = null;
+      } else {
+        const ease = (x) => x * x * (3 - 2 * x), go = q < 0.24 ? ease(q / 0.24) : q > 0.84 ? ease((1 - q) / 0.16) : 1;
+        // Round the table, not through it: the angle and the distance from the middle are both blended.
+        const ang = B.a0 + B.da * go, rad = (B.rA + (B.rT - B.rA) * go) * (1 + 0.3 * Math.sin(go * Math.PI));
+        a.position.set(Math.sin(ang) * rad, B.p0.y + B.lift * Math.sin(Math.min(1, go * 3) * Math.PI / 2) + (go < 1 ? Math.abs(Math.sin(now / 90)) * 5 * B.sc : 0), Math.cos(ang) * rad);
+        const hitting = go >= 1;
+        a.rotation.y = hitting || q <= 0.84 ? Math.atan2(b.position.x - a.position.x, b.position.z - a.position.z) : B.r0 + (a.rotation.y - B.r0) * 0.8;
+        a.visible = true; a.userData.label.visible = false; // up close the name over the head would fill the screen
+        const w = now / 55;
+        a.userData.arms.forEach((arm, k) => { const p = hitting ? Math.max(0, Math.sin(w + k * Math.PI)) : 0; arm.rotation.x = -1.25 * p; arm.position.z = 70 * p; });
+        if (hitting) { a.rotation.x = 0.12 + 0.06 * Math.sin(w); b.position.set(B.bp0.x + Math.sin(now / 23) * 5 * B.sc, B.bp0.y, B.bp0.z + Math.cos(now / 19) * 5 * B.sc); b.rotation.set(0.1 * Math.sin(now / 37), B.br0, 0.2 * Math.sin(now / 31)); }
+        else { a.rotation.x = 0; b.position.copy(B.bp0); b.rotation.set(0, B.br0, 0); }
+      }
+      dirty = Math.max(dirty, 2);
+    }
     // Arm reach.
     for (const f of figs.values()) {
       const u = f.userData;
@@ -1952,7 +1975,7 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     // That rule is only for the resting view from your chair. Once you turn your head, lean in or look up or down,
     // everybody is drawn, so nobody vanishes while you look at them from close by.
     const turned = Math.abs(cur.yaw) > 0.05 || Math.abs(cur.pitch) > 0.05 || cur.r < homeFit.r * 0.97;
-    for (const f of others) { f.updateMatrixWorld(); f.visible = !seated || !!tour || turned || side === 'dealer' || !(low(f, 0.35) || edge(f)); }
+    for (const f of others) { f.updateMatrixWorld(); f.visible = !seated || !!tour || turned || side === 'dealer' || (brawl && (f === brawl.a || f === brawl.b)) || !(low(f, 0.35) || edge(f)); }
     for (const r of racks) r.visible = true;
     if (myRack) myRack.visible = true;
     if (dbgCam) { camera.position.copy(office.localToWorld(dbgCam.p.clone())); camera.lookAt(office.localToWorld(dbgCam.t.clone())); }
@@ -2023,6 +2046,22 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
       return true;
     },
     walking: () => walking,
+    // One player's figure gets up, goes round the table to another player's figure, punches for a while and goes back.
+    punch(fromId, toId, ms = 5000) {
+      const a = figs.get(fromId), b = figs.get(toId);
+      if (!a || !b || a === b || brawl) return false;
+      const sc = a.scale.x, rA = Math.hypot(a.position.x, a.position.z), rB = Math.hypot(b.position.x, b.position.z) || 1;
+      const a0 = Math.atan2(a.position.x, a.position.z), b0 = Math.atan2(b.position.x, b.position.z);
+      const wrap = (x) => { while (x > Math.PI) x -= 2 * Math.PI; while (x < -Math.PI) x += 2 * Math.PI; return x; };
+      // The place to punch from: behind the other chair and a step to the side the walk comes from, so the
+      // puncher stands on the floor outside the ring of chairs, never in the table.
+      const sg = -Math.sign(wrap(b0 - a0) || 1), nx = b.position.x / rB, nz = b.position.z / rB;
+      const tx = b.position.x + nx * 85 * sc + nz * sg * 75 * sc, tz = b.position.z + nz * 85 * sc - nx * sg * 75 * sc;
+      brawl = { from: fromId, to: toId, a, b, t0: performance.now(), ms, sc, p0: a.position.clone(), r0: a.rotation.y, bp0: b.position.clone(), br0: b.rotation.y, a0, da: wrap(Math.atan2(tx, tz) - a0), rA, rT: Math.hypot(tx, tz), lift: 34 * sc };
+      touch();
+      return true;
+    },
+    brawling: () => !!brawl,
     dealCard() { for (const f of figs.values()) if (f.userData.isDealer) { f.userData.deal = 1; touch(); } },
     // For tests only: the drawing parts, so a test can look at one spot of the room.
     dbg: () => ({ gl, scene, camera, figs }),

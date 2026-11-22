@@ -400,6 +400,34 @@ PokerTable.noChances = true; PokerTable.autoRun = false;
   t.showCards('p1'); ok(t.publicState('zz').seats[1].cards.every(Boolean), 'a loser can show by choice');
   ok(tot(t) === 3000, 'chips constant');
 }
+{ // A bad beat: aces are far ahead on the flop and the turn, a king on the river beats them. Only the loser may punch.
+  PokerTable.noChances = false;
+  const t = mk(3, 1000); t.startHand();
+  rig(t, { 0: 'A♠ A♥', 1: 'K♠ K♥', 2: '8♠ 4♥' }, '2♣ 7♦ 9♣ J♦ K♦');
+  t.act('p0', 'call'); t.act('p1', 'call'); t.act('p2', 'check');
+  let g = 0; while (t.phase !== 'done' && g++ < 20) { const x = t.seats[t.turn]; t.act(x.id, 'check'); }
+  ok(t.phase === 'done' && t.result.wins[0].seat === 1, 'kings win on the river');
+  const mine = t.publicState('p0'), other = t.publicState('p2'), win = t.publicState('p1');
+  ok(mine.canPunch && mine.canPunch.to === 1 && mine.canPunch.pct >= 65, 'the player who took the bad beat may punch the winner');
+  ok(!other.canPunch && !win.canPunch, 'nobody else may punch, and nobody else is told');
+  ok(other.seats[0].cards.every((c) => !c), 'the beaten hand is still face down for the others');
+  let threw = false; try { t.punchWinner('p2'); } catch { threw = true; } ok(threw && !t.punch, 'a player without a bad beat cannot punch');
+  t.punchWinner('p0');
+  const after = t.publicState('p2');
+  ok(after.punch && after.punch.from === 0 && after.punch.to === 1 && after.punch.left > 4000 && after.punch.left <= 5000, 'everyone is told who punches whom, for 5 seconds');
+  threw = false; try { t.punchWinner('p0'); } catch { threw = true; } ok(threw, 'one punch per bad beat');
+  ok(tot(t) === 3000, 'a punch moves no chips');
+  t.startHand(); ok(!t.publicState('p0').punch && !t.publicState('p0').canPunch, 'the next hand starts clean');
+}
+{ // No bad beat when the best hand holds up, or when the hand ends by a fold.
+  const t = mk(3, 1000); t.startHand();
+  rig(t, { 0: 'A♠ A♥', 1: 'K♠ K♥', 2: '8♠ 4♥' }, '2♣ 7♦ 9♣ J♦ 3♠');
+  t.act('p0', 'call'); t.act('p1', 'call'); t.act('p2', 'check');
+  let g = 0; while (t.phase !== 'done' && g++ < 20) { const x = t.seats[t.turn]; t.act(x.id, 'check'); }
+  ok([0, 1, 2].every((i) => !t.publicState('p' + i).canPunch), 'no punch when the favourite wins');
+  t.startHand(); t.act(t.seats[t.turn].id, 'fold'); t.act(t.seats[t.turn].id, 'fold');
+  ok(t.phase === 'done' && [0, 1, 2].every((i) => !t.publicState('p' + i).canPunch), 'no punch after a fold win');
+}
 PokerTable.noChances = false; PokerTable.samples = 0;
 console.log(`${n - fails}/${n} poker checks passed`);
 process.exit(fails ? 1 : 0);

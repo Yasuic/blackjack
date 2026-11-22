@@ -755,3 +755,15 @@ body:not(.room3d) .pfelt:not(.tall) .ro-grid.wide { top: 21%; grid-auto-rows: ca
 @media (max-width: 560px) { .bc-acts.ro-acts { flex-wrap: wrap; row-gap: 4px; } }
 body:not(.room3d) .pfelt:not(.tall) .ro-result { display: none; }
 .ro-spin.pressed, .bc-acts .btn.primary.pressed { background: #1d6f52 !important; border-color: #7ef0b6 !important; color: #eafff5 !important; }
+/* ---------- Poker: a punch after a bad beat ---------- */
+.pk-punch { background: linear-gradient(#ff6b5e, #c62f2f) !important; border-color: #ffb3a8 !important; color: #fff !important; font-weight: 800; font-size: 17px; padding: 10px 18px; border-radius: 12px; animation: pk-pulse 0.9s ease-in-out infinite; }
+.pk-punchbar { position: fixed; left: 50%; top: 74px; transform: translateX(-50%); z-index: 60; background: rgba(20,8,8,.92); border: 2px solid #ff8a7a; border-radius: 14px; padding: 8px 18px 12px; color: #fff; font: 800 18px Inter, system-ui, sans-serif; white-space: nowrap; max-width: 94vw; overflow: hidden; text-overflow: ellipsis; box-shadow: 0 8px 30px rgba(0,0,0,.6); pointer-events: none; }
+.pk-punchbar i { position: absolute; left: 0; bottom: 0; height: 5px; width: 100%; background: #ff8a7a; animation: pk-run linear forwards; }
+.pk-pow { position: absolute; transform: translate(-50%, -100%) var(--bb, none) rotate(var(--rot, 0deg)); font: 900 calc(34px * var(--k, 1)) Inter, system-ui, sans-serif; color: #ffe14d; -webkit-text-stroke: calc(2px * var(--k, 1)) #b3140a; text-shadow: 0 3px 0 #b3140a, 0 0 18px rgba(255,80,40,.8); animation: pk-pow .7s ease-out forwards; pointer-events: none; white-space: nowrap; z-index: 5; }
+body:not(.room3d) .pk-pow { transform: translate(-50%, -50%) rotate(var(--rot, 0deg)); }
+@keyframes pk-pow { 0% { opacity: 0; scale: .3; } 18% { opacity: 1; scale: 1.25; } 70% { opacity: 1; scale: 1; } 100% { opacity: 0; scale: 1.1; } }
+.pk-fist { position: absolute; transform: translate(-50%, -50%); font-size: calc(54px * var(--k, 1)); line-height: 1; transition: left 1.2s cubic-bezier(.3,.7,.3,1), top 1.2s cubic-bezier(.3,.7,.3,1); animation: pk-jab .33s 1.2s ease-in-out infinite; pointer-events: none; z-index: 4; }
+@keyframes pk-jab { 50% { scale: 1.45; rotate: -18deg; } }
+body:not(.room3d) .felt.pk-brawl { animation: pk-shake .16s 1.2s linear infinite; }
+@keyframes pk-shake { 0% { translate: 0 0; } 25% { translate: 3px -2px; } 50% { translate: -3px 2px; } 75% { translate: 2px 2px; } 100% { translate: 0 0; } }
+@media (prefers-reduced-motion: reduce) { body:not(.room3d) .felt.pk-brawl { animation: none; } }

@@ -1,9 +1,9 @@
 // The roulette page: a European roulette table for up to 9 in Nigel's room. The host's browser runs
 // the table (js/roulette.js); every other browser sends its bets there and is told only what it may see.
-import { RouTable, ROU_SEATS, WHEEL, colorOf, betNumbers, betName, betPays, verifySpin } from './roulette.js?v=20261122b';
-import { showSpin } from './wheel.js?v=20261122b';
-import { webglOK, initRoom } from './room3d.js?v=20261122b';
-import { params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML } from './common.js?v=20261122b';
+import { RouTable, ROU_SEATS, WHEEL, colorOf, betNumbers, betName, betPays, verifySpin } from './roulette.js?v=20261122c';
+import { showSpin } from './wheel.js?v=20261122c';
+import { webglOK, initRoom } from './room3d.js?v=20261122c';
+import { params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML } from './common.js?v=20261122c';
 
 const PREFIX = 'bjt-ro-';
 const app = $('#app');

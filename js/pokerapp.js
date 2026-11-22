@@ -1,11 +1,11 @@
 // The poker page: a Texas Hold'em table for up to 9 in the big meeting room. The host's browser runs
 // the table (js/poker.js); every other browser sends its moves there and is told only what it may see.
-import { PokerTable, POKER_SEATS, pokerDeck, cardText } from './poker.js?v=20261122b';
-import { sha256 } from './game.js?v=20261122b';
-import { botMove, isBot, BOT_NAMES } from './pokerbot.js?v=20261122b';
-import { chipSound, cardSound, hitSound, standSound, potSound, tickSound, turnSound } from './fx.js?v=20261122b';
-import { webglOK, initRoom } from './room3d.js?v=20261122b';
-import { params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame } from './common.js?v=20261122b';
+import { PokerTable, POKER_SEATS, pokerDeck, cardText } from './poker.js?v=20261122c';
+import { sha256 } from './game.js?v=20261122c';
+import { botMove, isBot, BOT_NAMES } from './pokerbot.js?v=20261122c';
+import { chipSound, cardSound, hitSound, standSound, potSound, tickSound, turnSound } from './fx.js?v=20261122c';
+import { webglOK, initRoom } from './room3d.js?v=20261122c';
+import { params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame } from './common.js?v=20261122c';
 
 const PREFIX = 'bjt-pk-';
 const app = $('#app');
@@ -148,6 +148,7 @@ function doMove(id, m) {
     case 'vaway': t.voteAway(id, String(m.id), !!m.on); break;
     case 'fx': relayFx(id, m.e); break;
     case 'show': t.showCards(id, m.which); break;
+    case 'punch': t.punchWinner(id); break;
     case 'rabbit': t.rabbitHunt(id); break;
     case 'straddle': t.setStraddle(id, !!m.on); break;
     case 'runs': t.setRuns(id, m.n); break;
@@ -177,6 +178,35 @@ function showFx(fromId, e) {
   el.style.left = P.x + (Math.random() * 6 - 3) + '%'; el.style.top = P.y + '%';
   box.append(el);
   setTimeout(() => el.remove(), 2300);
+}
+// A punch after a bad beat, on every screen: in the 3D room the loser's figure gets up, walks round the table
+// and punches the winner's figure; on every table comic words pop over the winner's seat and the felt shakes.
+function showPunch(st) {
+  const box = $('#pk-fx'), k = st.punch, ms = Math.max(1500, Math.min(PUNCH_MS, k.left || PUNCH_MS));
+  const A = st.seats[k.from], B = st.seats[k.to];
+  if (!box || !A || !B) return;
+  S.room?.punch?.(A.id, B.id, ms);
+  const L = seatLayout(st), Pa = toward(L.at(k.from), 0.8), Pb = toward(L.at(k.to), 0.72), felt = $('#felt');
+  const flat = !S.room, t0 = Date.now(), words = ['POW!', 'BAM!', 'WHACK!', 'OOF!', 'SMACK!', 'BONK!'];
+  felt?.classList.add('pk-brawl'); setTimeout(() => felt?.classList.remove('pk-brawl'), ms);
+  const bar = document.createElement('div');
+  bar.className = 'pk-punchbar'; bar.innerHTML = `<b>👊 ${esc(A.name)} punches ${esc(B.name)}</b><i style="animation-duration:${ms}ms"></i>`;
+  document.body.append(bar); setTimeout(() => bar.remove(), ms + 200);
+  // The fist: on a flat table it flies from the loser's plate to the winner's and stays there, hitting.
+  let fist = null;
+  if (flat) { fist = document.createElement('div'); fist.className = 'pk-fist'; fist.textContent = '👊'; fist.style.left = Pa.x + '%'; fist.style.top = Pa.y + '%'; box.append(fist); requestAnimationFrame(() => { fist.style.left = Pb.x + '%'; fist.style.top = Pb.y + '%'; }); setTimeout(() => fist.remove(), ms); }
+  let n = 0;
+  const hit = () => {
+    const gone = Date.now() - t0;
+    if (gone > ms * 0.86 || !document.body.contains(box)) return;
+    const el = document.createElement('div');
+    el.className = 'pk-pow pk-stand'; el.textContent = words[n++ % words.length];
+    el.style.left = Pb.x + (Math.random() * 14 - 7) + '%'; el.style.top = Pb.y + (Math.random() * 8 - 6) + '%'; el.style.setProperty('--rot', (Math.random() * 30 - 15).toFixed(0) + 'deg');
+    box.append(el); setTimeout(() => el.remove(), 700);
+    try { hitSound(); if (n % 2) chipSound(2); } catch { /* sound is never worth an error */ }
+    setTimeout(hit, 330);
+  };
+  setTimeout(hit, Math.round(ms * 0.26)); // the first hit comes when the walk round the table is over
 }
 function push() {
   const t = S.table;
@@ -259,6 +289,13 @@ function hostClock() {
     if (t.players[x.id]?.connected === false && gone && now - gone > 40000) { t.sitOut(x.id, true); S.autoAway[x.id] = true; t.addLog(`${t.players[x.id].name} is offline and was marked away.`); push(); }
   }
   const r = t.result;
+  // A punch after a bad beat: the table stops for 5 seconds while everyone watches. While a player may still
+  // punch, the next hand waits 4 seconds longer. A computer player with a bad beat punches most of the time.
+  if (t.phase === 'done' && t.punch) { if (now - t.punch.at < PUNCH_MS + 700) return; }
+  else if (t.phase === 'done' && t.beats && Object.keys(t.beats).length) {
+    for (const i of Object.keys(t.beats)) { const x = t.seats[i]; if (x && isBot(x.id) && now - S.doneAt > BEAT_MS + SHOW_MS + 1300 && (t.handNo + Number(i)) % 4 !== 0) { try { t.punchWinner(x.id); push(); } catch {} return; } }
+    if (now - S.doneAt < endWait(r) + 4000) return;
+  }
   // A rabbit hunt is shown slowly: the next hand waits until every card has been turned and seen.
   if (!t.rabbit) S.rabUntil = 0; else if (!S.rabUntil) S.rabUntil = now + t.rabbit.length * RABBIT_MS + 2500;
   if (S.rabUntil && now < S.rabUntil) return;
@@ -408,7 +445,7 @@ const stepMs = () => Number(params.get('step')) || { fast: 2000, normal: 3000, l
 // The pace of a hand, as measured on a PokerNow table: the bets stay in front of the players for a beat before
 // they go to the pot and the next card comes; at a showdown the cards turn first and the winner shows after;
 // the next hand is dealt 3 seconds after a result (6 or 9 on the slower settings).
-const BEAT_MS = Number(params.get('beat') ?? 800), SHOW_MS = 900, RUN_ASK_MS = 10000;
+const BEAT_MS = Number(params.get('beat') ?? 800), SHOW_MS = 900, RUN_ASK_MS = 10000, PUNCH_MS = 5000;
 const afterMs = () => ({ fast: 3000, normal: 6000, long: 9000 }[(S.st || S.table)?.settings?.showSpeed] || 3000);
 const endWait = (r) => BEAT_MS + (r?.runout ? (r.runout.length + (r.boards && !r.dbl ? r.boards.length : 1)) * stepMs() + afterMs() : r?.showdown ? SHOW_MS + afterMs() : 3000);
 // For the beat after a betting round, the screen shows the table as it was just before the bets were swept:
@@ -584,6 +621,7 @@ function render() {
     return;
   }
   playSounds(st);
+  if (st.punch && S.punched !== st.handNo + ':' + st.punch.from) { S.punched = st.handNo + ':' + st.punch.from; showPunch(st); }
   const { mySeat, at, rel } = seatLayout(st);
   const ring = useRing(), plan = ring ? ringNow() : null;
   { const f = $('#felt'); if (f) { f.classList.toggle('ring', ring); if (plan) { f.style.setProperty('--k', plan.k.toFixed(3)); f.style.setProperty('--rb', plan.board.toFixed(2) + '%'); f.style.setProperty('--rp', plan.pot.toFixed(2) + '%'); } else { f.style.removeProperty('--k'); f.style.removeProperty('--rb'); f.style.removeProperty('--rp'); } } }
@@ -764,6 +802,7 @@ function drawHud(st, mySeat, showing) {
   else if (o) status = 'Your turn';
   else if (live && st.turn !== null) status = ''; // whose turn it is shows as the light on their name
   else if (st.beat) status = '';
+  else if (st.punch && st.punch.left > 0) status = ''; // the banner at the top says it
   else if (st.runAsk) { const a = st.runAsk, nm = esc(st.seats[a.by]?.name || ''); status = !a.n ? (a.by === mySeat ? 'All in. How many times do you want to run it?' : `All in. ${nm} picks how many times to run it…`) : (a.need.includes(mySeat) && !a.yes.includes(mySeat) ? `${nm} asks to run it ${a.n} times. Do you agree?` : `Run it ${a.n} times? Waiting for ${esc(a.need.filter((q) => !a.yes.includes(q)).map((q) => st.seats[q]?.name || '').join(', '))}…`); }
   else if (showing) status = S.shown?.hand === st.handNo && !st.result?.runout ? 'Showdown' : 'All in. The cards are coming out…';
   else if (st.phase === 'done') status = st.result?.wins?.length ? st.result.wins.map((w) => `${esc(st.seats[w.seat]?.name || 'A player')} wins ${amt(w.amount)}${w.hand ? ' with ' + esc(shortHand(w.hand)) : ''}`).filter((x, i, a) => a.indexOf(x) === i).slice(0, 3).join(' · ') : 'Hand over';
@@ -812,6 +851,7 @@ function drawHud(st, mySeat, showing) {
     h += `<div class="pk-acts pre"><button class="pk-act fold${pre === 'cf' ? ' on' : ''}" data-act="pre" data-a="cf">Check / Fold</button><button class="pk-act check${pre === 'check' ? ' on' : ''}" data-act="pre" data-a="check">Check</button><button class="pk-act call${pre === 'call' ? ' on' : ''}" data-act="pre" data-a="call">Call any</button></div>`;
   } else if (seat) {
     const b = [];
+    if (st.canPunch && !showing) b.push(`<button class="btn pk-punch" data-act="punch">👊 Punch ${esc(st.seats[st.canPunch.to]?.name || 'the winner')}</button>`);
     if (st.phase === 'done' && seat.inHand && seat.cards[0] && !seat.shown) {
       const m = seat.mask || seat.cards.map(() => false);
       seat.cards.forEach((c, k) => { if (!m[k]) b.push(`<button class="btn small" data-act="show" data-w="${k}">Show ${esc(cardText(c))}</button>`); });
@@ -997,6 +1037,7 @@ document.addEventListener('click', (e) => {
     case 'preset': setRaise(el.dataset.v); break;
     case 'raise-step': { const o = st.options; if (o?.canRaise) setRaise(Math.max(o.minTo, Math.min(o.maxTo, Math.max(o.minTo, Math.min(o.maxTo, S.raiseTo)) + Number(el.dataset.d) * (st.settings.bigBlind || 1)))); break; }
     case 'show': send({ t: 'show', which: el.dataset.w === undefined ? 'both' : Number(el.dataset.w) }); break;
+    case 'punch': send({ t: 'punch' }); break;
     case 'rabbit': send({ t: 'rabbit' }); break;
     case 'away': { const s = st.seats.find((x) => x && x.id === S.myId); send({ t: 'away', on: !s.out }); break; }
     case 'straddle': { const s = st.seats.find((x) => x && x.id === S.myId); send({ t: 'straddle', on: !s.straddle }); break; }
