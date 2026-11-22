@@ -1,16 +1,16 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261122o';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122o';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122o';
-import { tickSound, winSound } from './fx.js?v=20261122o';
-import * as HX from './history.js?v=20261122o';
-import { webglOK, initRoom } from './room3d.js?v=20261122o';
-import { showDropped, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261122o';
-import { makeVault, makeOpener, cleanBox, cleanPiece } from './vault.js?v=20261122o';
-import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122o';
-import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122o';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261122p';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122p';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122p';
+import { tickSound, winSound } from './fx.js?v=20261122p';
+import * as HX from './history.js?v=20261122p';
+import { webglOK, initRoom } from './room3d.js?v=20261122p';
+import { showDropped, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261122p';
+import { makeVault, makeOpener, cleanBox, cleanPiece } from './vault.js?v=20261122p';
+import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122p';
+import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122p';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -1690,7 +1690,7 @@ function renderVote(st) {
   box.innerHTML = `<div class="vote-card">
     <div class="vote-title">${title}</div>
     ${body}
-    <p>${mine ? `Everyone else has to say yes. ${v.yes} of ${v.voters} said yes so far.` : isSet ? 'Everyone has to say yes. No answer counts as no.' : 'They would pay all winning bets and collect all losing bets. Everyone has to say yes. No answer counts as no.'}</p>
+    <p>${mine ? `${v.need < v.voters ? `${v.need} of ${v.voters} have to say yes` : 'Everyone else has to say yes'}. ${v.yes} of ${v.voters} said yes so far.` : isSet ? (v.need < v.voters ? `${v.need} of ${v.voters} players have to say yes, so one player away does not block it.` : 'Everyone has to say yes. No answer counts as no.') : 'They would pay all winning bets and collect all losing bets. Everyone has to say yes. No answer counts as no.'}</p>
     ${v.canVote ? `<div class="actions"><button class="btn primary" data-vote="1">Yes</button><button class="btn danger" data-vote="0">No</button></div>` : (mine ? '' : '<p class="hint">You voted. Waiting for the others.</p>')}
     <div class="vote-bar"><span id="vote-bar"></span></div>
   </div>`;
@@ -2932,7 +2932,7 @@ function renderSettings(st) {
     </div>`, true)}
     ${fold('set-seats', '🪑 Seats', `<div class="settings-grid">
       <label class="full">Seats at the table<input id="set-seats" type="number" min="1" step="1" inputmode="numeric" value="${s.seats}" ${dis} /></label>
-      <div class="hint full">Most casino tables have 7. A seat can only be taken away when nobody is sitting in it.</div>
+      <div class="hint full">Most casino tables have 7. Fewer seats than players: seats are taken from whoever holds the most first, then from the highest seat numbers. It happens between rounds.</div>
     </div>`, true)}
     ${fold('set-bets', '💵 Chips and bet limits', `<div class="settings-grid">
       <label>Starting chips<input id="set-start" type="number" min="1" value="${s.startChips}" ${dis} /></label>
@@ -3007,7 +3007,7 @@ function hostPropose(by, patch) {
   if (!changes.length) return 'none';
   if (by !== S.myId && !t.seatsOf(by).length && t.banker !== by) throw new Error('Take a seat to change the settings.');
   const summary = changes.map((k) => `${SETTING_NAMES[k][0]}: ${SETTING_NAMES[k][1](clean[k])}`);
-  const id = t.proposeSettings(by, clean, summary);
+  const id = t.proposeSettings(by, Object.fromEntries(changes.map((k) => [k, clean[k]])), summary); // only what changed, so a seat count change alone is seen as one
   if (!id) return 'saved';
   S.voteEnds = Date.now() + VOTE_SECONDS * 1000;
   setTimeout(() => hostDo((tb) => tb.expireVote(id)), VOTE_SECONDS * 1000);

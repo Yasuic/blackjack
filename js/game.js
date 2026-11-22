@@ -432,11 +432,12 @@ export class Table {
     for (const k of ['dealerHitsSoft17', 'allowSurrender', 'autoDeal']) s[k] = !!s[k];
     s.countTraining = false; // no card count is ever shown at this table
     s.seats = seatCount(s.seats, this.seats.length);
-    this.checkSeatCount(s.seats);
+    if (s.seats < this.seats.length && this.inRound() && this.seats.slice(s.seats).some(Boolean)) throw new Error('Seats can be taken away when this round ends.');
     this.settings = s;
-    // Growing adds empty seats at the end. Shrinking only ever removes empty ones (checked above).
+    // Growing adds empty seats at the end. Shrinking moves players down into free seats, and takes seats
+    // away when there are not enough (shrinkSeats), always between rounds.
     while (this.seats.length < s.seats) this.seats.push(null);
-    this.seats.length = s.seats;
+    if (s.seats < this.seats.length) this.shrinkSeats(s.seats);
     if (old.decks !== s.decks) this.newShoe();
   }
 
@@ -511,15 +512,36 @@ export class Table {
     if (side !== was.maxSideBet) { this.addLog(`${name}, the dealer, set the maximum side bet to ${side}.`); this.ev('dealer set maximum side bet', clientId, String(side)); }
   }
 
-  // The table can only lose seats that nobody is sitting in.
-  checkSeatCount(n) {
-    if (n === undefined || n === null) return;
-    n = seatCount(n, this.seats.length);
+  // Fewer seats. When there are more taken seats than the new number, seats are taken away fairly: each time
+  // from whoever holds the most seats (their highest seat first), so a player with one seat only loses it when
+  // everyone left has one seat; then the highest seat numbers go. The rest move down into the free seats, in
+  // order. Bets on a seat that goes away were never taken from the chips (that happens at the deal), so no
+  // chips move. Between rounds only.
+  shrinkSeats(n) {
     const taken = [];
-    for (let i = n; i < this.seats.length; i++) if (this.seats[i]) taken.push(i + 1);
-    if (!taken.length) return;
-    const list = taken.length === 1 ? `${taken[0]}` : `${taken.slice(0, -1).join(', ')} and ${taken[taken.length - 1]}`;
-    throw new Error(`${taken.length === 1 ? 'Seat' : 'Seats'} ${list} ${taken.length === 1 ? 'is' : 'are'} still taken. Ask them to move first.`);
+    this.seats.forEach((x, i) => { if (x) taken.push(i); });
+    const drop = new Set();
+    const count = (id) => taken.filter((i) => !drop.has(i) && this.seats[i].playerId === id).length;
+    while (taken.length - drop.size > n) {
+      const left = taken.filter((i) => !drop.has(i));
+      const most = Math.max(...left.map((i) => count(this.seats[i].playerId)));
+      const pick = left.filter((i) => count(this.seats[i].playerId) === most).pop(); // highest seat of a player holding the most
+      drop.add(pick);
+    }
+    const lost = {};
+    for (const i of drop) { const id = this.seats[i].playerId; lost[id] = (lost[id] || 0) + 1; }
+    const keep = taken.filter((i) => !drop.has(i)).map((i) => this.seats[i]);
+    // Seats below the new number keep their place; the others move to the lowest free seats.
+    const next = Array(n).fill(null), moved = [];
+    for (const i of taken) if (!drop.has(i) && i < n) next[i] = this.seats[i];
+    for (const i of taken) if (!drop.has(i) && i >= n) { const j = next.indexOf(null); next[j] = this.seats[i]; moved.push(this.seats[i].playerId); }
+    if (keep.length !== next.filter(Boolean).length) throw new Error('Seat count mix-up.'); // never happens: kept seats always fit
+    this.seats = next;
+    for (const p of Object.values(this.players)) this.fixSeat(p);
+    const name = (id) => this.players[id]?.name || 'A player';
+    const parts = Object.entries(lost).map(([id, k]) => (this.seatsOf(id).length ? `${name(id)} gave up ${k} seat${k > 1 ? 's' : ''}` : `${name(id)} stood up`));
+    this.addLog(`The table now has ${n} seat${n > 1 ? 's' : ''}.${parts.length ? ' ' + parts.join(', ') + '.' : ''}${moved.length ? ` ${[...new Set(moved)].map(name).join(', ')} moved to a lower seat.` : ''}`);
+    if (Object.keys(lost).length) this.ev('seats taken away', null, Object.entries(lost).map(([id, k]) => `${name(id)} ${k}`).join(', '));
   }
 
   addLog(msg) {
@@ -641,11 +663,14 @@ export class Table {
   // A settings change, from the host or from any player, needs a yes from everyone else who is online.
   proposeSettings(hostId, patch, summary) {
     if (this.vote) throw new Error('A vote is already running.');
-    this.checkSeatCount(patch?.seats);
     const voters = Object.values(this.players).filter((x) => x.id !== hostId && x.connected && !x.kicked).map((x) => x.id);
     this.voteSeq = (this.voteSeq || 0) + 1;
-    if (!voters.length) { this.applySettings(patch); return null; }
-    this.vote = { id: this.voteSeq, kind: 'settings', candidate: hostId, patch, summary, voters, votes: {} };
+    // A change of the seat count alone passes when all but one say yes: one player away from the screen
+    // (often the dealer) does not hold it up.
+    const seatsOnly = Object.keys(patch || {}).every((k) => k === 'seats' || k === 'countTraining') && 'seats' in (patch || {});
+    const need = Math.max(0, voters.length - (seatsOnly ? 1 : 0));
+    if (!need) { this.applySettings(patch); return null; }
+    this.vote = { id: this.voteSeq, kind: 'settings', candidate: hostId, patch, summary, voters, votes: {}, need };
     this.addLog(`${this.players[hostId]?.name || 'A player'} proposed new settings. Everyone else votes.`);
     return this.vote.id;
   }
@@ -663,6 +688,13 @@ export class Table {
     if (!v || !v.voters.includes(clientId) || clientId in v.votes) return;
     v.votes[clientId] = !!yes;
     const name = this.players[v.candidate].name;
+    const need = v.need ?? v.voters.length;
+    const yesN = v.voters.filter((id) => v.votes[id] === true).length, noN = v.voters.filter((id) => v.votes[id] === false).length;
+    if (need < v.voters.length) { // all but one: one no is allowed
+      if (yesN >= need) { this.vote = null; this.addLog(`${yesN} of ${v.voters.length} said yes to the new settings.`); this.applySettings(v.patch); return; }
+      if (noN > v.voters.length - need) { this.vote = null; this.addLog(`${this.players[clientId].name} voted no too. The settings stay the same.`); }
+      return;
+    }
     if (!yes) {
       this.vote = null;
       this.addLog(v.kind === 'settings' ? `${this.players[clientId].name} voted no. The settings stay the same.` : `${this.players[clientId].name} voted no. ${name} stays where they are.`);
@@ -678,6 +710,8 @@ export class Table {
 
   expireVote(voteId) {
     if (!this.vote || this.vote.id !== voteId) return;
+    const v = this.vote;
+    if (v.kind === 'settings' && v.voters.filter((id) => v.votes[id] === true).length >= (v.need ?? v.voters.length)) { this.vote = null; this.addLog('Enough players said yes to the new settings.'); this.applySettings(v.patch); return; }
     this.addLog(this.vote.kind === 'settings' ? 'The settings vote ran out, so the answer is no.' : `The vote for ${this.players[this.vote.candidate].name} ran out, so the answer is no.`);
     this.vote = null;
   }
@@ -1574,6 +1608,7 @@ export class Table {
         candidate: this.vote.candidate,
         name: this.players[this.vote.candidate].name,
         voters: this.vote.voters.length,
+        need: this.vote.need ?? this.vote.voters.length,
         yes: Object.values(this.vote.votes).filter(Boolean).length,
         canVote: this.vote.voters.includes(forClientId) && !(forClientId in this.vote.votes),
       } : null,

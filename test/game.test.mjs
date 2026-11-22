@@ -224,29 +224,28 @@ const da = t.players.a.chips, dd = t.players.d.chips;
   assert.equal(t.settings.seats, 10); assert.equal(t.seats.length, 10);
   assert.equal(t.seats[6].playerId, 'a'); assert.deepEqual(t.seats.slice(7), [null, null, null]);
   t.sit('b', 9);
-  // Shrinking over taken seats is refused and nothing changes.
-  assert.throws(() => t.updateSettings({ seats: 5 }), /Seats 7 and 10 are still taken/);
-  assert.throws(() => t.updateSettings({ seats: 8, decks: 1 }), /Seat 10 is still taken/);
-  assert.equal(t.settings.seats, 10); assert.equal(t.seats.length, 10); assert.equal(t.settings.decks, 8);
-  assert.throws(() => t.proposeSettings('h', { seats: 5 }, 'x'), /still taken/);
-  assert.equal(t.vote ?? null, null);
+  // Shrinking over taken seats moves the players down into free seats (enough room, so nobody loses a seat).
+  t.updateSettings({ seats: 5 });
+  assert.equal(t.seats.length, 5); assert.equal(t.seatsOf('a').length, 1); assert.equal(t.seatsOf('b').length, 1);
+  t.updateSettings({ seats: 10 });
   // Shrinking is fine once the seats being removed are empty.
   t.standUp('b'); t.standUp('a'); t.sit('b', 0); t.sit('a', 1);
   t.updateSettings({ seats: 2 });
   assert.equal(t.settings.seats, 2); assert.equal(t.seats.length, 2);
   assert.equal(t.players.a.seat, 1); assert.equal(t.players.b.seat, 0);
   // Goes through the vote like every other setting.
-  t.proposeSettings('h', { seats: 9 }, 'x'); t.castVote('a', true); assert.equal(t.seats.length, 2);
-  t.castVote('b', true); assert.equal(t.seats.length, 9);
-  // Someone sits in a seat that is going away while the vote runs: the change is dropped, not half applied.
-  t.proposeSettings('h', { seats: 4 }, 'x'); t.sit('a', 8); t.castVote('a', true); t.castVote('b', true);
-  assert.equal(t.seats.length, 9); assert.equal(t.settings.seats, 9); assert.equal(t.vote, null);
+  // A seat count change alone passes when all but one say yes.
+  t.proposeSettings('h', { seats: 9 }, 'x'); t.castVote('a', true); assert.equal(t.seats.length, 9);
+  // Someone sits in a seat that is going away while the vote runs: they move down when it passes.
+  t.proposeSettings('h', { seats: 4 }, 'x'); t.sit('a', 8); t.castVote('a', true);
+  assert.equal(t.seats.length, 4); assert.equal(t.seatsOf('a').length, 1); assert.equal(t.vote, null);
+  t.updateSettings({ seats: 9 });
   // Other settings leave the seats alone, and odd values fall back to what the table has.
   t.updateSettings({ decks: 2 }); assert.equal(t.seats.length, 9);
   t.updateSettings({ seats: 'lots' }); assert.equal(t.seats.length, 9);
   t.updateSettings({ seats: 0 }); assert.equal(t.seats.length, 9);
   // A seat count agreed mid round applies when the round ends.
-  t.sit('a', 1); t.setBet('a', { main: 10, sides: {} }); t.deal();
+  if (!t.seatsOf('a').length) t.sit('a', 1); t.setBet('a', { main: 10, sides: {} }); t.deal();
   if (t.inRound()) {
     t.applySettings({ seats: 6 }); assert.equal(t.seats.length, 9);
     let g = 0; while (t.phase !== 'settled' && g++ < 80) { if (t.phase === 'insurance') t.insurance('a', false); else if (t.phase === 'playing') t.action('a', 'stand'); else t.dealerStep(); }

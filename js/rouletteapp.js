@@ -1,12 +1,12 @@
 // The roulette page: a European roulette table for up to 9 in Nigel's room. The host's browser runs
 // the table (js/roulette.js); every other browser sends its bets there and is told only what it may see.
-import { RouTable, ROU_SEATS, WHEEL, colorOf, betNumbers, betName, betPays, verifySpin } from './roulette.js?v=20261122o';
-import { showSpin } from './wheel.js?v=20261122o';
-import { webglOK, initRoom } from './room3d.js?v=20261122o';
-import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122o';
-import { showDropped, params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML } from './common.js?v=20261122o';
+import { RouTable, ROU_SEATS, WHEEL, colorOf, betNumbers, betName, betPays, verifySpin } from './roulette.js?v=20261122p';
+import { showSpin } from './wheel.js?v=20261122p';
+import { webglOK, initRoom } from './room3d.js?v=20261122p';
+import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122p';
+import { showDropped, params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML } from './common.js?v=20261122p';
 
-import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261122o';
+import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261122p';
 const PREFIX = 'bjt-ro-';
 // A settings change by vote (js/vote.js): any player at the table may ask, every other player at the table who is online has to say yes.
 const VOTE = {
