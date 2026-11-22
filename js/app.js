@@ -1,16 +1,16 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261122p';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122p';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122p';
-import { tickSound, winSound } from './fx.js?v=20261122p';
-import * as HX from './history.js?v=20261122p';
-import { webglOK, initRoom } from './room3d.js?v=20261122p';
-import { showDropped, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261122p';
-import { makeVault, makeOpener, cleanBox, cleanPiece } from './vault.js?v=20261122p';
-import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122p';
-import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122p';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256 } from './game.js?v=20261122q';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122q';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122q';
+import { tickSound, winSound } from './fx.js?v=20261122q';
+import * as HX from './history.js?v=20261122q';
+import { webglOK, initRoom } from './room3d.js?v=20261122q';
+import { showDropped, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261122q';
+import { makeVault, makeOpener, cleanBox, cleanPiece } from './vault.js?v=20261122q';
+import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122q';
+import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122q';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -435,6 +435,55 @@ function maybeTakeOver() {
     toast(fresh ? 'Nobody was hosting, so the table opened in your browser. You are the host: keep this tab open.' : 'The host left. You are the host now: keep this tab open.');
   });
 }
+// ---------- "Become host": any player takes the table into their browser, no vote ----------
+// The host's browser sends the whole table (it is the same thing every host holds) to the asking player,
+// who opens the next host address with it. The old host's browser then joins as a player. A round in play
+// goes on with the same shoe and hands.
+function handHostTo(conn) {
+  const id = conn.clientId, p = S.table?.players[id];
+  if (!p || S.hold || S.handing) return;
+  S.handing = true;
+  const gen = (S.gen || 0) + 1;
+  S.table.addLog(`${p.name} took over as host. The table now runs in ${p.name}'s browser.`);
+  S.table.ev('host handoff: player asked to be host', id);
+  try { conn.send({ t: 'host-give', gen, table: JSON.stringify(S.table) }); } catch { S.handing = false; return; }
+  hostChanged();
+  setTimeout(() => {
+    S.handing = false;
+    for (const c of Object.values(S.conns || {})) { try { c.close(); } catch {} }
+    try { S.peer?.destroy(); } catch {}
+    demoteToPlayer(gen);
+    toast(`${p.name} is the host now. You are a player at the same table.`);
+  }, 2500);
+}
+function takeHost(msg) {
+  if (S.role !== 'player' || S.taking) return;
+  let table = null;
+  try { table = Table.fromJSON(JSON.parse(String(msg.table || ''))); } catch { table = null; }
+  const gen = Number(msg.gen);
+  if (!table || !Number.isInteger(gen) || gen < 1 || gen > 100000) { toast('The table could not be handed over. Try again.'); return; }
+  S.taking = true;
+  const peer = new Peer(hostAddr(gen), peerOptions());
+  const timer = setTimeout(() => { try { peer.destroy(); } catch {} S.taking = false; toast('The table could not be handed over. Try again.'); }, 12000);
+  peer.on('error', () => { clearTimeout(timer); try { peer.destroy(); } catch {} S.taking = false; });
+  peer.on('open', () => {
+    clearTimeout(timer);
+    peer.removeAllListeners('error');
+    for (const x of Object.values(table.players)) { x.connected = false; x.gone = false; }
+    table.join(S.myId, S.name, S.buyIn, S.look);
+    table.vote = null; table.hist = []; table.evts = []; table.created = null;
+    if (table.inRound()) for (const x of Object.values(table.players)) if (x.id !== S.myId && !x.kicked) awayClock(x.id);
+    try { S.conn?.close(); } catch {}
+    try { S.peer?.destroy(); } catch {}
+    clearInterval(S.watchdog);
+    S.conn = null; S.taking = false; S.noHostAt = null; S.why = ''; S.dead = {};
+    for (const c of S.probes || []) { try { c.close(); } catch {} } S.probes = [];
+    sessDel('bj-join-' + S.code);
+    S.vault = null; S.box = null;
+    startHost(true, { code: S.code, table, peer, gen });
+    toast('You are the host now: keep this tab open.');
+  });
+}
 // This browser was the host, came back, and found the table running in someone else's browser.
 function demoteToPlayer(gen) {
   const code = S.code;
@@ -496,6 +545,8 @@ function onHostMessage(conn, msg) {
   if (msg.t === 'chat') { relayChat(conn.clientId, msg); return; }
   if (msg.t === 'voice') { voiceSet(conn.clientId, conn.peer, !!msg.on, !!msg.mic); return; }
   if (msg.t === 'keys') { gotNonce(msg, conn.clientId); return; }
+  // Any player may take over as host, with no vote: this browser hands the whole table to theirs and joins as a player.
+  if (msg.t === 'host-ask') { handHostTo(conn); return; }
   // The player walks to another table of the office and takes their chips along (common.js walkTo).
   if (msg.t === 'cashout') {
     let amount = 0, err = null;
@@ -987,6 +1038,7 @@ function wireGuestConn(conn) {
     else if (msg.t === 'fx') showThrow(msg);
     else if (msg.t === 'peek') showPeek(msg.card, msg.by);
     else if (msg.t === 'cashed') gotCashed(msg);
+    else if (msg.t === 'host-give') takeHost(msg);
     else if (msg.t === 'key-req') conn.send({ t: 'keys', rid: msg.rid, keys: serveKeys(msg) });
     else if (msg.t === 'kicked') { S.kicked = true; sessDel('bj-join-' + S.code); S.peer.destroy(); app.innerHTML = '<div class="center-msg"><h2>You were removed from the table.</h2></div>'; }
   });
@@ -1216,7 +1268,7 @@ function buildLayout() {
           ${fold('m-settings', '⚙️ Game settings', '<div id="host-settings"></div>')}
           ${fold('m-log', '📝 Table log', `<div id="host-log" class="log"></div>
             ${fold('m-logs', 'Logs', `<button class="menu-item" data-act="hist-panel" title="A small list of the hands at the left of the screen.">🕘 Hand history: ${histOn() ? 'on' : 'off'}</button>`, true)}`)}` : `
-          ${fold('m-players', '👥 Players', '<div id="guest-players" class="player-list"></div>')}
+          ${fold('m-players', '👥 Players', '<button class="menu-item" data-act="become-host" title="The table moves to your browser. No vote: the host\'s browser hands it over.">👑 Become host</button><div id="guest-players" class="player-list"></div>')}
           ${fold('m-settings', '⚙️ Game settings', '<div class="hint" style="margin-bottom:8px">Any seated player can change the settings. Everyone else has to vote yes.</div><div id="host-settings"></div>')}
           ${fold('m-log', '📝 Table log', `<div id="host-log" class="log"></div>
             ${fold('m-logs', 'Logs', `<button class="menu-item" data-act="hist-panel" title="A small list of the hands at the left of the screen.">🕘 Hand history: ${histOn() ? 'on' : 'off'}</button>`, true)}`)}`}
@@ -3320,6 +3372,7 @@ function runAct(el) {
     case 'hints': safeSet('bj-hints2', hintsOn() ? '0' : '1'); el.textContent = hintsOn() ? '💡 Strategy hints: on' : '💡 Strategy hints: off'; render(); break;
     case 'buyin-open': openBuyIn(); break;
     case 'office': showOffice(S.code, S.myId); break;
+    case 'become-host': if (S.role === 'player' && S.online) { send({ t: 'host-ask' }); toast('Taking over as host…'); } break;
     case 'ledger-toggle': { const l = $('#ledger'); l.classList.toggle('closed'); safeSet('bj-ledger', l.classList.contains('closed') ? '0' : '1'); renderLedger(S.state); break; }
     case 'buyin-answer': hostDo((t) => t.answerBuyIn(Number(el.dataset.id), el.dataset.yes === '1')); break;
     case 'throw-open': openThrowPanel(el); break;
