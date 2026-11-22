@@ -361,7 +361,8 @@ function maybeTakeOver() {
   const at = snap ? snap.order.indexOf(S.myId) : -1;
   const rank = snap ? (at < 0 ? snap.order.length + 1 : at) : 2;
   // The host gets 30 seconds to come back (a reload, a short drop) before another browser takes the table.
-  if (now - S.noHostAt < (snap ? HOST_WAIT + rank * 4000 : 6000 + rank * 6000)) return;
+  // A player who pressed Become host does not wait the 30 seconds (the checks above still make sure nobody holds the table).
+  if (now - S.noHostAt < (now - (S.wantHostAt || 0) < 90000 ? 1500 : snap ? HOST_WAIT + rank * 4000 : 6000 + rank * 6000)) return;
   S.taking = true;
   const newGen = snap ? g + 1 : 0;
   const peer = new Peer(hostAddr(newGen), peerOptions());
@@ -443,7 +444,10 @@ function maybeTakeOver() {
 // goes on with the same shoe and hands.
 function handHostTo(conn) {
   const id = conn.clientId, p = S.table?.players[id];
-  if (!p || S.hold || S.handing) return;
+  const no = (why) => { try { conn.send({ t: 'host-no', why }); } catch {} };
+  if (!p) return no('Join the table first.');
+  if (S.hold) return no('The table is still moving to a new host. Try again in a few seconds.');
+  if (S.handing) return no('Someone else is taking over right now.');
   S.handing = true;
   const gen = (S.gen || 0) + 1;
   S.table.addLog(`${p.name} took over as host. The table now runs in ${p.name}'s browser.`);
@@ -459,6 +463,7 @@ function handHostTo(conn) {
   }, 2500);
 }
 function takeHost(msg) {
+  clearTimeout(S.askHostT); S.askHostT = null;
   if (S.role !== 'player' || S.taking) return;
   let table = null;
   try { table = Table.fromJSON(JSON.parse(String(msg.table || ''))); } catch { table = null; }
@@ -1041,6 +1046,7 @@ function wireGuestConn(conn) {
     else if (msg.t === 'peek') showPeek(msg.card, msg.by);
     else if (msg.t === 'cashed') gotCashed(msg);
     else if (msg.t === 'host-give') takeHost(msg);
+    else if (msg.t === 'host-no') { clearTimeout(S.askHostT); S.askHostT = null; toast(String(msg.why || 'The host could not hand over the table.').slice(0, 120)); }
     else if (msg.t === 'key-req') conn.send({ t: 'keys', rid: msg.rid, keys: serveKeys(msg) });
     else if (msg.t === 'kicked') { S.kicked = true; sessDel('bj-join-' + S.code); S.peer.destroy(); app.innerHTML = '<div class="center-msg"><h2>You were removed from the table.</h2></div>'; }
   });
@@ -3374,7 +3380,23 @@ function runAct(el) {
     case 'hints': safeSet('bj-hints2', hintsOn() ? '0' : '1'); el.textContent = hintsOn() ? '💡 Strategy hints: on' : '💡 Strategy hints: off'; render(); break;
     case 'buyin-open': openBuyIn(); break;
     case 'office': showOffice(S.code, S.myId); break;
-    case 'become-host': if (S.role === 'player' && S.online) { send({ t: 'host-ask' }); toast('Taking over as host…'); } break;
+    case 'become-host': {
+      if (S.role !== 'player') break;
+      if (S.taking) { toast('Taking over as host…'); break; }
+      // Good for 90 seconds: if the host turns out to be gone, this browser takes the table without the 30 second wait.
+      S.wantHostAt = Date.now();
+      if (!S.online) {
+        // The host's browser is gone: take the table now instead of waiting the 30 seconds.
+        toast('The host is offline. Taking over the table…'); maybeTakeOver();
+        clearTimeout(S.askHostT);
+        S.askHostT = setTimeout(() => { S.askHostT = null; if (S.role === 'player' && !S.online) toast('The old host\'s browser still holds the table address. It frees up within a minute, then you take over.'); }, 15000);
+        break;
+      }
+      send({ t: 'host-ask' }); toast('Asking the host\'s browser for the table…');
+      clearTimeout(S.askHostT);
+      S.askHostT = setTimeout(() => { S.askHostT = null; if (S.role === 'player' && !S.taking && S.online) toast('The host\'s browser did not answer. Its tab may be asleep. If it drops, you take over at once.'); }, 8000);
+      break;
+    }
     case 'ledger-toggle': { const l = $('#ledger'); l.classList.toggle('closed'); safeSet('bj-ledger', l.classList.contains('closed') ? '0' : '1'); renderLedger(S.state); break; }
     case 'buyin-answer': hostDo((t) => t.answerBuyIn(Number(el.dataset.id), el.dataset.yes === '1')); break;
     case 'throw-open': openThrowPanel(el); break;
