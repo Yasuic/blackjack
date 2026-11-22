@@ -218,7 +218,7 @@ function buildOffice(signText, midShift = 0, midScale = 1, skipRoom = null, live
     chrome: mk({ color: '#b9bec4', roughness: 0.25, metalness: 0.9 }),
     screen: mk({ color: '#0d0f12', roughness: 0.25, metalness: 0.2 }),
     // What the office screens show: the ARC Group logo, from the photo of it, lit like a screen that is on.
-    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261122zf'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
+    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261122zg'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
     dark: mk({ color: '#30353c', roughness: 0.6 }),
   };
   const group = new THREE.Group();
@@ -996,7 +996,7 @@ function buildStorefront() {
     lamp: lam('#c8161d', 0.6), bulb: lit('#ffe9a8'), red: lit('#c8161d'), gold: lit('#f4c542'), wood: lam('#7a5234', 0.35),
     glass: new THREE.MeshBasicMaterial({ color: '#dff3f7', transparent: true, opacity: 0.13, depthWrite: false }),
     awning: new THREE.MeshBasicMaterial({ map: canvasTexture(512, 64, (g, w, h) => { for (let i = 0; i < 16; i++) { g.fillStyle = i % 2 ? '#fff6e6' : '#f08a1c'; g.fillRect((i * w) / 16, 0, w / 16 + 1, h); } }), side: THREE.DoubleSide }),
-    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261122zf') }),
+    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261122zg') }),
     menu: new THREE.MeshBasicMaterial({ map: canvasTexture(256, 384, (g, w, h) => {
       g.fillStyle = '#c8161d'; g.fillRect(0, 0, w, h); g.fillStyle = '#f4c542'; g.fillRect(14, 14, w - 28, 44);
       const r = rng(11); g.fillStyle = '#fff3d6';
@@ -1262,18 +1262,22 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
   // A straight limb from a to b.
   const limb = (a, b, rt, rb, mat) => {
     const va = new THREE.Vector3(...a), vb = new THREE.Vector3(...b);
-    const m = new THREE.Mesh(cyl(rt, rb, 6), mat);
-    m.scale.y = va.distanceTo(vb);
+    const m = new THREE.Mesh(limbBox, mat), w = rt + rb;
+    m.scale.set(w, va.distanceTo(vb), w);
     m.position.copy(va).add(vb).multiplyScalar(0.5);
     m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), vb.clone().sub(va).normalize());
     m.castShadow = true;
     return m;
   };
-  const headGeo = new THREE.IcosahedronGeometry(56, 1);
-  const hairGeo = new THREE.SphereGeometry(61, 8, 5, 0, Math.PI * 2, 0, Math.PI * 0.56);
-  const handGeo = new THREE.IcosahedronGeometry(21, 0);
-  const torsoGeo = new THREE.CylinderGeometry(84, 66, 230, 8);
-  const shoulderGeo = new THREE.IcosahedronGeometry(30, 0);
+  // Players are drawn blocky, like the people at the office desks: boxes for the head, hair, body and limbs.
+  const headGeo = new THREE.BoxGeometry(100, 108, 100);
+  const hairGeo = new THREE.BoxGeometry(108, 30, 108);
+  const hairBackGeo = new THREE.BoxGeometry(108, 70, 24);
+  const handGeo = new THREE.BoxGeometry(38, 30, 46);
+  const torsoGeo = new THREE.BoxGeometry(168, 230, 168);
+  const shoulderGeo = new THREE.BoxGeometry(56, 56, 56);
+  const limbBox = new THREE.BoxGeometry(1, 1, 1), eyeBox = new THREE.BoxGeometry(14, 14, 4);
+  let M_EYE = null;
 
   // Where a seat is, from its place on the felt (percent from the left and from the dealer's end):
   // the nearest point on the table edge and the direction pointing away from the table there.
@@ -1335,9 +1339,15 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     const up = standing ? 34 : 0; // a standing person is a little taller than a seated one
     const torso = new THREE.Mesh(torsoGeo, shirt); torso.scale.z = 0.58; torso.position.y = -22 + up; torso.castShadow = true;
     const neck = limb([0, 88 + up, 0], [0, 124 + up, 0], 24, 26, skin);
-    const head = new THREE.Mesh(headGeo, skin); head.position.set(0, 168 + up, 4); head.scale.set(0.95, 1.06, 1); head.castShadow = true;
-    const cap = new THREE.Mesh(hairGeo, hair); cap.position.set(0, 174 + up, -4); cap.rotation.x = -0.42; cap.scale.set(0.97, 1.02, 1.04);
-    g.add(torso, neck, head, cap);
+    // The head turns on the neck (see idleFigs: players look round at each other now and then).
+    const headG = new THREE.Group(); headG.position.set(0, 124 + up, 0);
+    const head = new THREE.Mesh(headGeo, skin); head.position.set(0, 46, 4); head.castShadow = true;
+    const cap = new THREE.Mesh(hairGeo, hair); cap.position.set(0, 112, 4);
+    const back = new THREE.Mesh(hairBackGeo, hair); back.position.set(0, 76, -48);
+    const eyeMat = (M_EYE ||= lam({ color: '#15171c' }));
+    for (const ex of [-22, 22]) { const e = new THREE.Mesh(eyeBox, eyeMat); e.position.set(ex, 54, 55); headG.add(e); }
+    headG.add(head, cap, back);
+    g.add(torso, neck, headG);
     const arms = [];
     // Poker: a player in the hand holds two big cards up in front of the chest, backs out, so everyone sees who is
     // still in. A player who folded has put them down flat on the felt.
@@ -1382,7 +1392,7 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     const label = makeLabel(((look.flag ? look.flag + ' ' : '') + (p.name || 'Player')).slice(0, 22));
     label.position.y = 290 + up;
     g.add(label);
-    g.userData = { arms, label, reach: 0, headParts: [head, cap, label] };
+    g.userData = { arms, label, reach: 0, headParts: [headG, label], headG };
     return g;
   }
   function disposeTree(o) {
@@ -1460,14 +1470,18 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     if (liveT[g]) return liveT[g];
     const T = OTHER_TABLES[g], bj = g === 'blackjack';
     const W = bj ? 2 * T.r : T.w, D = bj ? 2 * T.r : T.d;
-    const cv = document.createElement('canvas'); cv.width = Math.round(W * PPM); cv.height = Math.round(D * PPM);
-    const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
+    // Drawn at 2.5 times the size it is laid out in (cv holds the layout size), so cards and numbers stay sharp up close.
+    const cv = { width: Math.round(W * PPM), height: Math.round(D * PPM) }, real = document.createElement('canvas'), HD = 2.5;
+    real.width = Math.round(cv.width * HD); real.height = Math.round(cv.height * HD);
+    const ctx = real.getContext('2d'); ctx.setTransform(HD, 0, 0, HD, 0, 0);
+    const tex = new THREE.CanvasTexture(real); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 16; tex.generateMipmaps = true;
     const geo = new THREE.PlaneGeometry(W, D); geo.rotateX(-Math.PI / 2);
     const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: tex, transparent: true, roughness: 0.92, metalness: 0 }));
     mesh.position.set(-T.x, (bj ? 0.774 : 0.749) + 0.0025, -T.y);
     mesh.renderOrder = 1;
     office.add(mesh);
-    return (liveT[g] = { g, T, W, D, cv, x: cv.getContext('2d'), tex, view: null, n: 9, piles: new Map(), anim: 0, reveal: null, key: '' });
+    const chipG = new THREE.Group(); mesh.add(chipG);
+    return (liveT[g] = { g, T, W, D, cv, x: ctx, tex, mesh, chipG, stacks: new Map(), view: null, n: 9, piles: new Map(), anim: 0, reveal: null, key: '' });
   }
   // Where seat i sits, in canvas pixels; in: how far in from the edge of the cloth (metres).
   function seatPx(L, i, n, inn) {
@@ -1508,6 +1522,24 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
       x.setLineDash([3, 3]); x.strokeStyle = 'rgba(255,255,255,0.85)'; x.lineWidth = 2; x.beginPath(); x.arc(p.x, y, r - 2, 0, Math.PI * 2); x.stroke(); x.setLineDash([]);
     }
     x.restore();
+  }
+  // A stack of chips on another table: one chip per step of the amount, with a white edge stripe like the real ones.
+  const liveChipGeo = new THREE.CylinderGeometry(0.019, 0.019, 0.0034, 20), stripeGeo = new THREE.CylinderGeometry(0.0192, 0.0192, 0.0012, 20);
+  const liveChipMats = {}, chipMatOf = (c) => (liveChipMats[c] ||= new THREE.MeshStandardMaterial({ color: c, roughness: 0.45 }));
+  function chipStack(L, key, at, a, scale) {
+    const n = Math.max(1, Math.min(10, Math.ceil(Math.log2(1 + a / 4)))), col = CHIP_COL(a), sig = n + col;
+    let st = L.stacks.get(key);
+    if (!st || st.userData.sig !== sig) {
+      if (st) L.chipG.remove(st);
+      st = new THREE.Group(); st.userData.sig = sig;
+      for (let i = 0; i < n; i++) {
+        const c = new THREE.Mesh(liveChipGeo, chipMatOf(col)); c.position.y = 0.0017 + i * 0.0035; c.rotation.y = i * 0.7; c.castShadow = true; st.add(c);
+        const r = new THREE.Mesh(stripeGeo, chipMatOf('#f4f2ec')); r.position.y = c.position.y; st.add(r);
+      }
+      L.chipG.add(st); L.stacks.set(key, st);
+    }
+    st.position.set((at.x / L.cv.width - 0.5) * L.W, 0.0005, (at.y / L.cv.height - 0.5) * L.D);
+    st.scale.setScalar(Math.max(0.01, scale));
   }
   // The cloth of each game, as on the real tables.
   function drawCloth(L) {
@@ -1606,13 +1638,15 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
         if (shown && L.cell?.[v.n]) { const c = L.cell[v.n]; x.beginPath(); x.arc(c.x, c.y, 0.017 * PPM, 0, Math.PI * 2); x.fillStyle = '#f4f2ec'; x.fill(); x.strokeStyle = '#c9a227'; x.lineWidth = 3; x.stroke(); }
       }
     }
-    // Chips, where they are on their way.
+    // Chips, as real stacks standing on the cloth, where they are on their way.
     const k = L.anim ? Math.min(1, (now - L.anim) / 650) : 1, e = easeOut(k);
-    for (const p of L.piles.values()) {
-      if (p.gone) { drawPile(x, { x: p.sx + (p.to.x - p.sx) * e, y: p.sy + (p.to.y - p.sy) * e, a: p.a }, 1 - e * 0.6); continue; }
-      drawPile(x, { x: p.sx + (p.x - p.sx) * e, y: p.sy + (p.y - p.sy) * e, a: p.a });
+    const seen = new Set();
+    for (const [key, p] of L.piles) {
+      const at = p.gone ? { x: p.sx + (p.to.x - p.sx) * e, y: p.sy + (p.to.y - p.sy) * e } : { x: p.sx + (p.x - p.sx) * e, y: p.sy + (p.y - p.sy) * e };
+      chipStack(L, key, at, p.a, p.gone ? 1 - e : 1); seen.add(key);
     }
-    if (k >= 1) { for (const [key, p] of L.piles) { if (p.gone) L.piles.delete(key); else { p.sx = p.x; p.sy = p.y; } } L.anim = 0; }
+    for (const [key, st] of L.stacks) if (!seen.has(key)) { L.chipG.remove(st); L.stacks.delete(key); }
+    if (k >= 1) { for (const [key, p] of L.piles) { if (p.gone) { L.piles.delete(key); const st = L.stacks.get(key); if (st) { L.chipG.remove(st); L.stacks.delete(key); } } else { p.sx = p.x; p.sy = p.y; } } L.anim = 0; }
     L.tex.needsUpdate = true;
   }
   function setLive(views = {}, map = {}) {
@@ -2231,6 +2265,35 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
   let running = true, last = performance.now(), frames = 0, fpsAt = last, fps = 0;
   const near = (a, b, eps) => Math.abs(a - b) < eps;
   let dbgCam = null, ambAt = 0;
+  // Life at the tables: now and then a player looks round at someone else at the table, or shifts in the chair.
+  let idleAt = 0;
+  const idleV = new THREE.Vector3(), idleW = new THREE.Vector3();
+  function idleFigs(now) {
+    const all = [...figs.values(), ...otherGroup.children.filter((c) => c.userData?.headG)].filter((f) => f !== myFig && f.userData?.headG && f.parent);
+    if (!all.length) return false;
+    if (now - idleAt > 1400) {
+      idleAt = now;
+      const f = all[Math.floor(Math.random() * all.length)], u = f.userData;
+      if (u.baseRy === undefined) u.baseRy = f.rotation.y;
+      const r = Math.random();
+      if (r < 0.55 && all.length > 1) { // look at somebody else
+        let o = all[Math.floor(Math.random() * all.length)]; if (o === f) o = all[(all.indexOf(f) + 1) % all.length];
+        f.getWorldPosition(idleV); o.getWorldPosition(idleW);
+        const a = Math.atan2(idleW.x - idleV.x, idleW.z - idleV.z) - u.baseRy;
+        u.lookTo = Math.max(-1.1, Math.min(1.1, Math.atan2(Math.sin(a), Math.cos(a)))); u.lookUntil = now + 1800 + Math.random() * 2200;
+      } else if (r < 0.85) { u.shiftTo = (Math.random() - 0.5) * 0.28; u.shiftUntil = now + 2500 + Math.random() * 3000; } // turn a little in the chair
+      else { u.lookTo = (Math.random() - 0.5) * 0.9; u.lookUntil = now + 1200; } // a glance round the room
+    }
+    let moving = false;
+    for (const f of all) {
+      const u = f.userData;
+      const look = u.lookUntil > now ? u.lookTo : 0, shift = u.shiftUntil > now ? u.shiftTo : 0;
+      const h = u.headG, dh = look - h.rotation.y;
+      if (Math.abs(dh) > 0.002) { h.rotation.y += dh * 0.12; moving = true; }
+      if (u.baseRy !== undefined) { const cur0 = u.shiftNow || 0, ds = shift - cur0; if (Math.abs(ds) > 0.002) { u.shiftNow = cur0 + ds * 0.06; f.rotation.y = u.baseRy + u.shiftNow; moving = true; } }
+    }
+    return moving;
+  }
   // Walking with the keys up to another table of the office takes you into it: that table's page is already open
   // in the office frame (or opens now), and you carry on from where you stand. Your seat here stays yours.
   let nearAt = 0;
@@ -2258,6 +2321,7 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     frames++;
     // The office is alive: redraw every frame while somebody walks, and about 12 times a second otherwise.
     if (liveTick(now)) dirty = Math.max(dirty, 1);
+    if (!window.__officeAway && idleFigs(now)) dirty = Math.max(dirty, 1);
     if (office.userData.tick?.(now) || now - ambAt > 80) { ambAt = now; dirty = Math.max(dirty, 1); }
     if (now - fpsAt >= 1000) { fps = Math.round((frames * 1000) / (now - fpsAt)); frames = 0; fpsAt = now; }
     if (moveKeys.size) {
