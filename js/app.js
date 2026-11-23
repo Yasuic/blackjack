@@ -1,17 +1,17 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { startPresence } from './presence.js?v=20261122zy';
-import { outerLink } from './shell.js?v=20261122zy';
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe } from './game.js?v=20261122zy';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122zy';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122zy';
-import { tickSound, winSound } from './fx.js?v=20261122zy';
-import * as HX from './history.js?v=20261122zy';
-import { webglOK, initRoom } from './room3d.js?v=20261122zy';
-import { COPY_BTN, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261122zy';
-import { topToolsHTML, initTopTools, setProfit, setRisk, cardScale } from './toptools.js?v=20261122zy';
-import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122zy';
+import { startPresence } from './presence.js?v=20261122zz';
+import { outerLink } from './shell.js?v=20261122zz';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe } from './game.js?v=20261122zz';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122zz';
+import { bestMove, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122zz';
+import { tickSound, winSound } from './fx.js?v=20261122zz';
+import * as HX from './history.js?v=20261122zz';
+import { webglOK, initRoom } from './room3d.js?v=20261122zz';
+import { COPY_BTN, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261122zz';
+import { topToolsHTML, initTopTools, setProfit, setRisk, cardScale } from './toptools.js?v=20261122zz';
+import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122zz';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -2620,25 +2620,6 @@ function fitBet(v, where) {
 // Off unless the player turns it on. The key is new (it was 'bj-hints'), so an older saved 'on' starts off once too.
 function hintsOn() { return safeGet('bj-hints2') === '1'; }
 
-// The basic strategy chart, drawn from the same rules the hints use.
-function openChart() {
-  const st = S.state;
-  const c = strategyChart(st?.settings || {});
-  const cls = { H: 'h', S: 's', D: 'd', Ds: 'd', P: 'p', R: 'r', Rs: 'r', Rp: 'r' };
-  const table = (title, rows) => `<div class="chart-block"><div class="chart-title">${title}</div><table class="chart">
-    <tr><th></th>${c.up.map((u) => `<th>${u}</th>`).join('')}</tr>
-    ${rows.map((r) => `<tr><th>${r.label}</th>${r.cells.map((x) => `<td class="${cls[x.code]}">${x.code}</td>`).join('')}</tr>`).join('')}
-  </table></div>`;
-  let pop = $('#chart-pop');
-  if (!pop) { pop = document.createElement('div'); pop.id = 'chart-pop'; pop.className = 'chart-pop'; document.body.appendChild(pop); }
-  pop.innerHTML = `<div class="chart-card">
-    <div class="chart-head"><b>Basic strategy</b><span class="hint">${st?.settings?.dealerHitsSoft17 ? 'Dealer hits soft 17' : 'Dealer stands on all 17s'}, double after split, late surrender, 4 to 8 decks. Top row is the dealer's up card.</span><button class="btn small" data-chart="close">Close</button></div>
-    <div class="chart-grid">${table('Hard totals', c.hard)}${table('Soft totals', c.soft)}${table('Pairs', c.pairs)}</div>
-    <div class="chart-key"><span class="h">H</span> Hit <span class="s">S</span> Stand <span class="d">D</span> Double, or hit if you can't <span class="d">Ds</span> Double, or stand if you can't <span class="p">P</span> Split <span class="r">R</span> Surrender, or hit if you can't</div>
-  </div>`;
-  pop.hidden = false;
-  pop.onclick = (e) => { if (e.target === pop || e.target.closest('[data-chart=close]')) pop.hidden = true; };
-}
 
 // For someone who is watching: ask a seated player for their seat.
 function askOutHTML(st) {
