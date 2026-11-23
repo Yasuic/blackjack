@@ -1,17 +1,17 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { startPresence } from './presence.js?v=20261122zz';
-import { outerLink } from './shell.js?v=20261122zz';
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe } from './game.js?v=20261122zz';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122zz';
-import { bestMove, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122zz';
-import { tickSound, winSound } from './fx.js?v=20261122zz';
-import * as HX from './history.js?v=20261122zz';
-import { webglOK, initRoom } from './room3d.js?v=20261122zz';
-import { COPY_BTN, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261122zz';
-import { topToolsHTML, initTopTools, setProfit, setRisk, cardScale } from './toptools.js?v=20261122zz';
-import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122zz';
+import { startPresence } from './presence.js?v=20261123a';
+import { outerLink } from './shell.js?v=20261123a';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe } from './game.js?v=20261123a';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261123a';
+import { bestMove, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261123a';
+import { tickSound, winSound } from './fx.js?v=20261123a';
+import * as HX from './history.js?v=20261123a';
+import { webglOK, initRoom } from './room3d.js?v=20261123a';
+import { COPY_BTN, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261123a';
+import { topToolsHTML, initTopTools, setProfit, setRisk, cardScale } from './toptools.js?v=20261123a';
+import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261123a';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -2569,7 +2569,7 @@ function spotAreaHTML(st, s, i, isMe, mainAmt) {
     if (res?.win) floats.push(`<span class="side-float" style="left:${(((Number(lx) + 82) / 164) * 100).toFixed(1)}%;top:${(((Number(ly) + 82) / 164) * 100).toFixed(1)}%">${sb.icon || ''} +${money(res.pay - res.stake)}</span>`);
     const big = n <= 5;
     const label = amt || res
-      ? `<text x="${lx}" y="${Number(ly) - 4}" class="ring-amt ${res ? (res.win ? 'up' : 'down') : ''}">${res ? (res.win ? '+' + money(res.pay - res.stake) : '-' + money(res.stake)) : money(amt)}</text><text x="${lx}" y="${Number(ly) + 8}" class="ring-name small">${sb.icon || ''} ${esc(friend ? '→ ' + friend.slice(0, 7) : sb.short)}</text>`
+      ? `<text x="${lx}" y="${Number(ly) - 4}" class="ring-amt ${res ? (res.win ? 'up' : 'down') : ''}">${res ? (res.win ? '+' + money(res.pay - res.stake) : '-' + money(res.stake)) : money(amt)}</text><text x="${lx}" y="${Number(ly) + 8}" class="ring-name small">${sb.icon || ''} ${esc(sb.short)}</text>`
       : `<text x="${lx}" y="${Number(ly) - (big ? 3 : 0)}" class="ring-icon ${big ? '' : 'sm'}">${sb.icon || ''}</text><text x="${lx}" y="${Number(ly) + (big ? 10 : 9)}" class="ring-name ${big ? '' : 'small'}">${sb.short}</text>`;
     return `<g class="ring-slice ${canBet ? 'live' : ''} ${amt ? 'on' : ''} ${res ? (res.win ? 'won' : 'lost') : ''}" ${canBet ? `data-act="side-spot" data-k="${k}"` : ''} id="sb-${i}-${k}"><title>${esc(SIDE_BETS[k].name)}: ${esc(SIDE_BETS[k].about)}</title><path d="${d}" />${label}</g>`;
   }).join('');
