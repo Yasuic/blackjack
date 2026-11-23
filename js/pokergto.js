@@ -81,7 +81,6 @@ function classIndex(nm) {
   if (h < 0 || l < 0) return -1;
   return h === l ? cls(h, h) : cls(Math.max(h, l), Math.min(h, l), nm[2] === 's');
 }
-export const handPct = (a, b) => PCT[classOf(a, b)];
 
 // A range in the usual notation: "77+, A2s+, KTs+, 99-66, A5s-A2s, AJo+, KQ". "A5s:0.5" plays the hand half the time.
 export function parseRange(str) {

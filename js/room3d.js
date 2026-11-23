@@ -5,7 +5,7 @@
 // The camera has two ways of moving. Seated: you are in your own chair, dragging turns your head and the
 // wheel leans you in. Scroll back past your chair and you stand up: now dragging walks you around the table.
 // The camera can never go below the table top, so the underside of a card can never be seen.
-import * as THREE from '../lib/three.module.js';
+import * as THREE from '../lib/three.module.min.js';
 import { CSS3DRenderer, CSS3DObject } from '../lib/CSS3DRenderer.js';
 
 // Asked once per page and remembered. Each test made a new WebGL context, and the page asks often (every menu
@@ -218,7 +218,7 @@ function buildOffice(signText, midShift = 0, midScale = 1, skipRoom = null, live
     chrome: mk({ color: '#b9bec4', roughness: 0.25, metalness: 0.9 }),
     screen: mk({ color: '#0d0f12', roughness: 0.25, metalness: 0.2 }),
     // What the office screens show: the ARC Group logo, from the photo of it, lit like a screen that is on.
-    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261122zl'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
+    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261122zm'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
     dark: mk({ color: '#30353c', roughness: 0.6 }),
   };
   const group = new THREE.Group();
@@ -996,7 +996,7 @@ function buildStorefront() {
     lamp: lam('#c8161d', 0.6), bulb: lit('#ffe9a8'), red: lit('#c8161d'), gold: lit('#f4c542'), wood: lam('#7a5234', 0.35),
     glass: new THREE.MeshBasicMaterial({ color: '#dff3f7', transparent: true, opacity: 0.13, depthWrite: false }),
     awning: new THREE.MeshBasicMaterial({ map: canvasTexture(512, 64, (g, w, h) => { for (let i = 0; i < 16; i++) { g.fillStyle = i % 2 ? '#fff6e6' : '#f08a1c'; g.fillRect((i * w) / 16, 0, w / 16 + 1, h); } }), side: THREE.DoubleSide }),
-    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261122zl') }),
+    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261122zm') }),
     menu: new THREE.MeshBasicMaterial({ map: canvasTexture(256, 384, (g, w, h) => {
       g.fillStyle = '#c8161d'; g.fillRect(0, 0, w, h); g.fillStyle = '#f4c542'; g.fillRect(14, 14, w - 28, 44);
       const r = rng(11); g.fillStyle = '#fff3d6';
@@ -1510,16 +1510,6 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
       x.fillStyle = red ? '#c8202d' : '#16181c'; x.textAlign = 'center'; x.textBaseline = 'middle';
       x.font = `700 ${Math.round(h * 0.36)}px ${FONT}`; x.fillText(rank === 'T' ? '10' : rank, 0, -h * 0.17);
       x.font = `${Math.round(h * 0.36)}px ${FONT}`; x.fillText(suit, 0, h * 0.2);
-    }
-    x.restore();
-  }
-  function drawPile(x, p, alpha = 1) {
-    const n = Math.max(1, Math.min(6, Math.ceil(Math.log2(1 + p.a / 4)))), r = 0.016 * PPM;
-    x.save(); x.globalAlpha = alpha;
-    for (let k = 0; k < n; k++) {
-      const y = p.y - k * 2.2;
-      x.beginPath(); x.arc(p.x, y, r, 0, Math.PI * 2); x.fillStyle = CHIP_COL(p.a); x.shadowColor = 'rgba(0,0,0,0.35)'; x.shadowBlur = 3; x.fill(); x.shadowColor = 'transparent';
-      x.setLineDash([3, 3]); x.strokeStyle = 'rgba(255,255,255,0.85)'; x.lineWidth = 2; x.beginPath(); x.arc(p.x, y, r - 2, 0, Math.PI * 2); x.stroke(); x.setLineDash([]);
     }
     x.restore();
   }

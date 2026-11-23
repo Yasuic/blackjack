@@ -1,17 +1,17 @@
 // The poker page: a Texas Hold'em table for up to 9 in the big meeting room. The host's browser runs
 // the table (js/poker.js); every other browser sends its moves there and is told only what it may see.
-import { outerLink } from './shell.js?v=20261122zl';
-import { PokerTable, POKER_SEATS, pokerDeck, cardText, mpClientMoves, mpMine, mpCheck, bestHand, bestOmaha } from './poker.js?v=20261122zl';
-import { plainDeck, shufflePass, lockPass, checkDeck, keyFor } from './mental.js?v=20261122zl';
-import { sha256 } from './game.js?v=20261122zl';
-import { botMove, isBot, BOT_NAMES } from './pokerbot.js?v=20261122zl';
-import { chipSound, cardSound, hitSound, standSound, potSound, tickSound, turnSound, punchSound } from './fx.js?v=20261122zl';
-import { webglOK, initRoom } from './room3d.js?v=20261122zl';
-import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122zl';
-import { showDropped, markMyTurn, onOfficeBack, setSeated, officeView, params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML } from './common.js?v=20261122zl';
+import { outerLink } from './shell.js?v=20261122zm';
+import { PokerTable, POKER_SEATS, pokerDeck, cardText, mpClientMoves, mpMine, mpCheck, bestHand, bestOmaha } from './poker.js?v=20261122zm';
+import { plainDeck, shufflePass, lockPass, checkDeck, keyFor } from './mental.js?v=20261122zm';
+import { sha256 } from './game.js?v=20261122zm';
+import { botMove, isBot, BOT_NAMES } from './pokerbot.js?v=20261122zm';
+import { chipSound, cardSound, hitSound, standSound, potSound, tickSound, turnSound, punchSound } from './fx.js?v=20261122zm';
+import { webglOK, initRoom } from './room3d.js?v=20261122zm';
+import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122zm';
+import { showDropped, markMyTurn, onOfficeBack, setSeated, officeView, params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML } from './common.js?v=20261122zm';
 
-import { shareHidden, startHold } from './vault.js?v=20261122zl';
-import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261122zl';
+import { shareHidden, startHold } from './vault.js?v=20261122zm';
+import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261122zm';
 const PREFIX = 'bjt-pk-';
 // A settings change by vote (js/vote.js): any player at the table may ask, every other player at the table who is online has to say yes.
 const VOTE = {
@@ -707,10 +707,6 @@ function runStage(st) {
 // The usual numbers under a name. VPIP: share of hands where the player put chips in by choice before the flop.
 // PFR: share of hands the player raised before the flop.
 const pc = (a, b) => (b ? Math.round((a / b) * 100) : 0);
-function statLine(t) {
-  if (!t || !t.hands) return '';
-  return `<small class="pk-stats" title="VPIP: hands with chips put in by choice before the flop. PFR: hands raised before the flop."><i>VPIP ${pc(t.vpip, t.pre)}</i><i>PFR ${pc(t.pfr, t.pre)}</i><i>${t.hands} hand${t.hands === 1 ? '' : 's'}</i></small>`;
-}
 function statsHTML(t) {
   if (!t || !t.hands) return '<p class="hint">No hands played yet.</p>';
   return `<table class="pk-table"><tr><td>Hands dealt</td><td>${t.hands}</td></tr><tr><td>VPIP (put chips in by choice before the flop)</td><td>${pc(t.vpip, t.pre)}%</td></tr><tr><td>PFR (raised before the flop)</td><td>${pc(t.pfr, t.pre)}%</td></tr><tr><td>Went to showdown</td><td>${pc(t.sd, t.hands)}%</td></tr><tr><td>Won at showdown</td><td>${pc(t.wsd, t.sd)}%</td></tr><tr><td>Hands won</td><td>${pc(t.won, t.hands)}%</td></tr></table>`;

@@ -4,7 +4,7 @@
 // needed to put the key together again. One piece, or any group of half the players or fewer, learns nothing.
 // When the host's browser goes away, the next host collects the pieces from the players who come back and opens
 // the locked copy, so the game goes on with the same cards in the same order.
-import { sha256 } from './game.js?v=20261122zl';
+import { sha256 } from './game.js?v=20261122zm';
 
 const hex = (bytes) => Array.from(bytes, (x) => x.toString(16).padStart(2, '0')).join('');
 const unhex = (s) => { const out = new Uint8Array(s.length >> 1); for (let i = 0; i < out.length; i++) out[i] = parseInt(s.substr(i * 2, 2), 16); return out; };

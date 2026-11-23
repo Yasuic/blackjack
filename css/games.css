@@ -32,7 +32,6 @@
 .pk-board .card.deal { animation: pk-deal .45s ease-out both; }
 @keyframes pk-deal { from { opacity: 0; transform: translateY(-40px) scale(.7); } to { opacity: 1; transform: none; } }
 .pk-board .card.hi, .pk-cards .card.hi { box-shadow: 0 0 0 3px var(--gold), 0 0 16px rgba(232,196,106,.9); }
-.pk-rabbit { display: flex; gap: 4px; align-items: center; margin-left: 10px; font-size: calc(18px * var(--k)); }
 .card.ghost { opacity: .55; filter: grayscale(.4); }
 .pk-pot { left: 50%; top: calc(50% + 34px * var(--k)); display: flex; flex-direction: column; align-items: center; gap: 2px; color: #fff6dc; font: 700 calc(15px * var(--k)) Inter, system-ui, sans-serif; background: rgba(8,10,14,.78); border: 1px solid rgba(232,196,106,.55); border-radius: 999px; padding: calc(3px * var(--k)) calc(12px * var(--k)); white-space: nowrap; }
 .pfelt.tall .pk-pot { top: calc(47% + 30px); }
@@ -75,7 +74,6 @@ body:not(.room3d) .pk-spot.has { background: radial-gradient(circle, #c62828 0 4
 .pk-sit:hover { background: rgba(232,196,106,.25); }
 .pk-sit .sit-arrow { color: var(--gold); animation: pk-bob 1s ease-in-out infinite; }
 @keyframes pk-bob { 50% { transform: translateY(-6px); } }
-.pk-empty { transform: translate(-50%, -50%); color: rgba(255,255,255,.28); font: 600 calc(11px * var(--k)) Inter, sans-serif; letter-spacing: 1px; text-transform: uppercase; }
 
 /* ---------- Buttons under the table ---------- */
 .tray.pk-tray { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 100%; background: none !important; border: 0 !important; box-shadow: none !important; padding: 0 !important; height: auto; min-height: 0; }
@@ -228,8 +226,6 @@ body:not(.room3d) .pk-rank { top: calc(50% + 64px * var(--k)); }
 .pk-board .pk-pot { border: calc(2px * var(--k)) solid var(--gold); box-shadow: 0 0 calc(16px * var(--k)) rgba(232,196,106,.55); padding: calc(3px * var(--k)) calc(12px * var(--k)); }
 @media (max-width: 699px) { body.game-poker .pfelt.tall .pk-pot .pk-potnum { font-size: 24px; } }
 /* Numbers under a name. */
-.pk-stats { display: block; font: 600 calc(9.5px * var(--k)) Inter, sans-serif; color: #b9c6d6; white-space: nowrap; letter-spacing: .01em; }
-.pfelt.tall .pk-stats { font-size: 8.5px; }
 /* Raise button: drag up for the amount. */
 .pk-act.raise { position: relative; touch-action: none; user-select: none; -webkit-user-select: none; }
 .pk-dragtip { position: absolute; right: 6px; top: 3px; font: 700 9px Inter, sans-serif; font-style: normal; opacity: .75; letter-spacing: .04em; pointer-events: none; }
@@ -238,11 +234,6 @@ body:not(.room3d) .pk-rank { top: calc(50% + 64px * var(--k)); }
 .pk-gnum { position: absolute; left: 50%; transform: translate(-50%, 50%); margin-left: 0; white-space: nowrap; background: #b8860b; border: 2px solid #ffe08a; color: #fff8e1; border-radius: 12px; padding: 5px 14px; text-align: center; z-index: 2; box-shadow: 0 4px 18px rgba(0,0,0,.6); }
 .pk-gnum b { display: block; font: 800 24px Inter, system-ui, sans-serif; font-variant-numeric: tabular-nums; }
 .pk-gnum small { font: 600 11px Inter, sans-serif; opacity: .9; }
-.pk-stats i { font-style: normal; }
-.pk-stats i + i::before { content: ' · '; }
-.pfelt.tall .pk-stats i { display: block; line-height: 1.15; }
-.pfelt.tall .pk-stats i + i::before { content: none; }
-.pfelt.tall .pk-stats i:nth-child(3) { display: none; }
 /* Omaha (four cards) and two boards. */
 .pk-cards.four { --cw: calc(25px * var(--k)); gap: 2px; }
 .pfelt.tall .pk-cards.four, .pfelt.tall .pk-seat.far .pk-cards.four { --cw: 24px; gap: 1px; }
@@ -263,7 +254,6 @@ body.game-poker:not(.room3d) .pfelt.tall .pk-seat.far .pk-cards.four { --cw: 22p
 body.room3d .pfelt:not(.tall) .pk-mid.many.n2 .pk-board { top: 64%; --cw: calc(31px * var(--k)); }
 body.game-poker:not(.room3d) .pfelt.tall .pk-mid.many.n2 .pk-board { --cw: 34px; }
 body.game-poker:not(.room3d) .pfelt.tall .pk-mid.many.n2 .pk-brow i { font-size: 9px; padding: 0 3px; }
-.pk-seat.far .pk-stats i:nth-child(3) { display: none; }
 /* Two boards in the 3D room on a computer: the pot is beside the boards, so it does not cover the far seats. */
 body.room3d .pfelt:not(.tall) .pk-mid.many.n2 .pk-board .pk-pot { position: absolute; left: calc(100% + 14px * var(--k)); top: 50%; transform: translateY(-50%); margin: 0; white-space: nowrap; }
 
@@ -503,7 +493,6 @@ body.room3d .pfelt.ring:not(.tall) .pk-spot.pot { top: var(--rp, 40%); }
 .pfelt.ring .pk-board .pk-pot { padding-top: 0; padding-bottom: 0; }
 .pfelt.ring .pk-seat.bl .pk-bubble { justify-self: start; }
 .pfelt.ring .pk-seat.br .pk-bubble { justify-self: end; }
-.pfelt.ring .pk-seat.me .pk-stats { display: none; }
 .pk-d { display: inline-block; width: 1.25em; height: 1.25em; line-height: 1.25em; margin-right: .3em; border-radius: 50%; background: #fff; color: #111; font: 800 .8em/1.25em Inter, sans-serif; text-align: center; vertical-align: middle; font-style: normal; box-shadow: inset 0 -2px 0 rgba(0,0,0,.25); }
 /* The name of your hand stands on the left of your own cards on a computer, clear of the Fold, Call and Raise buttons. */
 @media (min-width: 700px) { body.game-pk .pk-handrow .pk-rank.flat { left: auto; right: calc(100% + 8px); } }
