@@ -8,7 +8,7 @@
 // How browsers find each other: the first one to open the office takes the office's meeting name ('bjo-' + code)
 // and passes every message on to all the others; everybody else links to it. When that browser leaves, the
 // next one to notice takes the name over, so the office never depends on any one table's host.
-import { peerOptions } from './common.js?v=20261122zv';
+import { peerOptions } from './common.js?v=20261122zw';
 
 const GAMES = ['blackjack', 'poker', 'baccarat', 'roulette'];
 const KINDS = ['tap', 'wave', 'push', 'fold', 'react'];
