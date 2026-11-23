@@ -1,14 +1,14 @@
 // The baccarat page: a punto banco table for up to 9 in the small meeting room. The host's browser runs
 // the table (js/baccarat.js); every other browser sends its bets there and is told only what it may see.
-import { outerLink } from './shell.js?v=20261122zt';
-import { BacTable, BAC_SEATS, BAC_SPOTS, BAC_KEYS, verifyShoe, cardText } from './baccarat.js?v=20261122zt';
-import { webglOK, initRoom } from './room3d.js?v=20261122zt';
-import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122zt';
-import { autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML, breachCover } from './common.js?v=20261122zt';
-import { KeyGuard, mixKeys, newNonce } from './cardkeys.js?v=20261122zt';
+import { outerLink } from './shell.js?v=20261122zu';
+import { BacTable, BAC_SEATS, BAC_SPOTS, BAC_KEYS, verifyShoe, cardText } from './baccarat.js?v=20261122zu';
+import { webglOK, initRoom } from './room3d.js?v=20261122zu';
+import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122zu';
+import { autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML, breachCover } from './common.js?v=20261122zu';
+import { KeyGuard, mixKeys, newNonce } from './cardkeys.js?v=20261122zu';
 
-import { shareHidden, startHold } from './vault.js?v=20261122zt';
-import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261122zt';
+import { shareHidden, startHold } from './vault.js?v=20261122zu';
+import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261122zu';
 const PREFIX = 'bjt-bc-';
 // A settings change by vote (js/vote.js): any player at the table may ask, every other player at the table who is online has to say yes.
 const VOTE = {
@@ -686,7 +686,6 @@ function drawHud(st, me, sg) {
     ${isHost ? `<button class="btn small primary" data-act="deal"${st.canDeal && !done && !st.halted ? '' : ' disabled'}>Deal<span> now</span></button>` : ''}
     <button class="btn small" data-act="add">🪙<span> Chips</span></button>
     <button class="btn small" data-act="react">😀</button>
-    <button class="btn small danger" data-act="leave">🚪<span> Leave</span></button>
   </div>`;
   tray.innerHTML = h;
 }
@@ -697,17 +696,15 @@ function drawMenu(st) {
   if (!el) return;
   const isHost = S.role === 'host';
   el.innerHTML = `
-    <div class="menu-invite"><div class="menu-title">🔗 Invite link</div><div class="share"><input id="share" readonly value="${esc(inviteLink())}" /><button class="btn small" data-act="copy">Copy</button></div></div>
     <button class="menu-item" data-act="ledger">📒 Ledger</button>
     ${S.role === 'guest' ? '<button class="menu-item" data-act="become-host" title="The table moves to your browser. No vote.">👑 Become host</button>' : ''}
     <button class="menu-item" data-act="log">📝 Round log</button>
-    <button class="menu-item" data-act="fair">🔐 Fair shoe</button>
     <button class="menu-item" data-act="rules">📖 Rules and payouts</button>
     ${isHost || (st.players.find((p) => p.id === S.myId)?.seat ?? -1) >= 0 ? `<button class="menu-item" data-act="settings" data-note="${isHost ? '' : 'Everyone else at the table votes on your change.'}">⚙️ Table settings</button>` : ''}
     ${isHost ? `    <button class="menu-item" data-act="players">👥 Players</button>
     <button class="menu-item" data-act="pause">${S.paused ? '▶️ Deal by the clock again' : '⏸️ Stop the clock (deal by hand)'}</button>` : ''}
     <button class="menu-item" data-act="view3d">🧊 3D room: ${use3D() ? 'on' : 'off'}</button>
-    ${S.room ? '<button class="menu-item" data-act="walk">🚶 Walk around</button><button class="menu-item" data-act="view-reset">🪑 Back to my seat</button>' : ''}
+    ${S.room ? '<button class="menu-item" data-act="walk">🚶 Walk around</button>' : ''}
     <button class="menu-item" data-act="leave">↩️ Leave the table</button>`;
 }
 function ledgerHTML(st) { return bankLedgerHTML(st, S.myId); }

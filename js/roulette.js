@@ -1,7 +1,7 @@
 // European roulette (one zero, 37 pockets) for up to 9 players against the house. Pure rules: the host's
 // browser owns one RouTable and every bet goes through it. Nothing here touches the page or the network.
-import { sha256, MAX_CHIPS } from './game.js?v=20261122zt';
-import { isFrozen, bankJoin, setBank, clearBank, bankGone, bankSettle, ledgerNet, ledgerSum, bankAdopt, bankCashOut, bankCarryIn } from './bank.js?v=20261122zt';
+import { sha256, MAX_CHIPS } from './game.js?v=20261122zu';
+import { isFrozen, bankJoin, setBank, clearBank, bankGone, bankSettle, ledgerNet, ledgerSum, bankAdopt, bankCashOut, bankCarryIn } from './bank.js?v=20261122zu';
 
 export const ROU_SEATS = 9;
 export const ROU_DEFAULTS = {

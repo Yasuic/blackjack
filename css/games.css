@@ -440,7 +440,6 @@ body.game-pk.room3d .html-top .felt.pfelt::after { display: none; }
 @media (min-width: 700px) {
   body.game-pk .pk-mine { position: fixed; left: 262px; top: 66px; z-index: 40; width: auto; }
   body.game-pk .pk-mine .btn { border-radius: 999px; padding: 6px 12px; }
-  body.game-pk .room-reset { bottom: auto; top: 68px; right: 12px; }
 }
 .pk-react { position: absolute; left: calc(100% + 4px * var(--k)); bottom: 0; pointer-events: auto; cursor: pointer; font-size: calc(13px * var(--k)); line-height: 1; padding: calc(3px * var(--k)); border-radius: 50%; background: rgba(10,12,16,.8); border: 1px solid rgba(255,255,255,.25); }
 .pk-react:hover { border-color: var(--gold); }

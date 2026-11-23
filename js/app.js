@@ -1,17 +1,17 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { outerLink } from './shell.js?v=20261122zt';
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe } from './game.js?v=20261122zt';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122zt';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122zt';
-import { tickSound, winSound } from './fx.js?v=20261122zt';
-import * as HX from './history.js?v=20261122zt';
-import { webglOK, initRoom } from './room3d.js?v=20261122zt';
-import { COPY_BTN, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261122zt';
-import { makeVault, makeOpener, cleanBox, cleanPiece } from './vault.js?v=20261122zt';
-import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122zt';
-import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122zt';
+import { outerLink } from './shell.js?v=20261122zu';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe } from './game.js?v=20261122zu';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122zu';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122zu';
+import { tickSound, winSound } from './fx.js?v=20261122zu';
+import * as HX from './history.js?v=20261122zu';
+import { webglOK, initRoom } from './room3d.js?v=20261122zu';
+import { COPY_BTN, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261122zu';
+import { makeVault, makeOpener, cleanBox, cleanPiece } from './vault.js?v=20261122zu';
+import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122zu';
+import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122zu';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -69,7 +69,7 @@ if (safeGet('bj-four') === '1') document.body.classList.add('four-colour');
 // ---------- Small helpers ----------
 function safeGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
 function safeSet(k, v) { try { localStorage.setItem(k, v); } catch {} }
-// The view buttons (Look left, Look right, Reset view, Walk around, zoom) are hidden unless switched on in the menu.
+// The view buttons (Look left, Look right, Walk around, zoom) are hidden unless switched on in the menu.
 function viewPadOn() { return safeGet('bj-view-pad') === '1'; }
 document.body.classList.toggle('view-hidden', !viewPadOn());
 function safeDel(k) { try { localStorage.removeItem(k); } catch {} }
@@ -1385,11 +1385,7 @@ function buildLayout() {
       <div class="menu-wrap" id="menu-wrap">
         <button class="hamburger" data-act="menu" aria-label="Menu" aria-haspopup="true"><span></span><span></span><span></span></button>
         <div class="menu" id="menu">
-          <div class="menu-invite">
-            <div class="menu-title">🔗 Invite link</div>
-            <div class="share"><input id="share" readonly /><button class="btn small" data-act="copy">Copy</button></div>
-          </div>
-          <button class="menu-item" data-act="view-pad" title="Look left, Look right, Reset view, Walk around and zoom buttons">🎥 View buttons: ${viewPadOn() ? 'on' : 'off'}</button>
+          <button class="menu-item" data-act="view-pad" title="Look left, Look right, Walk around and zoom buttons">🎥 View buttons: ${viewPadOn() ? 'on' : 'off'}</button>
           <button class="menu-item" data-act="afk-screen" title="A black screen with plain white text while you are away: who deals, the round, the ledger. The table keeps running.">🌙 AFK screen</button>
           ${fold('m-table', '📜 Table rules and payouts', `
             <button class="menu-item" data-act="rules">💰 Side bet payouts</button>`)}
@@ -1410,8 +1406,6 @@ function buildLayout() {
           ${fold('m-settings', '⚙️ Game settings', '<div class="hint" style="margin-bottom:8px">Any seated player can change the settings. Everyone else has to vote yes.</div><div id="host-settings"></div>')}
           ${fold('m-log', '📝 Table log', `<div id="host-log" class="log"></div>
             ${fold('m-logs', 'Logs', `<button class="menu-item" data-act="hist-panel" title="A small list of the hands at the left of the screen.">🕘 Hand history: ${histOn() ? 'on' : 'off'}</button>`, true)}`)}`}
-          ${fold('m-cheat', '✅ Game Cheating Detection', `
-            <button class="menu-item" data-act="fair">🔐 Provably fair</button>`)}
         </div>
       </div>
     </div>
@@ -1431,7 +1425,7 @@ function buildLayout() {
     <button class="float-hurry float-split" data-act="hurry" data-say="split" title="Shout SPLIT THAT SHIT!!! at the table. Press as often as you like.">✂️<span> Split it</span></button>
     <button class="float-hurry float-insure" data-act="hurry" data-say="insure" title="Shout INSURE THAT SHIT!! at the table. Press as often as you like.">🛡️<span> Insure it</span></button>
     <div class="ledger ${safeGet('bj-ledger') !== '1' ? 'closed' : ''}" id="ledger"></div>
-    <div class="zoom-ctl">${use3D() ? '<button class="view-btn" data-act="turn" data-d="1" title="Turn to the players on your left" aria-label="Look left">◀ Look left</button><button class="view-btn" data-act="turn" data-d="-1" title="Turn to the players on your right" aria-label="Look right">Look right ▶</button><button class="view-btn view-reset" data-act="view-reset" title="Back to your own seat">Reset view</button><button class="view-btn view-walk" data-act="walk" title="Leave your chair and move through the whole office" aria-label="Walk around">🚶 Walk around</button>' : ''}<label class="tilt-ctl" title="Camera angle: drag to tilt the table"><span>Angle</span><input type="range" id="tilt" min="0" max="50" step="1" /></label><button data-act="zoom" data-d="-1" aria-label="Zoom out">−</button><span id="zoom-val"></span><button data-act="zoom" data-d="1" aria-label="Zoom in">+</button></div>
+    <div class="zoom-ctl">${use3D() ? '<button class="view-btn" data-act="turn" data-d="1" title="Turn to the players on your left" aria-label="Look left">◀ Look left</button><button class="view-btn" data-act="turn" data-d="-1" title="Turn to the players on your right" aria-label="Look right">Look right ▶</button><button class="view-btn view-walk" data-act="walk" title="Leave your chair and move through the whole office" aria-label="Walk around">🚶 Walk around</button>' : ''}<label class="tilt-ctl" title="Camera angle: drag to tilt the table"><span>Angle</span><input type="range" id="tilt" min="0" max="50" step="1" /></label><button data-act="zoom" data-d="-1" aria-label="Zoom out">−</button><span id="zoom-val"></span><button data-act="zoom" data-d="1" aria-label="Zoom in">+</button></div>
     </div>
     <div class="buyin-pop" id="buyin-pop" hidden></div>
     <div class="host-pops" id="host-pops"></div>`;
@@ -1779,8 +1773,6 @@ function render(note) {
     pill.className = 'pill ' + (S.online ? 'live' : 'off');
     pill.textContent = S.online ? `Table ${S.code}${S.role === 'player' && S.viaRelay ? ' · backup path' : ''}` : (S.role === 'host' ? 'Opening...' : 'Offline');
   }
-  const share = $('#share');
-  if (share && share.value !== inviteLink()) share.value = inviteLink();
   if (S.role === 'host') $('#offline-note')?.remove(); // this browser took the table over: the note is out of date
   // A guest whose host has gone away: say why, since the table lives in the host's browser tab.
   if (S.role !== 'host') {
@@ -2689,14 +2681,6 @@ function askOutHTML(st) {
 // Practice only (frozen ledger): the table can bet and play your seats by itself with basic strategy.
 // It looks at your cards and the dealer's up card, nothing else. It never uses a count.
 const AUTO_SPEEDS = { slow: 2600, normal: 1300, fast: 450 };
-// Sit out: one button for each of your own seats, always there, kept off the table so nothing covers it.
-// A seat that sits out keeps its place, gets no cards, and nobody waits for it.
-function sitOutHTML(st) {
-  const me = st.players.find((p) => p.id === S.myId);
-  const mine = (me?.seats || []).filter((i) => st.seats[i]);
-  if (!mine.length || st.banker?.id === S.myId) return '';
-  return mine.map((i) => { const lv = st.seats[i].leaving; return `<button class="seat-out ${lv ? 'on' : ''}" data-act="leave-seat" data-seat="${i}" title="${lv ? 'Tap to stay in this seat' : 'Leave this seat. A hand in play is still finished first.'}">${mine.length > 1 ? `Seat ${i + 1}: ` : ''}${lv ? 'Leaving after this round' : 'Sit out'}</button>`; }).join('');
-}
 // ---------- Live chat ----------
 // Text chat for everyone at the table, players and watchers. It travels over the table's own
 // connection: a guest sends a line to the host, and the host passes it to everyone. Nothing is stored online.
@@ -2874,8 +2858,7 @@ function drawVoice() {
   const others = V.list.filter((m) => m.id !== S.myId);
   const row = (m) => `<div class="voice-row"><span>${m.mic ? '🎤' : '🔇'} <b>${esc(m.name)}</b></span>${V.on ? `<button class="btn small ghost" data-act="voice-mute" data-id="${esc(m.id)}">${V.muted[m.id] ? 'Unmute' : 'Mute'}</button>` : ''}</div>`;
   el.querySelector('#voice-body').innerHTML = V.on
-    ? `<button class="btn ${V.mic ? '' : 'ghost'} voice-mic" data-act="voice-mic">${V.mic ? '🎤 Your mic is on. Tap to turn it off' : '🔇 Your mic is off. Tap to talk'}</button>
-       <div class="voice-list">${others.map(row).join('') || '<div class="chat-empty">Nobody else is in voice yet.</div>'}</div>
+    ? `<div class="voice-list">${others.map(row).join('') || '<div class="chat-empty">Nobody else is in voice yet.</div>'}</div>
        <button class="btn small danger" data-act="voice-leave">Leave voice</button>`
     : `<div class="chat-empty">Talk with the table. You join with your mic off, and the browser asks for the mic only when you turn it on.</div>
        <div class="voice-list">${V.list.map(row).join('') || '<div class="chat-empty">Nobody is in voice yet.</div>'}</div>
@@ -2994,8 +2977,6 @@ function trayInner(st) {
     const b = seat.bet;
     const s = st.settings;
     const limits = `<small>Table limits</small><span>Bet ${money(s.minBet)} to ${money(s.maxBet)}</span>${sideKeys(st).length ? `<span>Side bets up to ${money(s.maxSideBet)}</span>` : ''}${bigLineHTML(st)}`;
-    // With no bet down there is nothing to clear, so that place offers last round's bet again.
-    const rebet = st.rebet && !betTotal(b) ? `<button class="btn gold rebet-btn" data-act="rebet" title="Bet the same as last round (B)">↻ Rebet ${money(rebetSum(st))}${rebetHands(st)}</button>` : '';
     return `
       <div class="tray-row">
         <div class="balance limits">${limits}</div>
@@ -3010,7 +2991,7 @@ function trayInner(st) {
         ${pvpBtnHTML(st, seat)}
         
         ${sideKeys(st).length ? '<button class="btn" data-act="sides-plus" title="Adds 1 to every side bet on all your hands">+1 all side bets</button>' : ''}
-        ${autoRebetBtn()}${rebet || `<button class="btn" data-act="clear" ${(myInfo(st).me?.seats || []).some((i) => betTotal(st.seats[i]?.bet)) || betTotal(b) ? '' : 'disabled'}>Clear all</button>`}
+        ${autoRebetBtn()}<button class="btn" data-act="clear" ${(myInfo(st).me?.seats || []).some((i) => betTotal(st.seats[i]?.bet)) || betTotal(b) ? '' : 'disabled'}>Clear all</button>
         ${bigBtnHTML(st)}
       </div>`;
   }
@@ -3115,14 +3096,8 @@ function renderSettings(st) {
         <select id="set-decks">
           ${[[1, '1 deck'], [2, '2 decks'], [6, '6 decks'], [8, '8 decks'], [20, '20 decks'], [100, '100 decks'], [1000, '1000 decks'], ['csm', 'Randomized (full shuffle every round)']].map(([v, l]) => `<option value="${v}" ${String(s.decks) === String(v) ? 'selected' : ''}>${l}</option>`).join('')}
         </select></label>
-      <label class="full">When to reshuffle
-        <select id="set-mode">
-          <option value="penetration" ${s.shuffleMode === 'penetration' ? 'selected' : ''}>After a share of the shoe is used</option>
-          <option value="rounds" ${s.shuffleMode === 'rounds' ? 'selected' : ''}>Every few rounds</option>
-        </select></label>
-      <label class="full mode-pen" ${s.shuffleMode === 'rounds' ? 'hidden' : ''}>Reshuffle when <span id="pen-val">${s.penetration}%</span> of the shoe is used
+      <label class="full">Reshuffle when <span id="pen-val">${s.penetration}%</span> of the shoe is used
         <input id="set-pen" type="range" min="20" max="95" step="5" value="${s.penetration}" /></label>
-      <label class="full mode-rounds" ${s.shuffleMode === 'rounds' ? '' : 'hidden'}>Reshuffle every N rounds<input id="set-every" type="number" min="1" max="50" value="${s.shuffleEvery}" /></label>
       ${canShuffle ? `<button class="btn full" data-act="h-shuffle">${locked ? 'Shuffle before next hand' : 'Shuffle now'}</button>` : ''}
     </div>`, true)}
     ${fold('set-seats', '🪑 Seats', `<div class="settings-grid">
@@ -3131,10 +3106,8 @@ function renderSettings(st) {
     </div>`, true)}
     ${fold('set-bets', '💵 Chips and bet limits', `<div class="settings-grid">
       <label>Starting chips<input id="set-start" type="number" min="1" value="${s.startChips}" ${dis} /></label>
-      <label>Max side bet<input id="set-maxside" type="number" min="0" value="${s.maxSideBet}" ${dis} /></label>
       <label>Min bet<input id="set-min" type="number" min="1" value="${s.minBet}" ${dis} /></label>
-      <label>Max bet<input id="set-max" type="number" min="1" value="${s.maxBet}" ${dis} /></label>
-      <div class="hint full">Starting chips apply to new players.</div>
+      <div class="hint full">Starting chips apply to new players. The dealer sets the max bets at the table.</div>
     </div>`, true)}
     ${fold('set-rules', '📏 Rules', `<div class="settings-grid">
       <label class="check full"><input id="set-h17" type="checkbox" ${s.dealerHitsSoft17 ? 'checked' : ''} ${dis} /> Dealer hits soft 17</label>
@@ -3152,19 +3125,14 @@ function renderSettings(st) {
       <div class="hint full">When betting time runs out, the dealer deals to everyone with a bet. When time per move runs out, the dealer stands for that player.</div>
     </div>`, true)}
     <button class="btn primary" style="width:100%;margin-top:10px" data-act="h-settings" ${dis}>Save settings</button>`;
-  $('#set-mode').addEventListener('change', (e) => {
-    $('.mode-pen').hidden = e.target.value === 'rounds';
-    $('.mode-rounds').hidden = e.target.value !== 'rounds';
-  });
   // The deck choice saves as soon as it is picked; during a hand it starts when the hand ends.
   $('#set-decks').addEventListener('change', (e) => {
     const v = e.target.value === 'csm' ? 'csm' : Number(e.target.value);
     e.target.blur();
     proposeSettings({ decks: v });
   });
-  // The reshuffle choices save as soon as they are changed too.
-  const saveShuffle = (e) => { e.target.blur(); proposeSettings({ shuffleMode: $('#set-mode').value, penetration: Number($('#set-pen').value), shuffleEvery: Number($('#set-every').value) }); };
-  for (const id of ['set-mode', 'set-pen', 'set-every']) $('#' + id).addEventListener('change', saveShuffle);
+  // The reshuffle point saves as soon as it is changed too. Shuffling every 8 rounds is the dealer's button at the table.
+  $('#set-pen').addEventListener('change', (e) => { e.target.blur(); proposeSettings({ shuffleMode: 'penetration', penetration: Number(e.target.value) }); });
   $('#set-pen').addEventListener('input', (e) => ($('#pen-val').textContent = e.target.value + '%'));
 }
 
@@ -3176,8 +3144,7 @@ const SETTING_NAMES = {
   decks: ['Cards', (v) => (v === 'csm' ? 'randomized' : `${v} deck${v > 1 ? 's' : ''}`)],
   shuffleMode: ['Reshuffle', (v) => (v === 'rounds' ? 'every few rounds' : 'by share of shoe used')],
   penetration: ['Reshuffle at', (v) => v + '% used'],
-  shuffleEvery: ['Reshuffle every', (v) => v + ' rounds'],
-  startChips: ['Starting chips', money], minBet: ['Min bet', money], maxBet: ['Max bet', money], maxSideBet: ['Max side bet', money],
+  startChips: ['Starting chips', money], minBet: ['Min bet', money], // the max bets are the dealer's alone, set in the dealer row
   dealerHitsSoft17: ['Dealer', (v) => (v ? 'hits soft 17' : 'stands on all 17s')],
   countTraining: ['Count training', (v) => (v ? 'on for everyone' : 'off')],
   allowSurrender: ['Surrender', (v) => (v ? 'allowed' : 'not allowed')],
@@ -3189,7 +3156,7 @@ const SETTING_NAMES = {
 // Which settings of a patch differ from the table's, as a list of setting names.
 function settingChanges(cur, patch) {
   return Object.keys(patch || {}).filter((k) => SETTING_NAMES[k] && String(patch[k]) !== String(cur[k]))
-    .filter((k) => !(k === 'penetration' && (patch.shuffleMode || cur.shuffleMode) === 'rounds') && !(k === 'shuffleEvery' && (patch.shuffleMode || cur.shuffleMode) !== 'rounds'));
+    .filter((k) => !(k === 'penetration' && (patch.shuffleMode || cur.shuffleMode) === 'rounds'));
 }
 // On the host: a settings change asked for by player `by` (the host or any seated player) starts a vote of everyone else.
 // Only known settings are taken from the patch, since it may come over the network.
@@ -3391,7 +3358,7 @@ function runAct(el) {
     }
     case 'copy': {
       const link = inviteLink();
-      (navigator.clipboard?.writeText(link) || Promise.reject()).then(() => toast('Invite link copied. Send it to your friends.'), () => { $('#share').select(); toast('Copy the link from the box.'); });
+      (navigator.clipboard?.writeText(link) || Promise.reject()).then(() => toast('Invite link copied. Send it to your friends.'), () => { $('#modal-body').innerHTML = `<h3>Invite link</h3><input readonly value="${esc(link)}" style="width:100%" onfocus="this.select()" />`; if (!$('#modal').open) $('#modal').showModal(); });
       break;
     }
     case 'rules': $('#modal-body').innerHTML = rulesHTML(); $('#modal').showModal(); break;
@@ -3674,8 +3641,8 @@ function runAct(el) {
       const seats = Math.round(Number(v('set-seats')));
       if (!(seats >= 1)) { toast('The table needs at least 1 seat.'); break; }
       proposeSettings({
-        seats, decks, shuffleMode: v('set-mode'), penetration: Number(v('set-pen')), shuffleEvery: Number(v('set-every')),
-        startChips: Number(v('set-start')), minBet: Number(v('set-min')), maxBet: Number(v('set-max')), maxSideBet: Number(v('set-maxside')),
+        seats, decks, shuffleMode: 'penetration', penetration: Number(v('set-pen')),
+        startChips: Number(v('set-start')), minBet: Number(v('set-min')),
         dealerHitsSoft17: $('#set-h17').checked, countTraining: false, allowSurrender: $('#set-sur').checked, autoDeal: $('#set-auto').checked,
         betTimer: Number(v('set-bettimer')), turnTimer: Number(v('set-turntimer')),
         sideBets: [...document.querySelectorAll('[data-sidebet]')].filter((x) => x.checked).map((x) => x.dataset.sidebet),

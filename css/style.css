@@ -1174,7 +1174,6 @@ body.room3d .tilt-ctl, body.room3d #zoom-val { display: none; }
 body.room3d .zoom-ctl { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; width: 208px; }
 body.room3d .zoom-ctl button { width: auto; }
 body.room3d .zoom-ctl .view-btn { font-family: "Space Grotesk", system-ui, sans-serif; font-weight: 600; font-size: 13px; padding: 0 8px; white-space: nowrap; }
-body.room3d .zoom-ctl .view-reset { grid-column: 1 / -1; background: var(--gold); color: #1b1300; }
 @media (max-width: 1180px) { body.room3d .zoom-ctl { bottom: auto; top: 118px; right: 12px; } }
 @media (max-width: 560px) {
   body.room3d .hud3d { gap: 4px; }
@@ -1192,7 +1191,6 @@ body.room3d .toast { pointer-events: none; }
   body.room3d.in-room .hud-bar > .zoom-ctl { position: fixed; top: calc(var(--topbar-h, 52px) + 42px); left: 6px; right: 6px; bottom: auto; width: auto; height: auto; transform: none; display: grid; grid-template-columns: 1fr 1fr 1fr 38px 38px; gap: 3px; padding: 3px; border-radius: 12px; }
   body.room3d .zoom-ctl button { width: auto; height: 30px; font-size: 16px; }
   body.room3d .zoom-ctl .view-btn { font-size: 11.5px; padding: 0 4px; }
-  body.room3d .zoom-ctl .view-reset { grid-column: auto; order: 0; }
   body.room3d .zoom-ctl [data-d="1"].view-btn { order: -1; }
   body.room3d .zoom-ctl [data-d="-1"].view-btn { order: 1; }
   body.room3d .zoom-ctl [data-act="zoom"] { order: 2; }
@@ -1378,7 +1376,6 @@ body.room3d .felt .spot-amt { pointer-events: none; }
   body.room3d .zoom-ctl .view-btn { font-size: 0; }
   body.room3d .zoom-ctl .view-btn::before { font-size: 13px; content: '◀'; }
   body.room3d .zoom-ctl [data-d="-1"].view-btn::before { content: '▶'; }
-  body.room3d .zoom-ctl .view-reset::before { content: '⟲'; font-size: 15px; }
   body.room3d.in-room .float-balance { top: calc(var(--topbar-h, 52px) + 42px); right: 6px; width: 116px; height: 32px; box-sizing: border-box; justify-content: center; padding: 0 6px; }
   body.room3d.in-room .hud3d .tray:has(.chip-rack) { position: static; transform: none; width: 100%; max-width: none; padding: 2px 4px; gap: 4px; pointer-events: auto; order: 1; }
   body.room3d .hud3d { gap: 3px; }
@@ -1628,7 +1625,7 @@ body.view-hidden .zoom-ctl { display: none !important; }
 body.room3d .room-lock, body.room3d .room-reset { display: block; }
 .room-lock { top: 68px; left: 12px; }
 .room-lock.on { border-color: var(--gold); color: #ffe7a8; }
-.room-reset { bottom: 10px; right: 10px; }
+.room-reset { top: 68px; right: 12px; } /* the same place in every game, under the top bar */
 .room-lock:hover, .room-reset:hover { filter: brightness(1.25); }
 body.room3d .room.seat-locked { cursor: default; }
 @media (max-width: 600px) { .room-lock { top: 62px; left: 8px; padding: 5px 9px; font-size: 11px; } .room-reset { bottom: auto; top: 62px; right: 8px; padding: 5px 9px; font-size: 11px; } }

@@ -1,17 +1,17 @@
 // The poker page: a Texas Hold'em table for up to 9 in the big meeting room. The host's browser runs
 // the table (js/poker.js); every other browser sends its moves there and is told only what it may see.
-import { outerLink } from './shell.js?v=20261122zt';
-import { PokerTable, POKER_SEATS, pokerDeck, cardText, mpClientMoves, mpMine, mpCheck, bestHand, bestOmaha } from './poker.js?v=20261122zt';
-import { plainDeck, shufflePass, lockPass, checkDeck, keyFor } from './mental.js?v=20261122zt';
-import { sha256 } from './game.js?v=20261122zt';
-import { botMove, isBot, BOT_NAMES } from './pokerbot.js?v=20261122zt';
-import { chipSound, cardSound, hitSound, standSound, potSound, tickSound, turnSound, punchSound } from './fx.js?v=20261122zt';
-import { webglOK, initRoom } from './room3d.js?v=20261122zt';
-import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122zt';
-import { COPY_BTN, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML } from './common.js?v=20261122zt';
+import { outerLink } from './shell.js?v=20261122zu';
+import { PokerTable, POKER_SEATS, pokerDeck, cardText, mpClientMoves, mpMine, mpCheck, bestHand, bestOmaha } from './poker.js?v=20261122zu';
+import { plainDeck, shufflePass, lockPass, checkDeck, keyFor } from './mental.js?v=20261122zu';
+import { sha256 } from './game.js?v=20261122zu';
+import { botMove, isBot, BOT_NAMES } from './pokerbot.js?v=20261122zu';
+import { chipSound, cardSound, hitSound, standSound, potSound, tickSound, turnSound, punchSound } from './fx.js?v=20261122zu';
+import { webglOK, initRoom } from './room3d.js?v=20261122zu';
+import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122zu';
+import { COPY_BTN, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML } from './common.js?v=20261122zu';
 
-import { shareHidden, startHold } from './vault.js?v=20261122zt';
-import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261122zt';
+import { shareHidden, startHold } from './vault.js?v=20261122zu';
+import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261122zu';
 const PREFIX = 'bjt-pk-';
 // A settings change by vote (js/vote.js): any player at the table may ask, every other player at the table who is online has to say yes.
 const VOTE = {
@@ -583,7 +583,7 @@ function showTable() {
       <span id="conn-pill" class="pill">Connecting</span>
       <span class="spacer"></span>
       ${topToolsHTML()}
-      <button class="btn small" id="away-top" data-act="away" hidden title="Away: sit out the next hands">💺</button><button class="btn small primary" id="host-run" data-act="hostrun" hidden></button>
+      <button class="btn small primary" id="host-run" data-act="hostrun" hidden></button>
       <button class="pill fair-pill" data-act="fair" title="How the deck is kept fair">🔐<span class="fp-t"> Fair deck</span></button>
       <button class="btn small gold" data-act="copy">🔗 Invite</button>
       <div class="menu-wrap" id="menu-wrap">
@@ -1041,7 +1041,6 @@ function drawHud(st, mySeat, showing) {
   const badge = live && !showing && seat ? rankBadge(seat) : ''; // your own hand, named once, beside your own cards
   top.innerHTML = status || bounty ? `<div class="pk-statrow"><div class="status">${status}${bounty}</div></div>` : '';
   // The host's Start and Stop button at the top right: Start deals, Stop holds the game after the hand in play.
-  { const aw = $('#away-top'); if (aw) { aw.hidden = !seat; aw.classList.toggle('gold', !!seat?.out); aw.textContent = seat?.out ? '💺 Back' : '💺'; aw.title = seat?.out ? 'You are away. Tap to play again.' : 'Away: sit out the next hands'; } }
   const hr = $('#host-run');
   if (hr) { const running = S.started && !S.paused; hr.hidden = !isHost; hr.textContent = running ? '⏸ Stop' : '▶ Start'; hr.title = running ? 'Stop dealing after this hand' : 'Deal the next hand and keep dealing'; hr.classList.toggle('primary', !running); hr.disabled = !running && !st.canStart; }
   let h = '';
@@ -1097,10 +1096,11 @@ function drawHud(st, mySeat, showing) {
     else { S.brokeAt = 0; h += `<div class="pk-broke"><span>You are sitting out with no chips.</span><button class="btn primary" data-act="rebuy">Buy in ${money(st.settings.startStack)}</button></div>`; }
   } else S.brokeAt = 0;
   if (seat) {
-    // Only what is used during play stays on screen (top left). Chips, the amount view and Leave seat are in the menu.
+    // Only what is used during play stays on screen (top left): sit out and leave seat. Chips and the amount view are in the menu.
     h += `<div class="pk-mine">
       ${st.settings.straddle ? `<button class="btn small" data-act="straddle">Straddle: ${seat.straddle ? 'on' : 'off'}</button>` : ''}
 ${(() => { const x = st.seats.find((x) => x && x.id === S.myId); return x && x.inHand && st.phase !== 'waiting' && st.phase !== 'done' ? `<button class="btn pk-leave-later ${x.leaving ? 'on' : ''}" data-act="leave-later" data-on="${x.leaving ? 1 : 0}" title="You play this hand to the end, then your seat is free.">${x.leaving ? '🚪 Leaving after this hand. Tap to stay' : '🚪 Leave after this hand'}</button>` : ''; })()}
+      ${seat.out ? '' : '<button class="btn small" data-act="away" title="Away: sit out the next hands">💺 Sit out</button>'}
       <button class="btn danger pk-leave" data-act="stand">🚪 Leave seat</button>
     </div>`;
   }
@@ -1131,13 +1131,11 @@ function drawMenu(st) {
   if (!el) return;
   const isHost = S.role === 'host';
   el.innerHTML = `
-    <div class="menu-invite"><div class="menu-title">🔗 Invite link</div><div class="share"><input id="share" readonly value="${esc(inviteLink())}" /><button class="btn small" data-act="copy">Copy</button></div></div>
     ${mySeatNow(st) ? '<button class="menu-item" data-act="add">🪙 My chips</button>' : ''}
     <button class="menu-item" data-act="ledger">📒 Ledger</button>
     ${S.role === 'guest' ? '<button class="menu-item" data-act="become-host" title="The table moves to your browser. No vote.">👑 Become host</button>' : ''}
     <button class="menu-item" data-act="log">📝 Hand log</button>
     <button class="menu-item" data-act="dl-hands">⬇️ Download hand history</button>
-    <button class="menu-item" data-act="fair">🔐 Fair deck</button>
     <button class="menu-item" data-act="rules">📖 Table rules</button>
     <button class="menu-item" data-act="test-mode">🧪 Test mode: ${S.testMode ? 'on' : 'off'}</button>
     ${S.testMode ? `<div class="menu-head">Test</div>
@@ -1156,8 +1154,7 @@ function drawMenu(st) {
     <button class="menu-item" data-act="pause">${S.paused ? '▶️ Resume dealing' : '⏸️ Pause after this hand'}</button>` : ''}
     <button class="menu-item" data-act="view3d">🧊 3D room: ${use3D() ? 'on' : 'off'}</button>
     ${S.room ? `<button class="menu-item" data-act="turnhome">🎯 Back to my seat on my turn: ${safeGet('pk-turnhome2') === '1' ? 'on' : 'off'}</button>` : ''}
-    ${S.room ? '<button class="menu-item" data-act="walk">🚶 Walk around</button><button class="menu-item" data-act="view-reset">🪑 Back to my seat</button>' : ''}
-    ${mySeatNow(st) ? '<button class="menu-item" data-act="stand">🚪 Leave my seat</button>' : ''}
+    ${S.room ? '<button class="menu-item" data-act="walk">🚶 Walk around</button>' : ''}
     <button class="menu-item" data-act="leave">↩️ Leave the table</button>`;
 }
 function ledgerHTML(st) {
