@@ -1,5 +1,6 @@
 // The roulette page: a European roulette table for up to 9 in Nigel's room. The host's browser runs
 // the table (js/roulette.js); every other browser sends its bets there and is told only what it may see.
+import { startPresence } from './presence.js?v=20261122zv';
 import { outerLink } from './shell.js?v=20261122zv';
 import { RouTable, ROU_SEATS, WHEEL, colorOf, betNumbers, betName, betPays, verifySpin } from './roulette.js?v=20261122zv';
 import { showSpin, drawWheel as paintWheel, wheelState } from './wheel.js?v=20261122zv';
@@ -279,6 +280,7 @@ function sendSeed() {
   if (S.net.send({ t: 'seed', seed: randomHex(16), commit: c })) S.seedFor = c;
 }
 function send(m) {
+  S.live?.actFor(m); // my figure makes the move on everybody's screen (js/presence.js)
   if (S.role === 'host') { try { doMove(S.myId, m); } catch (e) { toast(e.message); } push(); }
   else if (!S.net?.send(m)) toast('Not connected to the host right now.');
 }
@@ -665,6 +667,8 @@ void cardHTML; void betPays;
 // The other tables of the office: who plays there is drawn at their table in the room.
 S.others = {};
 watchOffice('roulette', () => S.code, (g, list, view) => { (S.views ||= {})[g] = markMyTurn(g, view, S.myId); S.others[g] = list.filter((p) => p.id.split('#')[0] !== S.myId); S.room?.setOthers(S.others, S.views); });
+// Everyone in the office, live: where each person walks and looks, and the moves they make (js/presence.js).
+S.live = startPresence({ game: 'roulette', room: () => S.room, code: () => S.code, me: () => ({ id: S.myId, name: S.name, look: getLook() }), at: () => !!S.room?.hasPerson(S.myId), phone: innerWidth < 700 });
 
 // "Connection dropped" notice and blocked buttons while this browser has no link to the table (common.js showDropped).
 setInterval(() => showDropped((S.role === 'guest' && !!S.st && !!S.conn && S.conn[1] === false && document.body.classList.contains('in-room')), 'Your moves are not being sent. The table waits for the host. If the host is gone, you can take over.', becomeHost), 400);

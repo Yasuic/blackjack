@@ -1,6 +1,7 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
+import { startPresence } from './presence.js?v=20261122zv';
 import { outerLink } from './shell.js?v=20261122zv';
 import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe } from './game.js?v=20261122zv';
 import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122zv';
@@ -9,7 +10,6 @@ import { tickSound, winSound } from './fx.js?v=20261122zv';
 import * as HX from './history.js?v=20261122zv';
 import { webglOK, initRoom } from './room3d.js?v=20261122zv';
 import { COPY_BTN, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261122zv';
-import { makeVault, makeOpener, cleanBox, cleanPiece } from './vault.js?v=20261122zv';
 import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122zv';
 import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122zv';
 
@@ -326,20 +326,15 @@ function sendSnap() {
   lite.shoeLeft = shoe.length;
   const order = Object.values(t.players).filter((p) => p.id !== S.myId && p.connected && !p.kicked).map((p) => p.id);
   const body = JSON.stringify({ order, table: lite, gen: S.gen || 0 });
-  // The hidden part (the shoe in its order, the shuffle codes, the face down card) goes along locked. The key is cut
-  // into pieces, one per seated player, and more than half of the pieces are needed to open it (js/vault.js).
-  // While a move is being settled (S.hold) this browser does not have the hidden part yet, so nothing is locked.
-  const holders = S.hold ? [] : order.filter((id) => t.seats.some((x) => x && x.playerId === id) && S.conns[id]?.open && !S.conns[id].relay);
-  S.vault ||= makeVault();
-  const pack = S.hold ? { box: null, piece: () => null, changed: false } : S.vault.pack(holders, JSON.stringify({ shoe, shoeSize, fair, dealer, turn, pendingSettings, pendingCard: t.pendingCard || null }));
-  if (body === S.snapSent && !pack.changed) return;
+  // The hidden part (the shoe in its order, the shuffle codes, the face down card) never leaves this browser:
+  // a host change always means a new shuffle.
+  void shoe; void shoeSize; void fair; void dealer; void turn; void pendingSettings;
+  if (body === S.snapSent) return;
   S.snapSent = body;
-  S.snapPack = pack;
   for (const conn of Object.values(S.conns)) if (conn.open) { try { conn.send(snapMsg(conn)); } catch {} }
 }
-function snapMsg(conn) {
-  const pack = S.snapPack;
-  return { t: 'snap', snap: S.snapSent, gen: S.gen || 0, box: pack?.box || null, piece: (!conn.relay && pack?.piece(conn.clientId)) || null };
+function snapMsg() {
+  return { t: 'snap', snap: S.snapSent, gen: S.gen || 0 };
 }
 // A player's browser found no host at the table's address. After a short wait (longer for players
 // further down the list, so only one steps up) it opens the table itself.
@@ -444,9 +439,8 @@ function maybeTakeOver(force = false) {
     const seen = snap?.table?.dealerSeen || (S.state?.dealer ? { revealed: !!S.state.dealer.revealed, cards: S.state.dealer.cards } : null);
     delete table.dealerSeen; delete table.shoeLeft;
     table.vote = null; table.hist = []; table.evts = []; table.created = null;
-    // The same shoe goes on when enough players bring their pieces of the key (js/vault.js). Until they have
-    // come back (a few seconds) no card is dealt: every step that takes a card waits in line behind `gate`.
-    const opener = !fresh && S.box ? makeOpener(S.box, S.piece) : null;
+    // No player holds any part of the old shoe, so a new host always shuffles a new one.
+    const opener = null;
     const stillDealer = table.banker && table.banker === oldHost && table.players[oldHost] ? ` ${table.players[oldHost].name} is still the dealer.` : '';
     let done = false, release = () => {};
     const settle = (text) => {
@@ -602,7 +596,6 @@ function onHostMessage(conn, msg) {
     clearTimeout(S.goneTimers[id]); delete S.goneTimers[id];
     S.table.join(id, msg.name, msg.buyIn, msg.look);
     if (msg.carry && typeof msg.carry === 'object') { try { S.table.carryIn(id, msg.carry.amount, msg.carry.from, msg.carry.cid); } catch { /* not at this table */ } }
-    if (S.hold && msg.piece) S.hold.add(cleanPiece(msg.piece));
     hostChanged();
     if (S.snapSent) { try { conn.send(snapMsg(conn)); } catch {} }
     if (S.chat?.length) { try { conn.send({ t: 'chat-log', list: S.chat.slice(-40) }); } catch {} }
@@ -733,6 +726,7 @@ function runAction(id, msg, onError) {
         t.answerBuyIn(req.id, true); // buy-ins go straight through; the ledger shows everyone's total
         // Bought in to pay for a double or a split: that move is played in the same step.
         if (msg.then === 'double' || msg.then === 'split') t.action(id, msg.then);
+        else if (msg.then === 'insurance') t.insurance(id, true, Number.isInteger(msg.seat) ? msg.seat : undefined);
         break;
       }
       case 'leave-dealer': t.leaveDealer(id); break;
@@ -1132,9 +1126,7 @@ function wireGuestConn(conn) {
     S.online = true;
     S.why = '';
     S.retry = 0; S.noHostAt = null; S.noReplyAt = 0; S.linkTries = 0; S.viaRelay = !!conn.relay;
-    // This player's piece of the key goes only to a host that took the table over after the piece was made, and only on a direct link.
-    const piece = S.piece && !conn.relay && (S.gen || 0) > (S.pieceGen ?? Infinity) ? S.piece : undefined;
-    conn.send({ t: 'join', clientId: S.myId, name: S.name, buyIn: S.buyIn, look: S.look, piece, carry: carryFor('blackjack', S.code) || undefined });
+    conn.send({ t: 'join', clientId: S.myId, name: S.name, buyIn: S.buyIn, look: S.look, carry: carryFor('blackjack', S.code) || undefined });
   };
   conn.on('open', opened);
   if (conn.open && !conn.relay) opened(); // a link that opened before it was picked as the table's link
@@ -1144,7 +1136,7 @@ function wireGuestConn(conn) {
     if (msg.t === 'state') { setState(msg.state); render(); setTimerFromState(msg.state); }
     else if (msg.t === 'error') { toast(msg.msg); if (msg.bet) dropPend(); }
     else if (msg.t === 'hist') { S.guestHist = Array.isArray(msg.rounds) ? msg.rounds : []; S.guestHistTotal = msg.total || S.guestHist.length; drawHistPanel(true); if ($('#modal')?.open && $('#hist-list')) showHistory(); }
-    else if (msg.t === 'snap') { S.snap = String(msg.snap || '').slice(0, 400000); if (Number.isInteger(msg.gen) && msg.gen >= 0 && msg.gen < 100000) S.gen = msg.gen; S.box = cleanBox(msg.box); S.piece = cleanPiece(msg.piece); S.pieceGen = S.gen || 0; }
+    else if (msg.t === 'snap') { S.snap = String(msg.snap || '').slice(0, 400000); if (Number.isInteger(msg.gen) && msg.gen >= 0 && msg.gen < 100000) S.gen = msg.gen; }
     else if (msg.t === 'say') toast(String(msg.msg || '').slice(0, 200));
     else if (msg.t === 'chat') gotChat(msg);
     else if (msg.t === 'voice-list') gotVoiceList(msg.list);
@@ -1183,6 +1175,7 @@ function wireGuestConn(conn) {
 
 // Send a move: players send it to the host, the host runs it directly.
 function send(msg) {
+  S.live?.actFor(msg); // my figure makes the move on everybody's screen (js/presence.js)
   if (S.role === 'host' && msg.t === 'chat') { relayChat(S.myId, msg); return; }
   if (S.role === 'host' && msg.t === 'voice') { voiceSet(S.myId, S.peer?.id, !!msg.on, !!msg.mic); return; }
   if (S.role === 'host' && msg.t === 'hurry') { relayHurry(S.myId, msg.say); return; }
@@ -1558,15 +1551,15 @@ function renderBalance(st) {
   el.innerHTML = `<span class="lbl">Balance</span><b>${money(me.chips - onTable)}</b>${waiting}`;
 }
 
-// `then` is the move ('double' or 'split') the buy-in is for, and `need` the chips missing for it.
+// `then` is the move ('double', 'split' or 'insurance') the buy-in is for, and `need` the chips missing for it.
 function openBuyIn(broke = false, then = null, need = 0) {
   const pop = $('#buyin-pop');
   const me = S.state?.players.find((p) => p.id === S.myId);
-  const word = then === 'split' ? 'split' : 'double';
+  const word = then === 'split' ? 'split' : then === 'insurance' ? 'take insurance' : 'double';
   const amounts = then ? [need, ...[500, 1000, 2500, 5000].filter((v) => v > need)].slice(0, 4) : [500, 1000, 2500, 5000];
   pop.innerHTML = `<div class="vote-card">
     <div class="vote-title">${then ? `Buy in to ${word}` : broke ? 'You are out of chips' : 'Buy in more chips'}</div>
-    <p>${then ? `You are ${money(need)} short for this ${word}. Pick an amount and the ${word} is played right away. ` : ''}Chips are added right away and everyone sees it in the ledger. Play money only.${me?.boughtIn ? ` You have bought in ${money(me.boughtIn)} extra so far.` : ''}</p>
+    <p>${then ? `You are ${money(need)} short to ${word}. Pick an amount and it is done right away. ` : ''}Chips are added right away and everyone sees it in the ledger. Play money only.${me?.boughtIn ? ` You have bought in ${money(me.boughtIn)} extra so far.` : ''}</p>
     <div class="actions">${amounts.map((v, i) => `<button class="btn ${then && !i ? 'primary' : ''}" data-buy="${v}">${money(v)}${then && !i ? ' (just enough)' : ''}</button>`).join('')}</div>
     <div class="share" style="margin-top:10px;justify-content:center"><input id="buy-amt" type="number" min="${then ? need : 1}" placeholder="Other amount" style="width:150px" /><button class="btn primary" data-buy="custom">${then ? `Buy in and ${word}` : 'Buy in'}</button></div>
     <div class="actions" style="margin-top:10px">${broke ? '<button class="btn small" data-buy="spectate">Leave seat and watch</button>' : ''}<button class="btn small" data-buy="close">${broke ? 'Not now' : 'Cancel'}</button></div>
@@ -1583,10 +1576,17 @@ function openBuyIn(broke = false, then = null, need = 0) {
     const amount = b.dataset.buy === 'custom' ? Math.round(Number($('#buy-amt').value)) : Number(b.dataset.buy);
     if (!amount) { toast('Type an amount.'); return; }
     if (then && amount < need) { toast(`You need at least ${money(need)} more to ${word}.`); return; }
-    send(then ? { t: 'buyin', amount, then } : { t: 'buyin', amount });
+    send(then ? { t: 'buyin', amount, then, seat: myInfo(S.state).me?.seat } : { t: 'buyin', amount });
     pop.hidden = true;
-    toast(then ? `Added ${money(amount)} chips and ${then === 'split' ? 'split' : 'doubled'}.` : `Added ${money(amount)} chips.`);
+    toast(then ? `Added ${money(amount)} chips and ${then === 'split' ? 'split' : then === 'insurance' ? 'took insurance' : 'doubled'}.` : `Added ${money(amount)} chips.`);
   };
+}
+// Insurance with too few chips: buy in the rest first, and the insurance is taken in the same step.
+function takeIns(take) {
+  const { me, seat } = myInfo(S.state);
+  const short = take && me && seat ? Math.ceil(seat.bet.main / 2) - me.chips : 0;
+  if (short > 0) { openBuyIn(false, 'insurance', short); return; }
+  send({ t: 'insurance', take, seat: me?.seat });
 }
 // The move a buy-in would pay for: a double or a split that only the balance is in the way of.
 function shortFor(a) {
@@ -3520,7 +3520,7 @@ function runAct(el) {
       sendBet(!seat.ready);
       break;
     }
-    case 'ins': send({ t: 'insurance', take: el.dataset.take === '1', seat: myInfo(S.state).me?.seat }); break;
+    case 'ins': takeIns(el.dataset.take === '1'); break;
     case 'play': playMove(el.dataset.a); break;
     // Host only
     case 'h-deal': fresh((t) => t.dealCount(), () => hostDo((t) => t.deal())); break;
@@ -3628,7 +3628,7 @@ document.addEventListener('keydown', (e) => {
   const { seat } = myInfo(st);
   if (!seat) return;
   if (st.phase === 'insurance' && (k === 'y' || k === 'n')) {
-    if (!wait && seat.hands.length && !seat.insuranceDecided) send({ t: 'insurance', take: k === 'y', seat: myInfo(st).me?.seat });
+    if (!wait && seat.hands.length && !seat.insuranceDecided) takeIns(k === 'y');
     return;
   }
   if (k === 'b' && (st.phase === 'betting' || st.phase === 'settled')) {
@@ -4110,6 +4110,8 @@ function goGame(game) {
 // The other tables of the office: who plays there is drawn at their table in the room.
 S.others = {};
 watchOffice('blackjack', () => S.code, (g, list, view) => { (S.views ||= {})[g] = markMyTurn(g, view, S.myId); S.others[g] = list.filter((p) => p.id.split('#')[0] !== S.myId); S.room?.setOthers(S.others, S.views); });
+// Everyone in the office, live: where each person walks and looks, and the moves they make (js/presence.js).
+S.live = startPresence({ game: 'blackjack', room: () => S.room, code: () => S.code, me: () => ({ id: S.myId, name: S.name, look: S.look || readLook() }), at: () => !!S.room?.hasPerson(S.myId), phone: innerWidth < 700 });
 
 // "Connection dropped" notice and blocked buttons while this browser has no link to the table (common.js showDropped).
 setInterval(() => showDropped(S.role === 'player' && !S.online && !!S.state && !S.kicked, 'Your moves are not being sent. The table waits for the host. If the host is gone, you can take over.', askBecomeHost), 400);

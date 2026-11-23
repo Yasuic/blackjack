@@ -1340,7 +1340,7 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     const torso = new THREE.Mesh(torsoGeo, shirt); torso.scale.z = 0.58; torso.position.y = -22 + up; torso.castShadow = true;
     const neck = limb([0, 88 + up, 0], [0, 124 + up, 0], 24, 26, skin);
     // The head turns on the neck (see idleFigs: players look round at each other now and then).
-    const headG = new THREE.Group(); headG.position.set(0, 124 + up, 0);
+    const headG = new THREE.Group(); headG.position.set(0, 124 + up, 0); headG.rotation.order = 'YXZ';
     const head = new THREE.Mesh(headGeo, skin); head.position.set(0, 46, 4); head.castShadow = true;
     const cap = new THREE.Mesh(hairGeo, hair); cap.position.set(0, 112, 4);
     const back = new THREE.Mesh(hairBackGeo, hair); back.position.set(0, 76, -48);
@@ -1363,10 +1363,14 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
       g.add(arm);
       arms.push(arm);
     }
+    const legs = [];
     if (standing) {
+      // Each leg swings from the hip, so somebody walking round the office takes steps.
       for (const s of [-1, 1]) {
-        g.add(limb([s * 36, -120 + up, 0], [s * 40, (FLOOR + 30) / U, 0], 34, 26, trousers));
-        const shoe = new THREE.Mesh(new THREE.BoxGeometry(56, 30, 110), trousers); shoe.position.set(s * 40, (FLOOR + 15) / U, 18); g.add(shoe);
+        const hy = -120 + up, leg = new THREE.Group(); leg.position.set(s * 36, hy, 0);
+        leg.add(limb([0, 0, 0], [s * 4, (FLOOR + 30) / U - hy, 0], 34, 26, trousers));
+        const shoe = new THREE.Mesh(new THREE.BoxGeometry(56, 30, 110), trousers); shoe.position.set(s * 4, (FLOOR + 15) / U - hy, 18); leg.add(shoe);
+        g.add(leg); legs.push(leg);
       }
     } else {
       for (const s of [-1, 1]) {
@@ -1392,7 +1396,7 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     const label = makeLabel(((look.flag ? look.flag + ' ' : '') + (p.name || 'Player')).slice(0, 22));
     label.position.y = 290 + up;
     g.add(label);
-    g.userData = { arms, label, reach: 0, headParts: [headG, label], headG };
+    g.userData = { arms, legs, label, reach: 0, headParts: [headG, label], headG, pid: String(p.id).split('#')[0] };
     return g;
   }
   function disposeTree(o) {
@@ -1695,6 +1699,7 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
         const c = w(T.x, T.y), s = w(ox, oy), nx = s.x - c.x, nz = s.z - c.z;
         const f = makeFigure(p, false, 96);
         f.scale.setScalar(U * 0.86); f.position.set(s.x, yTop, s.z); f.rotation.y = Math.atan2(-nx, -nz);
+        f.userData.g = g;
         otherGroup.add(f);
       }
     }
@@ -2259,7 +2264,7 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
   let idleAt = 0;
   const idleV = new THREE.Vector3(), idleW = new THREE.Vector3();
   function idleFigs(now) {
-    const all = [...figs.values(), ...otherGroup.children.filter((c) => c.userData?.headG)].filter((f) => f !== myFig && f.userData?.headG && f.parent);
+    const all = [...figs.values(), ...otherGroup.children.filter((c) => c.userData?.headG)].filter((f) => f !== myFig && f.userData?.headG && f.parent && !liveOf(f)); // real people move by themselves (liveStep)
     if (!all.length) return false;
     if (now - idleAt > 1400) {
       idleAt = now;
@@ -2284,6 +2289,101 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     }
     return moving;
   }
+  // ---------- Real people, live (js/presence.js) ----------
+  // Every browser in the office sends where its player is and where they look. Somebody with a place at a table
+  // and the camera there is the figure on that chair (or the dealer's spot), with the head turned where they look.
+  // Somebody walking round the office, or watching without a seat, is a standing figure that walks where they walk.
+  // A player who holds a seat but is somewhere else right now is not drawn in that chair.
+  const live = new Map(); // id -> { s: last place, rx: when heard, fig, pos, yaw, ph }
+  const liveGroup = new THREE.Group(); scene.add(liveGroup);
+  const lv = new THREE.Vector3(), lw = new THREE.Vector3(), LIVE_MS = 7000;
+  const gesturing = new Set();
+  function liveOf(f) { const L = live.get(f.userData?.pid); return L && performance.now() - L.rx < LIVE_MS ? L : null; }
+  function lookYaw(L) { office.localToWorld(lv.set(L.s.x, 0, L.s.z)); office.localToWorld(lw.set(L.s.x + L.s.fx, 0, L.s.z + L.s.fz)); return Math.atan2(lw.x - lv.x, lw.z - lv.z); }
+  const pitchOf = (L) => Math.max(-0.5, Math.min(0.7, -L.s.p * 0.8));
+  function dropLive(id) { const L = live.get(id); if (!L) return; if (L.fig) { gesturing.delete(L.fig); liveGroup.remove(L.fig); disposeTree(L.fig); } live.delete(id); }
+  function liveStep(now, dt) {
+    let moved = false;
+    for (const [id, L] of live) {
+      if (now - L.rx > LIVE_MS) { dropLive(id); moved = true; continue; }
+      if (!L.s.at) {
+        if (!L.fig) { L.fig = makeFigure({ id, name: L.s.n, look: L.s.l }, true); L.fig.scale.setScalar(U); liveGroup.add(L.fig); L.pos = null; moved = true; }
+        office.localToWorld(lv.set(L.s.x, 0, L.s.z)); lv.y = 0;
+        if (!L.pos) { L.pos = lv.clone(); L.yaw = lookYaw(L); }
+        const bx = L.pos.x, bz = L.pos.z;
+        L.pos.lerp(lv, 1 - Math.exp(-dt * 9));
+        const sp = Math.hypot(L.pos.x - bx, L.pos.z - bz) / Math.max(dt, 1e-3) / S; // metres a second
+        const f = L.fig, u = f.userData, want = lookYaw(L);
+        // The body turns to where they walk, or when the head would have to turn too far; the head does the rest.
+        if (sp > 0.25 || Math.abs(wrapPi(want - L.yaw)) > 0.9) L.yaw += wrapPi(want - L.yaw) * Math.min(1, dt * 6);
+        f.position.copy(L.pos); f.rotation.y = L.yaw;
+        const hy = Math.max(-1.1, Math.min(1.1, wrapPi(want - L.yaw))), hx = pitchOf(L);
+        if (Math.abs(u.headG.rotation.y - hy) + Math.abs(u.headG.rotation.x - hx) > 0.003) { u.headG.rotation.y += (hy - u.headG.rotation.y) * 0.25; u.headG.rotation.x += (hx - u.headG.rotation.x) * 0.25; moved = true; }
+        const go = Math.min(1, sp / 0.5);
+        L.ph = (L.ph || 0) + dt * 9 * go;
+        const sw = go * Math.sin(L.ph) * 0.55;
+        if (u.legs?.length) { u.legs[0].rotation.x = sw; u.legs[1].rotation.x = -sw; }
+        if (!u.gest) { u.arms[0].rotation.x = -sw * 0.7; u.arms[1].rotation.x = sw * 0.7; }
+        if (sp > 0.02 || go > 0.02) moved = true;
+      } else if (L.fig) { gesturing.delete(L.fig); liveGroup.remove(L.fig); disposeTree(L.fig); L.fig = null; moved = true; }
+    }
+    for (const f of [...figs.values(), ...otherGroup.children]) {
+      const u = f.userData;
+      if (!u?.headG || f === myFig) continue;
+      const L = liveOf(f), gone = !!L && L.s.at !== (u.g || game);
+      if (gone !== !!u.gone) { u.gone = gone; f.visible = !gone; moved = true; }
+      if (!L || gone) continue;
+      f.getWorldDirection(lw);
+      const hy = Math.max(-1.2, Math.min(1.2, wrapPi(lookYaw(L) - Math.atan2(lw.x, lw.z)))), hx = pitchOf(L), h = u.headG;
+      if (Math.abs(h.rotation.y - hy) + Math.abs(h.rotation.x - hx) > 0.003) { h.rotation.y += (hy - h.rotation.y) * 0.2; h.rotation.x += (hx - h.rotation.x) * 0.2; moved = true; }
+    }
+    return moved;
+  }
+  // The moves a real player makes at the table (presence.js actKind): a tap on the felt for a hit or a check,
+  // a wave over the cards to stand, chips pushed forward for a bet, cards tossed in for a fold, arms up for a shout.
+  const GEST_MS = { tap: 650, wave: 900, push: 700, fold: 650, react: 1000 };
+  function gesture(id, kind) {
+    if (!GEST_MS[kind]) return;
+    const pid = String(id).split('#')[0], t0 = performance.now();
+    const list = [...figs.values(), ...otherGroup.children].filter((f) => f.userData?.pid === pid && f.userData.arms && !f.userData.gone);
+    const L = live.get(pid); if (L?.fig) list.push(L.fig);
+    for (const f of list) { f.userData.gest = { k: kind, t0 }; gesturing.add(f); }
+    if (list.length) touch();
+  }
+  function gestStep(now) {
+    for (const f of gesturing) {
+      const u = f.userData, G = u.gest;
+      if (!G || !f.parent) { gesturing.delete(f); continue; }
+      const q = (now - G.t0) / GEST_MS[G.k], R = u.arms[1], Lh = u.arms[0];
+      if (q >= 1) { u.gest = null; gesturing.delete(f); for (const A of u.arms) { A.rotation.set(0, 0, 0); A.position.z = 0; } if (u.armY !== undefined) R.position.y = u.armY; continue; }
+      const a = Math.sin(q * Math.PI);
+      if (G.k === 'tap') { R.rotation.x = -0.3 * a - 0.35 * Math.abs(Math.sin(q * Math.PI * 2)) * a; R.position.z = 34 * a; }
+      else if (G.k === 'wave') { R.rotation.x = -0.6 * a; R.position.z = 26 * a; R.rotation.y = 0.5 * Math.sin(q * Math.PI * 4) * a; }
+      else if (G.k === 'push') { for (const A of u.arms) { A.rotation.x = -0.55 * a; A.position.z = 44 * a; } }
+      else if (G.k === 'fold') { R.rotation.x = -0.75 * a; R.position.z = 52 * a; R.rotation.y = -0.35 * a; }
+      else if (G.k === 'react') { R.rotation.x = -2.4 * a; Lh.rotation.x = -2.4 * a; R.rotation.z = 0.25 * Math.sin(q * Math.PI * 5) * a; Lh.rotation.z = -0.25 * Math.sin(q * Math.PI * 5) * a; }
+    }
+    return gesturing.size > 0;
+  }
+  // Where I am and where I look, in office numbers that every table's page shares (see presence.js).
+  // free: walking round or on the way to another table, so not at my place at this table.
+  const pP = new THREE.Vector3(), pD = new THREE.Vector3(), pQ = new THREE.Vector3();
+  function pose() {
+    if (!homeFit || window.__officeAway) return null;
+    camera.updateMatrixWorld();
+    const free = walking || !!walkOut || !!arrive;
+    camera.getWorldDirection(pD);
+    // Walking with the keys, the camera follows a little behind and above: you are where it looks along the floor.
+    if (walking && !walkOut && !arrive) pP.copy(cur.t); else camera.getWorldPosition(pP);
+    // Watching at the table without a place there: the camera may hang over the felt, but the body stands on the
+    // floor behind the padded rail, on the same side.
+    if (!free) { const dx = pP.x - CENTRE.x, dz = pP.z - CENTRE.z, d = Math.hypot(dx, dz) || 1, min = Math.max(W, H) / 2 + RAIL + 0.45 * S; if (d < min) { pP.x = CENTRE.x + (dx / d) * min; pP.z = CENTRE.z + (dz / d) * min; } }
+    pQ.copy(pP).addScaledVector(pD, S);
+    office.worldToLocal(pP); office.worldToLocal(pQ);
+    const fx = pQ.x - pP.x, fz = pQ.z - pP.z, l = Math.hypot(fx, fz) || 1;
+    return { x: pP.x, z: pP.z, fx: fx / l, fz: fz / l, p: Math.asin(Math.max(-1, Math.min(1, pD.y))), free };
+  }
+
   // Walking with the keys up to another table of the office takes you into it: that table's page is already open
   // in the office frame (or opens now), and you carry on from where you stand. Your seat here stays yours.
   let nearAt = 0;
@@ -2312,6 +2412,8 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     // The office is alive: redraw every frame while somebody walks, and about 12 times a second otherwise.
     if (liveTick(now)) dirty = Math.max(dirty, 1);
     if (!window.__officeAway && idleFigs(now)) dirty = Math.max(dirty, 1);
+    if (liveStep(now, dt)) dirty = Math.max(dirty, 2);
+    if (gestStep(now)) dirty = Math.max(dirty, 2);
     if (office.userData.tick?.(now) || now - ambAt > 80) { ambAt = now; dirty = Math.max(dirty, 1); }
     if (now - fpsAt >= 1000) { fps = Math.round((frames * 1000) / (now - fpsAt)); frames = 0; fpsAt = now; }
     if (moveKeys.size) {
@@ -2429,7 +2531,7 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     // That rule is only for the resting view from your chair. Once you turn your head, lean in or look up or down,
     // everybody is drawn, so nobody vanishes while you look at them from close by.
     const turned = Math.abs(cur.yaw) > 0.05 || Math.abs(cur.pitch) > 0.05 || cur.r < homeFit.r * 0.97;
-    for (const f of others) { f.updateMatrixWorld(); f.visible = !seated || !!tour || turned || side === 'dealer' || (brawl && (f === brawl.a || f === brawl.b)) || !(low(f, 0.35) || edge(f)); }
+    for (const f of others) { f.updateMatrixWorld(); f.visible = !f.userData.gone && (!seated || !!tour || turned || side === 'dealer' || (brawl && (f === brawl.a || f === brawl.b)) || !(low(f, 0.35) || edge(f))); }
     // The other players' stools in front of you would be drawn as big shapes across the bottom of the screen: left out the same way.
     if (stoolGroup && game === 'roulette') for (const st of stoolGroup.children) { if (st === myStool) continue; st.updateMatrixWorld(); const seat = st.children[0]; tmp.setFromMatrixPosition(seat.matrixWorld).project(camera); st.visible = !seated || !!tour || turned || side === 'dealer' || tmp.y > -0.55; }
     for (const r of racks) r.visible = true;
@@ -2562,6 +2664,12 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
       return true;
     },
     brawling: () => !!brawl,
+    pose,
+    hasPerson: (id) => !!lastPeople?.[0]?.some((p) => String(p.id).split('#')[0] === id),
+    livePose(id, s) { const L = live.get(id) || { s }; L.s = s; L.rx = performance.now(); live.set(id, L); touch(); },
+    liveGone(id) { dropLive(id); touch(); },
+    gesture,
+    liveInfo: () => [...live].map(([id, L]) => ({ id, at: L.s.at, fig: !!L.fig, pos: L.fig ? office.worldToLocal(L.fig.position.clone()).toArray().map((v) => Math.round(v * 100) / 100) : null, head: L.fig ? Math.round(L.fig.userData.headG.rotation.y * 100) / 100 : null, seatHead: [...figs.values(), ...otherGroup.children].filter((f) => f.userData?.pid === id).map((f) => ({ g: f.userData.g || game, gone: !!f.userData.gone, y: Math.round(f.userData.headG.rotation.y * 100) / 100, gest: f.userData.gest?.k || null })) })),
     dealCard() { for (const f of figs.values()) if (f.userData.isDealer) { f.userData.deal = 1; touch(); } },
     // For tests only: the drawing parts, so a test can look at one spot of the room.
     dbg: () => ({ gl, scene, camera, figs }),

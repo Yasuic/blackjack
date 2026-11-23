@@ -2,7 +2,6 @@
 // top left, and the link between the host's browser and the players' browsers.
 import { office, openTable } from './shell.js?v=20261122zv';
 import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122zv';
-import { cleanBox, cleanPiece } from './vault.js?v=20261122zv';
 export const params = new URLSearchParams(location.search);
 export const $ = (sel, el = document) => el.querySelector(sel);
 export function safeGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
@@ -413,8 +412,7 @@ export function createHost(peerId, on) {
         if (old && old !== conn) { try { old.close(); } catch {} }
         conn.pid = id; conns.set(id, conn);
       }
-      // A player's piece of the key to the hidden cards, asked for by a host that took the table over (js/vault.js). Direct links only.
-      if (m.t === 'piece') { if (conn.pid && !conn.relay) on.piece?.(conn.pid, cleanPiece(m.piece)); return; }
+      if (m.t === 'piece' || m.t === 'vault') return; // old pages: no part of the hidden cards is ever passed on
       if (conn.pid) on.msg(conn.pid, m);
     });
     const bye = () => { if (conn.pid && conns.get(conn.pid) === conn) { conns.delete(conn.pid); on.gone?.(conn.pid); } };
@@ -538,14 +536,8 @@ export function watchOffice(current, getCode, onPeople, onLedger = null) {
 }
 // A player's side. on: { msg(m), status(text, ok), open(), nohost() }. hello() gives the first message.
 export function createGuest(peerId, hello, on) {
-  // The locked copy of the table's hidden cards and this player's piece of its key (js/vault.js). The piece is
-  // handed only to a host that asks for it over a direct link, which happens after a host change.
-  let vbox = null, vpiece = null;
-  const vaultMsg = (m, c, direct) => {
-    if (m.t === 'vault') { vbox = cleanBox(m.box); vpiece = direct ? cleanPiece(m.piece) : null; return true; }
-    if (m.t === 'piece-ask') { if (direct && vpiece && vpiece.kid === m.kid) { try { c.send({ t: 'piece', piece: vpiece }); } catch {} } return true; }
-    return false;
-  };
+  // A table never passes on any part of its hidden cards; a 'vault' or 'piece-ask' from an old page is dropped.
+  const vaultMsg = (m) => m.t === 'vault' || m.t === 'piece-ask';
   let peer = null, conn = null, dead = false, tries = 0, timer = null, lastRx = 0, downAt = 0, relayBusy = false;
   const retry = () => { if (dead) return; clearTimeout(timer); timer = setTimeout(connect, Math.min(6000, 800 + tries++ * 700)); };
   const connect = () => {
@@ -605,7 +597,6 @@ export function createGuest(peerId, hello, on) {
   }, 1500);
   return {
     send(m) { if (conn && conn.open) { try { conn.send(m); return true; } catch {} } return false; },
-    vault: () => ({ box: vbox, piece: vpiece }),
     close() { dead = true; clearTimeout(timer); clearInterval(watch); try { conn?.close(); } catch {} try { peer?.destroy(); } catch {} },
   };
 }

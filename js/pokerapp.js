@@ -1,5 +1,6 @@
 // The poker page: a Texas Hold'em table for up to 9 in the big meeting room. The host's browser runs
 // the table (js/poker.js); every other browser sends its moves there and is told only what it may see.
+import { startPresence } from './presence.js?v=20261122zv';
 import { outerLink } from './shell.js?v=20261122zv';
 import { PokerTable, POKER_SEATS, pokerDeck, cardText, mpClientMoves, mpMine, mpCheck, bestHand, bestOmaha } from './poker.js?v=20261122zv';
 import { plainDeck, shufflePass, lockPass, checkDeck, keyFor } from './mental.js?v=20261122zv';
@@ -10,7 +11,6 @@ import { webglOK, initRoom } from './room3d.js?v=20261122zv';
 import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122zv';
 import { COPY_BTN, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML } from './common.js?v=20261122zv';
 
-import { shareHidden, startHold } from './vault.js?v=20261122zv';
 import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261122zv';
 const PREFIX = 'bjt-pk-';
 // A settings change by vote (js/vote.js): any player at the table may ask, every other player at the table who is online has to say yes.
@@ -121,10 +121,9 @@ function myKept(st) {
 function takeOver() {
   const st = S.st;
   if (!st || S.role !== 'guest') return;
-  const kept = S.net.vault?.();
   try { S.net.close(); } catch {}
   const oldHost = st.hostId, oldName = st.players.find((p) => p.id === oldHost)?.name || 'The host';
-  const hold = startHold(kept);
+  const hold = null; // nobody holds any part of the hidden cards: a host change means a new deck or shoe
   const finish = (text) => {
     if (S.role !== 'host' || S.hold !== hold) return;
     let t = null;
@@ -210,8 +209,6 @@ function watchHost() {
   void rank;
 }
 function hostMsg(id, m) {
-  // A host change is being settled: note who came back and ask for their piece of the key (js/vault.js).
-  if (S.hold) { if (m.t === 'hello') { S.hold.hellos[id] = m; S.net.send(id, { t: 'piece-ask', kid: S.hold.kid }); } return; }
   const t = S.table;
   if (!t) return;
   if (m.t === 'host-ask') { handOver(id); return; }
@@ -406,8 +403,6 @@ function push() {
   const t = S.table;
   if (!t) return;
   for (const id of S.net.ids()) S.net.send(id, { t: 'state', st: { ...t.publicState(id), vote: voteView(t, VOTE, id) } });
-  // The deck and the cards nobody else may see go along locked, so the same deck goes on if this browser leaves.
-  shareHidden(S, S.net, t.seats.filter((x) => x && x.id !== S.myId && !isBot(x.id) && t.players[x.id]?.connected).map((x) => x.id), t.hidden());
   S.st = { ...t.publicState(S.myId), vote: voteView(t, VOTE, S.myId) };
   mpLocal(S.st);
   keepMine(S.st);
@@ -553,6 +548,7 @@ function sendSeed() {
 }
 // A move of this browser: straight to the table for the host, over the link for everyone else.
 function send(m) {
+  S.live?.actFor(m); // my figure makes the move on everybody's screen (js/presence.js)
   if (S.hold) { toast('One moment: the table is moving to your browser.'); return; }
   if (S.role === 'host') { try { doMove(S.myId, m); } catch (e) { toast(e.message); } push(); }
   else if (!S.net?.send(m)) toast('Not connected to the host right now.');
@@ -1429,6 +1425,8 @@ addEventListener('resize', () => { clearTimeout(resizeT); resizeT = setTimeout(r
 // The other tables of the office: who plays there is drawn at their table in the room.
 S.others = {};
 watchOffice('poker', () => S.code, (g, list, view) => { (S.views ||= {})[g] = markMyTurn(g, view, S.myId); S.others[g] = list.filter((p) => p.id.split('#')[0] !== S.myId); S.room?.setOthers(S.others, S.views); });
+// Everyone in the office, live: where each person walks and looks, and the moves they make (js/presence.js).
+S.live = startPresence({ game: 'poker', room: () => S.room, code: () => S.code, me: () => ({ id: S.myId, name: S.name, look: getLook() }), at: () => !!S.room?.hasPerson(S.myId), phone: innerWidth < 700 });
 
 // "Connection dropped" notice and blocked buttons while this browser has no link to the table (common.js showDropped).
 setInterval(() => showDropped(!!S.hold || (S.role === 'guest' && !!S.st && !!S.conn && S.conn[1] === false && document.body.classList.contains('in-room')), S.hold ? "The table is moving to your browser. One moment…" : 'Your moves are not being sent. The table waits for the host. If the host is gone, you can take over.', S.hold ? null : becomeHost), 400);

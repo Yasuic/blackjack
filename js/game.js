@@ -1273,8 +1273,8 @@ export class Table {
       for (const i of active) {
         const seat = this.seats[i];
         const p = this.players[seat.playerId];
-        // Players who cannot afford it, or who are away, skip insurance.
-        if (p.chips < Math.ceil(seat.bet.main / 2) || !p.connected) seat.insuranceDecided = true;
+        // Players who are away skip insurance. One who is short can buy in more chips to pay for it.
+        if (!p.connected) seat.insuranceDecided = true;
       }
       if (this.allInsuranceDecided()) this.afterInsurance();
     } else {
