@@ -1,8 +1,8 @@
 // Shared by the poker and baccarat pages: small helpers, the playing card picture, the game switch at the
 // top left, and the link between the host's browser and the players' browsers.
-import { office, openTable } from './shell.js?v=20261122zn';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122zn';
-import { cleanBox, cleanPiece } from './vault.js?v=20261122zn';
+import { office, openTable } from './shell.js?v=20261122zo';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122zo';
+import { cleanBox, cleanPiece } from './vault.js?v=20261122zo';
 export const params = new URLSearchParams(location.search);
 export const $ = (sel, el = document) => el.querySelector(sel);
 export function safeGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
@@ -275,6 +275,31 @@ export function officeLedgerHTML(code, myId) {
       <div class="og-body">${officeGraphHTML(code, list.some((p) => p.id === myId) ? myId : list[0]?.id)}</div></div>
     <p class="hint">Each table keeps its own ledger, and each one adds up to zero. Chips you take to another table leave this one as cashed out, so your +/- per table stays the same. Updated: ${games.map((g) => `${GAMES[g].name} ${ago(o.games[g].t)}`).join(', ')}.</p>`;
 }
+// ---------- Copy a ledger ----------
+// A "Copy" button beside a ledger copies its table as plain text with tabs between the columns, so it pastes
+// cleanly into a chat or into Excel (one cell per value).
+export const COPY_BTN = '<button class="btn small office-btn" data-copy-ledger>📋 Copy</button>';
+export function ledgerText(table) {
+  return [...table.querySelectorAll('tr')].map((tr) => [...tr.children].map((td) => td.textContent.replace(/[♛·]/g, '').replace(/\s+/g, ' ').trim()).join('\t')).join('\n');
+}
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true; } catch { /* fall back below */ }
+  try {
+    const ta = document.createElement('textarea'); ta.value = text; ta.style.cssText = 'position:fixed;left:-9999px;top:0';
+    document.body.appendChild(ta); ta.select(); const ok = document.execCommand('copy'); ta.remove(); return ok;
+  } catch { return false; }
+}
+document.addEventListener('click', async (e) => {
+  const b = e.target.closest?.('[data-copy-ledger]');
+  if (!b) return;
+  e.preventDefault(); e.stopPropagation();
+  let el = b.parentElement, table = null;
+  while (el && !(table = el.querySelector('table'))) el = el.parentElement;
+  if (!table) return;
+  const ok = await copyText(ledgerText(table));
+  try { toast(ok ? 'Copied' : 'Could not copy'); } catch { /* fine */ }
+  const was = b.textContent; b.textContent = ok ? 'Copied' : 'Could not copy'; setTimeout(() => { b.textContent = was; }, 1500);
+}, true);
 export function showOffice(code, myId) {
   let d = document.getElementById('office-dlg');
   if (!d) {
@@ -282,7 +307,7 @@ export function showOffice(code, myId) {
     d.addEventListener('click', (e) => { if (e.target === d || e.target.closest('[data-office-close]')) d.close(); });
     document.body.appendChild(d);
   }
-  d.innerHTML = `<div class="office-body">${officeLedgerHTML(code, myId)}<button class="btn" data-office-close>Close</button></div>`;
+  d.innerHTML = `<div class="office-body">${officeLedgerHTML(code, myId)}${COPY_BTN}<button class="btn" data-office-close>Close</button></div>`;
   if (!d.open) d.showModal();
 }
 // Picking a player in the "All tables" view redraws that player's graph.
@@ -575,5 +600,5 @@ export function bankLedgerHTML(st, myId) {
   const rows = [...st.players].sort((a, b) => b.net - a.net);
   const cell = (n) => `<td class="${n > 0 ? 'up' : n < 0 ? 'down' : ''}">${n > 0 ? '+' : ''}${money(Math.round(n * 100) / 100)}</td>`;
   const sum = Math.round(rows.reduce((a, r) => a + r.net, 0) * 100) / 100;
-  return `<h3>Ledger${st.frozen ? ' (frozen)' : ''}</h3><div class="ledger-body"><table class="pk-table"><tr><th>Player</th><th>Bought in</th><th>Chips</th><th>+/-</th></tr>${rows.map((r) => { const b = st.frozen && r.base ? r.base : r; return `<tr class="${r.id === myId ? 'me' : ''}"><td>${esc(r.name)}${r.id === st.bankId ? ' (dealer)' : ''}</td><td>${money(b.totalIn)}</td><td>${money(b.chips)}</td>${cell(r.net)}</tr>`; }).join('')}<tr><td>Total</td><td></td><td></td>${cell(sum)}</tr></table><p class="hint">The +/- column counts only rounds played with a player as the dealer, so it always adds up to zero. Rounds against the house are practice and are left out${st.frozen ? '. The ledger is frozen now: the chips on the table are practice chips' : ''}.</p><button class="btn small office-btn" data-act="office">🏢 All tables</button></div>`;
+  return `<h3>Ledger${st.frozen ? ' (frozen)' : ''}</h3><div class="ledger-body"><table class="pk-table"><tr><th>Player</th><th>Bought in</th><th>Chips</th><th>+/-</th></tr>${rows.map((r) => { const b = st.frozen && r.base ? r.base : r; return `<tr class="${r.id === myId ? 'me' : ''}"><td>${esc(r.name)}${r.id === st.bankId ? ' (dealer)' : ''}</td><td>${money(b.totalIn)}</td><td>${money(b.chips)}</td>${cell(r.net)}</tr>`; }).join('')}<tr><td>Total</td><td></td><td></td>${cell(sum)}</tr></table><p class="hint">The +/- column counts only rounds played with a player as the dealer, so it always adds up to zero. Rounds against the house are practice and are left out${st.frozen ? '. The ledger is frozen now: the chips on the table are practice chips' : ''}.</p><button class="btn small office-btn" data-act="office">🏢 All tables</button>${COPY_BTN}</div>`;
 }

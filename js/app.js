@@ -1,17 +1,17 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { outerLink } from './shell.js?v=20261122zn';
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe } from './game.js?v=20261122zn';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122zn';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122zn';
-import { tickSound, winSound } from './fx.js?v=20261122zn';
-import * as HX from './history.js?v=20261122zn';
-import { webglOK, initRoom } from './room3d.js?v=20261122zn';
-import { autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261122zn';
-import { makeVault, makeOpener, cleanBox, cleanPiece } from './vault.js?v=20261122zn';
-import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122zn';
-import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122zn';
+import { outerLink } from './shell.js?v=20261122zo';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe } from './game.js?v=20261122zo';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122zo';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122zo';
+import { tickSound, winSound } from './fx.js?v=20261122zo';
+import * as HX from './history.js?v=20261122zo';
+import { webglOK, initRoom } from './room3d.js?v=20261122zo';
+import { COPY_BTN, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261122zo';
+import { makeVault, makeOpener, cleanBox, cleanPiece } from './vault.js?v=20261122zo';
+import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122zo';
+import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122zo';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -1746,7 +1746,7 @@ function renderLedger(st) {
       ${rows.map((r) => `<tr class="${r.id === S.myId ? 'me' : ''}"><td>${r.id === st.hostId ? '♛ ' : ''}${esc(r.name)}${r.kicked ? ' (left)' : r.connected ? '' : ' (away)'}${st.banker?.id === r.id ? ' (dealer)' : ''}</td><td>${money(r.totalIn)}</td><td>${money(r.chips)}</td><td>${pl(net(r))}</td></tr>`).join('')}
       <tr class="tot"><td>Table</td><td>${money(sumIn)}</td><td>${money(sumChips)}</td><td>${pl(rows.reduce((a, r) => a + net(r), 0))}</td></tr>
     </table>
-    <button class="btn small office-btn" data-act="office">🏢 All tables</button>
+    <button class="btn small office-btn" data-act="office">🏢 All tables</button>${COPY_BTN}
     <div class="hint">Bought in counts starting chips, buy-ins and chips the host gives or takes. The +/- column counts only hands played with a player as the dealer, so it always adds up to zero. Hands against the house are practice and are left out.</div></div>`;
 }
 
