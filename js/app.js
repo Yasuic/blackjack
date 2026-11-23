@@ -1,17 +1,17 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { outerLink } from './shell.js?v=20261122zi';
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe } from './game.js?v=20261122zi';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122zi';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122zi';
-import { tickSound, winSound } from './fx.js?v=20261122zi';
-import * as HX from './history.js?v=20261122zi';
-import { webglOK, initRoom } from './room3d.js?v=20261122zi';
-import { showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261122zi';
-import { makeVault, makeOpener, cleanBox, cleanPiece } from './vault.js?v=20261122zi';
-import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122zi';
-import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122zi';
+import { outerLink } from './shell.js?v=20261122zj';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe } from './game.js?v=20261122zj';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122zj';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122zj';
+import { tickSound, winSound } from './fx.js?v=20261122zj';
+import * as HX from './history.js?v=20261122zj';
+import { webglOK, initRoom } from './room3d.js?v=20261122zj';
+import { showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261122zj';
+import { makeVault, makeOpener, cleanBox, cleanPiece } from './vault.js?v=20261122zj';
+import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122zj';
+import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122zj';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -770,7 +770,14 @@ function fresh(countFn, fn) {
     S.spareKeys ||= [];
     const run = (keys) => {
       t.keys = S.spareKeys.concat(keys || []);
-      try { fn(); } finally { S.spareKeys = t.keys || []; t.keys = null; res(); } // keys a step did not use open the next cards
+      try { fn(); } finally {
+        // A key the step did not use is burned at once, face up, so no key ever waits on a card nobody has seen.
+        let burned = 0;
+        try { while (S.table === t && t.keys?.length && t.burnCard()) burned++; } catch { /* fine */ }
+        S.spareKeys = t.keys || []; t.keys = null;
+        if (burned) { try { hostChanged(); } catch { /* fine */ } }
+        res();
+      }
     };
     const need = count - S.spareKeys.length;
     if (need <= 0) return run([]);

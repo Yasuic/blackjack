@@ -413,6 +413,17 @@ export class Table {
     this.runCount = (this.runCount || 0) + hiLo(c);
     return c;
   }
+  // A card key a step could not use (the move it was asked for did not happen, for example a hit after the turn
+  // clock had already stood the hand) is never kept for later: its card is burned, face up for everyone, like a
+  // dealer burns a card. So every key a guest gives out opens a card the whole table sees within moments.
+  burnCard() {
+    if (!this.keys?.length || !this.shoe.length || !this.fair?.current) return null;
+    const c = this.pick();
+    (this.burned ||= []).push(c);
+    if (this.burned.length > 20) this.burned.shift();
+    this.addLog(`Burned card: ${c.r}${c.s} (its key was not needed).`);
+    return c;
+  }
   // Take one card out of the shoe. The shoe order is set once, at the shuffle, by two things: the
   // host's hidden seed and a secret that stays in one guest's browser. Card number k needs key
   // number k from that guest (this.keys), and the keys are fixed by the guest's secret, so the
