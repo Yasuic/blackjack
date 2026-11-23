@@ -1,6 +1,6 @@
 // Top bar tools shared by every game: the card size slider, the "Session profit" readout and the volume sliders.
 // All of it is each player's own view; the browser remembers the choices.
-import { getVolume, setVolume, isMuted, setMuted, shoutSound, chipSound, throwSound } from './fx.js?v=20261122zr';
+import { getVolume, setVolume, isMuted, setMuted, shoutSound, chipSound, throwSound } from './fx.js?v=20261122zs';
 
 const SIZE_KEY = 'bj-cardz', MIN = 60, MAX = 160;
 let size = 100, onSize = null, useCss = false, bound = false;
@@ -9,6 +9,8 @@ try { const v = Number(localStorage.getItem(SIZE_KEY)); if (v >= MIN && v <= MAX
 // 1 is the normal card size.
 export function cardScale() { return size / 100; }
 
+// Sound has one place only: these sliders. An old "Sound: off" from the menu becomes "All sounds" at 0.
+try { if (isMuted()) { setVolume('main', 0); setMuted(false); } } catch { /* fine */ }
 const SLIDERS = [['main', 'All sounds'], ['game', 'Cards and chips'], ['fx', 'Effects'], ['horn', 'Horns and shouts']];
 export function topToolsHTML() {
   const v = getVolume();

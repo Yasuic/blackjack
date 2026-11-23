@@ -1,8 +1,8 @@
 // Shared by the poker and baccarat pages: small helpers, the playing card picture, the game switch at the
 // top left, and the link between the host's browser and the players' browsers.
-import { office, openTable } from './shell.js?v=20261122zr';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122zr';
-import { cleanBox, cleanPiece } from './vault.js?v=20261122zr';
+import { office, openTable } from './shell.js?v=20261122zs';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122zs';
+import { cleanBox, cleanPiece } from './vault.js?v=20261122zs';
 export const params = new URLSearchParams(location.search);
 export const $ = (sel, el = document) => el.querySelector(sel);
 export function safeGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
@@ -139,6 +139,22 @@ export function autoUpdate(game, idle) {
   };
   setInterval(check, 120000);
 }
+// Sliders: the part left of the knob is gold and the rest dark (style.css, --p). At 0 nothing is gold, the knob
+// included, so a slider turned all the way down looks off. Every range input on every page, also ones drawn later.
+function paintRange(el) {
+  const min = Number(el.min) || 0, max = Number(el.max) || 100, v = Number(el.value);
+  const p = max > min ? Math.max(0, Math.min(100, ((v - min) / (max - min)) * 100)) : 0;
+  el.style.setProperty('--p', p + '%');
+  el.classList.toggle('at-zero', v <= 0);
+}
+try {
+  const all = () => { for (const el of document.querySelectorAll('input[type=range]')) paintRange(el); };
+  document.addEventListener('input', (e) => { if (e.target?.type === 'range') paintRange(e.target); }, true);
+  let queued = false;
+  new MutationObserver(() => { if (queued) return; queued = true; requestAnimationFrame(() => { queued = false; all(); }); }).observe(document.documentElement, { childList: true, subtree: true });
+  setInterval(all, 1500); // a value set by code (Reset, another tab) shows within moments
+  all();
+} catch { /* fine */ }
 // Turn the phone upright: a hint that fills short landscape screens (styled in style.css). Added once per page.
 try {
   if (!document.getElementById('rotate-hint')) {

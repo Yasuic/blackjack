@@ -1,17 +1,17 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { outerLink } from './shell.js?v=20261122zr';
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe } from './game.js?v=20261122zr';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122zr';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122zr';
-import { tickSound, winSound } from './fx.js?v=20261122zr';
-import * as HX from './history.js?v=20261122zr';
-import { webglOK, initRoom } from './room3d.js?v=20261122zr';
-import { COPY_BTN, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261122zr';
-import { makeVault, makeOpener, cleanBox, cleanPiece } from './vault.js?v=20261122zr';
-import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122zr';
-import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122zr';
+import { outerLink } from './shell.js?v=20261122zs';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe } from './game.js?v=20261122zs';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122zs';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122zs';
+import { tickSound, winSound } from './fx.js?v=20261122zs';
+import * as HX from './history.js?v=20261122zs';
+import { webglOK, initRoom } from './room3d.js?v=20261122zs';
+import { COPY_BTN, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261122zs';
+import { makeVault, makeOpener, cleanBox, cleanPiece } from './vault.js?v=20261122zs';
+import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122zs';
+import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122zs';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -1398,7 +1398,6 @@ function buildLayout() {
             <button class="menu-item" data-act="hints" id="hints-btn">${hintsOn() ? '💡 Strategy hints: on' : '💡 Strategy hints: off'}</button>
             <button class="menu-item" data-act="room3d">${use3D() ? '🧊 3D room: on' : '🧊 3D room: off'}</button>
             ${use3D() ? `<button class="menu-item" data-act="pixel">${pixelOn() ? '👾 Pixel look: on' : '👾 Pixel look: off'}</button>` : ''}
-            <button class="menu-item" data-act="mute" id="mute-btn">${isMuted() ? '🔇 Sound: off' : '🔊 Sound: on'}</button>
             <button class="menu-item" data-act="keys">⌨️ Keyboard keys</button>`)}
           ${host ? `
           ${fold('m-round', '🃏 Round', '<div id="host-round"></div>')}
