@@ -1076,6 +1076,7 @@ export class Table {
   startBetting() {
     if (this.phase !== 'settled' && this.phase !== 'betting') return;
     this.phase = 'betting';
+    this.ledgerHold = null;
     this.dealer = { cards: [], revealed: false };
     this.turn = null;
     for (let i = 0; i < this.seats.length; i++) {
@@ -1218,6 +1219,8 @@ export class Table {
     const f = this.fair;
     const fresh = f?.current && this.shoe.length === this.shoeSize && Object.keys(f.next.seeds).some((k) => f.current.clientSeeds[k] === undefined);
     if (this.needsShuffle(playing) || fresh || this.shuffleNext) this.newShoe();
+    // The ledger shows each player as they stood before this hand until the hand is settled (no change mid hand).
+    this.ledgerHold = Object.fromEntries(Object.values(this.players).map((p) => [p.id, { chips: p.chips, totalIn: p.totalIn ?? this.settings.startChips, houseNet: p.houseNet || 0 }]));
     this.round++;
     this.roundsSinceShuffle++;
     const active = [];
@@ -1594,6 +1597,7 @@ export class Table {
     }
     this.practiceRound = !this.banker;
     this.phase = 'settled';
+    this.ledgerHold = null;
     this.rabbit = true; // the next card can be shown until the first bet of the next round
     if (this.bankerLeaving) {
       // The dealer asked to stop after this round. A dealer who owes chips stays until they are covered.
@@ -1708,7 +1712,7 @@ export class Table {
         running: (this.runCount || 0) - (hide && hole ? hiLo(hole) : 0),
         decksLeft: (this.shoe.length + (hide && hole ? 1 : 0)) / 52,
       },
-      ledger: Object.values(this.players).map((p) => ({ id: p.id, name: p.name, totalIn: p.totalIn ?? this.settings.startChips, chips: p.chips, houseNet: p.houseNet || 0, connected: p.connected, kicked: !!p.kicked })),
+      ledger: Object.values(this.players).map((p) => { const h = this.inRound() && this.ledgerHold?.[p.id]; return { id: p.id, name: p.name, totalIn: h ? h.totalIn : p.totalIn ?? this.settings.startChips, chips: h ? h.chips : p.chips, houseNet: h ? h.houseNet : p.houseNet || 0, connected: p.connected, kicked: !!p.kicked }; }),
       buyIns: (this.buyIns || []).filter((b) => b.playerId === forClientId).map((b) => ({ id: b.id, amount: b.amount })),
       halted: !!this.halted,
       fair: this.fair && {
@@ -1728,8 +1732,8 @@ export class Table {
 
   // Save and restore so the host can refresh the page without losing the table.
   toJSON() {
-    const { settings, seats, players, phase, dealer, turn, round, roundsSinceShuffle, log, shoe, shoeSize, banker, bankerNet, pendingBanker, buyIns, runCount, hostId, pendingSettings, frozen, fair, hist, evts, created, frozenSnap, shuffleNext, bankerLeaving, halted } = this;
-    return { settings, seats, players, phase, dealer, turn, round, roundsSinceShuffle, log, shoe: packShoe(shoe), shoeSize, banker, bankerNet, pendingBanker, buyIns, runCount, hostId, pendingSettings, frozen, fair, hist, evts, created, frozenSnap, shuffleNext, bankerLeaving, halted };
+    const { settings, seats, players, phase, dealer, turn, round, roundsSinceShuffle, log, shoe, shoeSize, banker, bankerNet, pendingBanker, buyIns, runCount, hostId, pendingSettings, frozen, fair, hist, evts, created, frozenSnap, shuffleNext, bankerLeaving, halted, ledgerHold } = this;
+    return { settings, seats, players, phase, dealer, turn, round, roundsSinceShuffle, log, shoe: packShoe(shoe), shoeSize, banker, bankerNet, pendingBanker, buyIns, runCount, hostId, pendingSettings, frozen, fair, hist, evts, created, frozenSnap, shuffleNext, bankerLeaving, halted, ledgerHold };
   }
   static fromJSON(obj) {
     const t = new Table(obj.settings);

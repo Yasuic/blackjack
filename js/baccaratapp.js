@@ -1,14 +1,14 @@
 // The baccarat page: a punto banco table for up to 9 in the small meeting room. The host's browser runs
 // the table (js/baccarat.js); every other browser sends its bets there and is told only what it may see.
-import { outerLink } from './shell.js?v=20261122zk';
-import { BacTable, BAC_SEATS, BAC_SPOTS, BAC_KEYS, verifyShoe, cardText } from './baccarat.js?v=20261122zk';
-import { webglOK, initRoom } from './room3d.js?v=20261122zk';
-import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122zk';
-import { showDropped, markMyTurn, onOfficeBack, setSeated, officeView, params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML, breachCover } from './common.js?v=20261122zk';
-import { KeyGuard, mixKeys, newNonce } from './cardkeys.js?v=20261122zk';
+import { outerLink } from './shell.js?v=20261122zl';
+import { BacTable, BAC_SEATS, BAC_SPOTS, BAC_KEYS, verifyShoe, cardText } from './baccarat.js?v=20261122zl';
+import { webglOK, initRoom } from './room3d.js?v=20261122zl';
+import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122zl';
+import { showDropped, markMyTurn, onOfficeBack, setSeated, officeView, params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML, breachCover } from './common.js?v=20261122zl';
+import { KeyGuard, mixKeys, newNonce } from './cardkeys.js?v=20261122zl';
 
-import { shareHidden, startHold } from './vault.js?v=20261122zk';
-import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261122zk';
+import { shareHidden, startHold } from './vault.js?v=20261122zl';
+import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261122zl';
 const PREFIX = 'bjt-bc-';
 // A settings change by vote (js/vote.js): any player at the table may ask, every other player at the table who is online has to say yes.
 const VOTE = {
@@ -162,6 +162,7 @@ function showFx(fromId, e) {
   setTimeout(() => el.remove(), 2300);
 }
 function push() {
+  if (S.hostWait && S.table && S.role === 'host' && !S.handing) { const t = S.table; if (!(t.phase === 'peel')) { const id = S.hostWait; S.hostWait = null; setTimeout(() => { if (S.table?.players[id]) handOver(id); }, 0); } }
   const t = S.table;
   if (!t) return;
   t.keyed = true; // cards are drawn only when their keys are here (feed below)
@@ -298,7 +299,7 @@ function startGuest(code, again) {
         S.st = m.st; S.at = Date.now(); S.nohost = false; lockCheck(m.st); render(); sendSeed();
       }
       else if (m.t === 'key-req') S.net.send({ t: 'keys', rid: m.rid, keys: serveKeys(m) });
-      else if (m.t === 'err') toast(m.msg);
+      else if (m.t === 'err') { if (m.wait) clearTimeout(S.askT); toast(m.msg); }
       else if (m.t === 'cashed') gotCashed(m);
       else if (m.t === 'host-give') takeGiven(m);
       else if (m.t === 'fx') showFx(m.from, m.e);
@@ -317,6 +318,9 @@ function startGuest(code, again) {
 function handOver(id) {
   const t = S.table, p = t?.players[id];
   if (!p || S.handing || S.hold) { S.net.send(id, { t: 'err', msg: S.hold ? 'The table is still moving. Try again in a few seconds.' : 'Someone else is taking over right now.' }); return; }
+  // Never in the middle of a hand: the table moves once this one is over (push runs it then).
+  if (t.phase === 'peel') { S.hostWait = id; S.net.send(id, { t: 'err', msg: 'You become the host when this hand ends.', wait: true }); return; }
+  S.hostWait = null;
   S.handing = true;
   t.addLog(`${p.name} took over as host. The table now runs in ${p.name}'s browser.`);
   push();
@@ -341,7 +345,8 @@ function takeGiven(m) {
   safeSet('bc-host', String(m.saved));
   try { S.net.close(); } catch {}
   S.retakeUntil = Date.now() + 20000;
-  setTimeout(() => { S.taking = false; startHost(S.code, true); toast('You are the host now: keep this tab open.'); }, 2500);
+  // A new host always means a new shoe (the old host's browser knew the order). Between hands only.
+  setTimeout(() => { S.taking = false; startHost(S.code, true); if (S.table && S.table.phase !== 'peel') { S.table.newShoe(); push(); } toast('You are the host now: keep this tab open.'); }, 2500);
 }
 function becomeHost() {
   if (S.role !== 'guest' || S.taking) return;

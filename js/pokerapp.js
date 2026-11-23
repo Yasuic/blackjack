@@ -1,17 +1,17 @@
 // The poker page: a Texas Hold'em table for up to 9 in the big meeting room. The host's browser runs
 // the table (js/poker.js); every other browser sends its moves there and is told only what it may see.
-import { outerLink } from './shell.js?v=20261122zk';
-import { PokerTable, POKER_SEATS, pokerDeck, cardText, mpClientMoves, mpMine, mpCheck, bestHand, bestOmaha } from './poker.js?v=20261122zk';
-import { plainDeck, shufflePass, lockPass, checkDeck, keyFor } from './mental.js?v=20261122zk';
-import { sha256 } from './game.js?v=20261122zk';
-import { botMove, isBot, BOT_NAMES } from './pokerbot.js?v=20261122zk';
-import { chipSound, cardSound, hitSound, standSound, potSound, tickSound, turnSound, punchSound } from './fx.js?v=20261122zk';
-import { webglOK, initRoom } from './room3d.js?v=20261122zk';
-import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122zk';
-import { showDropped, markMyTurn, onOfficeBack, setSeated, officeView, params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML } from './common.js?v=20261122zk';
+import { outerLink } from './shell.js?v=20261122zl';
+import { PokerTable, POKER_SEATS, pokerDeck, cardText, mpClientMoves, mpMine, mpCheck, bestHand, bestOmaha } from './poker.js?v=20261122zl';
+import { plainDeck, shufflePass, lockPass, checkDeck, keyFor } from './mental.js?v=20261122zl';
+import { sha256 } from './game.js?v=20261122zl';
+import { botMove, isBot, BOT_NAMES } from './pokerbot.js?v=20261122zl';
+import { chipSound, cardSound, hitSound, standSound, potSound, tickSound, turnSound, punchSound } from './fx.js?v=20261122zl';
+import { webglOK, initRoom } from './room3d.js?v=20261122zl';
+import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122zl';
+import { showDropped, markMyTurn, onOfficeBack, setSeated, officeView, params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML } from './common.js?v=20261122zl';
 
-import { shareHidden, startHold } from './vault.js?v=20261122zk';
-import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261122zk';
+import { shareHidden, startHold } from './vault.js?v=20261122zl';
+import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261122zl';
 const PREFIX = 'bjt-pk-';
 // A settings change by vote (js/vote.js): any player at the table may ask, every other player at the table who is online has to say yes.
 const VOTE = {
@@ -163,6 +163,9 @@ function takeOver() {
 function handOver(id) {
   const t = S.table, p = t?.players[id];
   if (!p || S.handing || S.hold) { S.net.send(id, { t: 'err', msg: S.hold ? 'The table is still moving. Try again in a few seconds.' : 'Someone else is taking over right now.' }); return; }
+  // Never in the middle of a hand: the table moves once this one is over (push runs it then).
+  if (t.inHand()) { S.hostWait = id; S.net.send(id, { t: 'err', msg: 'You become the host when this hand ends.', wait: true }); return; }
+  S.hostWait = null;
   S.handing = true;
   t.addLog(`${p.name} took over as host. The table now runs in ${p.name}'s browser.`);
   push();
@@ -399,6 +402,7 @@ async function dealHand() {
   finally { S.mpBusy = false; t.shuffling = false; push(); }
 }
 function push() {
+  if (S.hostWait && S.table && S.role === 'host' && !S.handing) { const t = S.table; if (!(t.inHand())) { const id = S.hostWait; S.hostWait = null; setTimeout(() => { if (S.table?.players[id]) handOver(id); }, 0); } }
   const t = S.table;
   if (!t) return;
   for (const id of S.net.ids()) S.net.send(id, { t: 'state', st: { ...t.publicState(id), vote: voteView(t, VOTE, id) } });
@@ -529,7 +533,7 @@ function startGuest(code, again) {
         if (S.st && st.hostId !== S.st.hostId) toast(`The table now runs in ${st.players.find((p) => p.id === st.hostId)?.name || 'another player'}'s browser.`);
         S.st = st; mpLocal(st); keepMine(st); S.at = Date.now(); S.nohost = false; render(); sendSeed();
       }
-      else if (m.t === 'err') toast(m.msg);
+      else if (m.t === 'err') { if (m.wait) clearTimeout(S.askT); toast(m.msg); }
       else if (m.t === 'mp-step') mpStep(m);
       else if (m.t === 'cashed') gotCashed(m);
       else if (m.t === 'host-give') takeGiven(m);

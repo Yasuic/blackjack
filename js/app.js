@@ -1,17 +1,17 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { outerLink } from './shell.js?v=20261122zk';
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe } from './game.js?v=20261122zk';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122zk';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122zk';
-import { tickSound, winSound } from './fx.js?v=20261122zk';
-import * as HX from './history.js?v=20261122zk';
-import { webglOK, initRoom } from './room3d.js?v=20261122zk';
-import { showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261122zk';
-import { makeVault, makeOpener, cleanBox, cleanPiece } from './vault.js?v=20261122zk';
-import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122zk';
-import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122zk';
+import { outerLink } from './shell.js?v=20261122zl';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe } from './game.js?v=20261122zl';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122zl';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122zl';
+import { tickSound, winSound } from './fx.js?v=20261122zl';
+import * as HX from './history.js?v=20261122zl';
+import { webglOK, initRoom } from './room3d.js?v=20261122zl';
+import { showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261122zl';
+import { makeVault, makeOpener, cleanBox, cleanPiece } from './vault.js?v=20261122zl';
+import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122zl';
+import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122zl';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -507,6 +507,9 @@ function handHostTo(conn) {
   if (!p) return no('Join the table first.');
   if (S.hold) return no('The table is still moving to a new host. Try again in a few seconds.');
   if (S.handing) return no('Someone else is taking over right now.');
+  // Never in the middle of a hand: the table moves once this round is over (hostChanged runs it then).
+  if (S.table.inRound()) { S.hostWait = id; return no(`You become the host when this round ends.`); }
+  S.hostWait = null;
   S.handing = true;
   const gen = (S.gen || 0) + 1;
   S.table.addLog(`${p.name} took over as host. The table now runs in ${p.name}'s browser.`);
@@ -537,6 +540,8 @@ function takeHost(msg) {
     peer.removeAllListeners('error');
     for (const x of Object.values(table.players)) { x.connected = false; x.gone = false; }
     table.join(S.myId, S.name, S.buyIn, S.look);
+    // A new host always means a new shoe (the old host's browser knew the order). Between rounds only.
+    if (!table.inRound() && table.fair?.current) table.newShoe();
     table.vote = null; table.hist = []; table.evts = []; table.created = null;
     if (table.inRound()) for (const x of Object.values(table.players)) if (x.id !== S.myId && !x.kicked) awayClock(x.id);
     try { S.conn?.close(); } catch {}
@@ -872,6 +877,7 @@ function hostDo(fn) {
 
 function hostChanged() {
   const t = S.table;
+  if (S.hostWait && t && !t.inRound() && !S.handing) { const c = S.conns?.[S.hostWait]; S.hostWait = null; if (c?.open) setTimeout(() => handHostTo(c), 0); }
   // The dealer draws one card at a time so everyone can watch.
   if (t.phase === 'dealer' && !S.dealerTimer) {
     const step = () => fresh((tb) => (tb.dealerNeedsCard() ? 1 : 0), () => {
@@ -886,7 +892,7 @@ function hostChanged() {
   if (t.phase === 'settled' && !S.clearTimer) {
     S.clearTimer = setTimeout(() => {
       S.clearTimer = null;
-      if (S.table.phase === 'settled') hostDo((tb) => tb.startBetting());
+      if (S.role === 'host' && S.table?.phase === 'settled') hostDo((tb) => tb.startBetting());
     }, 4500);
   }
   // Auto deal once every seated, connected player has pressed Ready.

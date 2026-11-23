@@ -4,7 +4,7 @@
 // needed to put the key together again. One piece, or any group of half the players or fewer, learns nothing.
 // When the host's browser goes away, the next host collects the pieces from the players who come back and opens
 // the locked copy, so the game goes on with the same cards in the same order.
-import { sha256 } from './game.js?v=20261122zk';
+import { sha256 } from './game.js?v=20261122zl';
 
 const hex = (bytes) => Array.from(bytes, (x) => x.toString(16).padStart(2, '0')).join('');
 const unhex = (s) => { const out = new Uint8Array(s.length >> 1); for (let i = 0; i < out.length; i++) out[i] = parseInt(s.substr(i * 2, 2), 16); return out; };
@@ -16,6 +16,7 @@ function rand(n) {
 function mul(a, b) { let p = 0; for (let i = 0; i < 8; i++) { if (b & 1) p ^= a; const hi = a & 0x80; a = (a << 1) & 0xff; if (hi) a ^= 0x1b; b >>= 1; } return p; }
 function inv(a) { let r = 1; for (let i = 0; i < 254; i++) r = mul(r, a); return r; }
 
+const VAULT_ON = false;
 export const piecesNeeded = (n) => Math.floor(n / 2) + 1; // more than half
 export function newKey() { return { kid: hex(rand(6)), key: hex(rand(32)) }; }
 // Cut a key into n pieces; any `need` of them give the key back. Piece number i (from 1) is the i-th entry.
@@ -75,7 +76,10 @@ export function makeVault() {
       const ids = [...holderIds].sort(), tag = ids.join(',');
       if (tag !== forIds) {
         forIds = tag; pieces = {}; last = ''; k = null;
-        if (ids.length >= 2) { k = newKey(); need = piecesNeeded(ids.length); const ys = splitKey(k.key, ids.length, need); ids.forEach((id, i) => { pieces[id] = { kid: k.kid, x: i + 1, y: ys[i], need }; }); }
+        // Turned off (2026-11-23): one person with several guest browsers held enough pieces to open the hidden
+        // part (the dealer's face down card and the shoe) during play. No pieces are handed out any more; a forced
+        // take over deals on from a fresh shuffle, and a hand already started still plays to its real result.
+        if (VAULT_ON && ids.length >= 2) { k = newKey(); need = piecesNeeded(ids.length); const ys = splitKey(k.key, ids.length, need); ids.forEach((id, i) => { pieces[id] = { kid: k.kid, x: i + 1, y: ys[i], need }; }); }
       }
       if (!k) return { box: null, piece: () => null, changed: last !== 'none' && ((last = 'none'), true) };
       const changed = hiddenText !== last;

@@ -1,14 +1,14 @@
 // The roulette page: a European roulette table for up to 9 in Nigel's room. The host's browser runs
 // the table (js/roulette.js); every other browser sends its bets there and is told only what it may see.
-import { outerLink } from './shell.js?v=20261122zk';
-import { RouTable, ROU_SEATS, WHEEL, colorOf, betNumbers, betName, betPays, verifySpin } from './roulette.js?v=20261122zk';
-import { showSpin, drawWheel as paintWheel, wheelState } from './wheel.js?v=20261122zk';
-import { winSound } from './fx.js?v=20261122zk';
-import { webglOK, initRoom } from './room3d.js?v=20261122zk';
-import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122zk';
-import { showDropped, markMyTurn, onOfficeBack, setSeated, officeView, params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML } from './common.js?v=20261122zk';
+import { outerLink } from './shell.js?v=20261122zl';
+import { RouTable, ROU_SEATS, WHEEL, colorOf, betNumbers, betName, betPays, verifySpin } from './roulette.js?v=20261122zl';
+import { showSpin, drawWheel as paintWheel, wheelState } from './wheel.js?v=20261122zl';
+import { winSound } from './fx.js?v=20261122zl';
+import { webglOK, initRoom } from './room3d.js?v=20261122zl';
+import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122zl';
+import { showDropped, markMyTurn, onOfficeBack, setSeated, officeView, params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML } from './common.js?v=20261122zl';
 
-import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261122zk';
+import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261122zl';
 const PREFIX = 'bjt-ro-';
 // A settings change by vote (js/vote.js): any player at the table may ask, every other player at the table who is online has to say yes.
 const VOTE = {
@@ -157,6 +157,7 @@ function showFx(fromId, e) {
   setTimeout(() => el.remove(), 2300);
 }
 function push() {
+  if (S.hostWait && S.table && S.role === 'host' && !S.handing) { const t = S.table; if (!(t.phase === 'closing')) { const id = S.hostWait; S.hostWait = null; setTimeout(() => { if (S.table?.players[id]) handOver(id); }, 0); } }
   const t = S.table;
   if (!t) return;
   for (const id of S.net.ids()) S.net.send(id, { t: 'state', st: { ...t.publicState(id), vote: voteView(t, VOTE, id) } });
@@ -195,7 +196,7 @@ function startGuest(code, again) {
         if (S.st && m.st.hostId !== S.st.hostId) toast(`The table now runs in ${m.st.players.find((p) => p.id === m.st.hostId)?.name || 'another player'}'s browser.`);
         S.st = m.st; S.at = Date.now(); S.nohost = false; render(); sendSeed();
       }
-      else if (m.t === 'err') toast(m.msg);
+      else if (m.t === 'err') { if (m.wait) clearTimeout(S.askT); toast(m.msg); }
       else if (m.t === 'cashed') gotCashed(m);
       else if (m.t === 'host-give') takeGiven(m);
       else if (m.t === 'fx') showFx(m.from, m.e);
@@ -213,6 +214,9 @@ function startGuest(code, again) {
 function handOver(id) {
   const t = S.table, p = t?.players[id];
   if (!p || S.handing || S.hold) { S.net.send(id, { t: 'err', msg: S.hold ? 'The table is still moving. Try again in a few seconds.' : 'Someone else is taking over right now.' }); return; }
+  // Never in the middle of a hand: the table moves once this one is over (push runs it then).
+  if (t.phase === 'closing') { S.hostWait = id; S.net.send(id, { t: 'err', msg: 'You become the host when this hand ends.', wait: true }); return; }
+  S.hostWait = null;
   S.handing = true;
   t.addLog(`${p.name} took over as host. The table now runs in ${p.name}'s browser.`);
   push();
