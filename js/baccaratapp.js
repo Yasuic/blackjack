@@ -1,23 +1,14 @@
 // The baccarat page: a punto banco table for up to 9 in the small meeting room. The host's browser runs
 // the table (js/baccarat.js); every other browser sends its bets there and is told only what it may see.
-<<<<<<< Updated upstream
-import { outerLink } from './shell.js?v=20261122zm';
-import { BacTable, BAC_SEATS, BAC_SPOTS, BAC_KEYS, verifyShoe, cardText } from './baccarat.js?v=20261122zm';
-import { webglOK, initRoom } from './room3d.js?v=20261122zm';
-import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122zm';
-import { showDropped, markMyTurn, onOfficeBack, setSeated, officeView, params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML, breachCover } from './common.js?v=20261122zm';
-import { KeyGuard, mixKeys, newNonce } from './cardkeys.js?v=20261122zm';
-=======
-import { outerLink } from './shell.js?v=20261122zm';
-import { BacTable, BAC_SEATS, BAC_SPOTS, BAC_KEYS, verifyShoe, cardText } from './baccarat.js?v=20261122zm';
-import { webglOK, initRoom } from './room3d.js?v=20261122zm';
-import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122zm';
-import { autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML, breachCover } from './common.js?v=20261122zm';
-import { KeyGuard, mixKeys, newNonce } from './cardkeys.js?v=20261122zm';
->>>>>>> Stashed changes
+import { outerLink } from './shell.js?v=20261122zn';
+import { BacTable, BAC_SEATS, BAC_SPOTS, BAC_KEYS, verifyShoe, cardText } from './baccarat.js?v=20261122zn';
+import { webglOK, initRoom } from './room3d.js?v=20261122zn';
+import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122zn';
+import { autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML, breachCover } from './common.js?v=20261122zn';
+import { KeyGuard, mixKeys, newNonce } from './cardkeys.js?v=20261122zn';
 
-import { shareHidden, startHold } from './vault.js?v=20261122zm';
-import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261122zm';
+import { shareHidden, startHold } from './vault.js?v=20261122zn';
+import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261122zn';
 const PREFIX = 'bjt-bc-';
 // A settings change by vote (js/vote.js): any player at the table may ask, every other player at the table who is online has to say yes.
 const VOTE = {

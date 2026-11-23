@@ -1,29 +1,17 @@
 // The poker page: a Texas Hold'em table for up to 9 in the big meeting room. The host's browser runs
 // the table (js/poker.js); every other browser sends its moves there and is told only what it may see.
-<<<<<<< Updated upstream
-import { outerLink } from './shell.js?v=20261122zm';
-import { PokerTable, POKER_SEATS, pokerDeck, cardText, mpClientMoves, mpMine, mpCheck, bestHand, bestOmaha } from './poker.js?v=20261122zm';
-import { plainDeck, shufflePass, lockPass, checkDeck, keyFor } from './mental.js?v=20261122zm';
-import { sha256 } from './game.js?v=20261122zm';
-import { botMove, isBot, BOT_NAMES } from './pokerbot.js?v=20261122zm';
-import { chipSound, cardSound, hitSound, standSound, potSound, tickSound, turnSound, punchSound } from './fx.js?v=20261122zm';
-import { webglOK, initRoom } from './room3d.js?v=20261122zm';
-import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122zm';
-import { showDropped, markMyTurn, onOfficeBack, setSeated, officeView, params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML } from './common.js?v=20261122zm';
-=======
-import { outerLink } from './shell.js?v=20261122zm';
-import { PokerTable, POKER_SEATS, pokerDeck, cardText, mpClientMoves, mpMine, mpCheck, bestHand, bestOmaha } from './poker.js?v=20261122zm';
-import { plainDeck, shufflePass, lockPass, checkDeck, keyFor } from './mental.js?v=20261122zm';
-import { sha256 } from './game.js?v=20261122zm';
-import { botMove, isBot, BOT_NAMES } from './pokerbot.js?v=20261122zm';
-import { chipSound, cardSound, hitSound, standSound, potSound, tickSound, turnSound, punchSound } from './fx.js?v=20261122zm';
-import { webglOK, initRoom } from './room3d.js?v=20261122zm';
-import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122zm';
-import { autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML } from './common.js?v=20261122zm';
->>>>>>> Stashed changes
+import { outerLink } from './shell.js?v=20261122zn';
+import { PokerTable, POKER_SEATS, pokerDeck, cardText, mpClientMoves, mpMine, mpCheck, bestHand, bestOmaha } from './poker.js?v=20261122zn';
+import { plainDeck, shufflePass, lockPass, checkDeck, keyFor } from './mental.js?v=20261122zn';
+import { sha256 } from './game.js?v=20261122zn';
+import { botMove, isBot, BOT_NAMES } from './pokerbot.js?v=20261122zn';
+import { chipSound, cardSound, hitSound, standSound, potSound, tickSound, turnSound, punchSound } from './fx.js?v=20261122zn';
+import { webglOK, initRoom } from './room3d.js?v=20261122zn';
+import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122zn';
+import { autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML } from './common.js?v=20261122zn';
 
-import { shareHidden, startHold } from './vault.js?v=20261122zm';
-import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261122zm';
+import { shareHidden, startHold } from './vault.js?v=20261122zn';
+import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261122zn';
 const PREFIX = 'bjt-pk-';
 // A settings change by vote (js/vote.js): any player at the table may ask, every other player at the table who is online has to say yes.
 const VOTE = {
