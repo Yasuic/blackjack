@@ -3,7 +3,7 @@
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
 import { startPresence } from './presence.js?v=20261123b';
 import { outerLink } from './shell.js?v=20261123b';
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe } from './game.js?v=20261123b';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe, destName } from './game.js?v=20261123b';
 import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261123b';
 import { bestMove, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261123b';
 import { tickSound, winSound } from './fx.js?v=20261123b';
@@ -610,8 +610,6 @@ function onHostMessage(conn, msg) {
   if (msg.t === 'keys') { gotNonce(msg, conn.clientId); return; }
   // Any player may take over as host, with no vote: this browser hands the whole table to theirs and joins as a player.
   if (msg.t === 'host-ask') { handHostTo(conn); return; }
-  // A guest's browser found card keys taken that were not used for dealt cards: the game pauses for everyone.
-  if (msg.t === 'breach') { hostDo((t) => t.halt()); return; }
   // The player walks to another table of the office and takes their chips along (common.js walkTo).
   if (msg.t === 'carry') { if (msg.carry && typeof msg.carry === 'object') { try { S.table.carryIn(conn.clientId, msg.carry.amount, msg.carry.from, msg.carry.cid); } catch { /* not at this table */ } hostChanged(); } return; } // chips brought back to a table that stayed open
   if (msg.t === 'cashout') {
@@ -630,7 +628,7 @@ function onHostMessage(conn, msg) {
     hostRounds().then((all) => { try { conn.send({ t: 'hist', n: (S.table.hist || []).length, total: all.length, rounds: all.slice(-80).map(({ events, table, backed, ...r }) => r) }); } catch {} });
     return;
   }
-  fresh(moveCount(msg, conn.clientId), () => runAction(conn.clientId, msg, (err) => conn.open && conn.send({ t: 'error', msg: err, bet: msg.t === 'bet' })));
+  fresh(movePlanFor(msg, conn.clientId), () => runAction(conn.clientId, msg, (err) => conn.open && conn.send({ t: 'error', msg: err, bet: msg.t === 'bet' })));
 }
 
 // How long a player who dropped out may stay away before the dealer stands their hand. Their own
@@ -640,7 +638,7 @@ function awayClock(id, already = 0) {
   clearTimeout(S.goneTimers[id]);
   S.goneTimers[id] = setTimeout(() => {
     delete S.goneTimers[id];
-    fresh(() => 0, () => hostDo((tb) => tb.markGone(id)));
+    fresh(() => [], () => hostDo((tb) => tb.markGone(id)));
   }, Math.max(3000, AWAY_MS - already)); // "already" is how long they had been silent when the host noticed
 }
 // Tell everyone something that happened to one player (shown as a banner to them, a short note to the rest).
@@ -761,25 +759,28 @@ function keyHolders() {
   return mixed.length ? mixed : open;
 }
 let freshChain = Promise.resolve();
-// countFn says how many cards the step takes. fn runs once the keys are here. Steps run one at a time, in order.
-function fresh(countFn, fn) {
+// planFn says where each card of the step goes, in draw order (see Table.dealPlan). fn runs once the keys are
+// here. Steps run one at a time, in order. Announce first, then reveal: the places go out with the key request
+// (and to everyone else at the table), and a guest gives a key only for the next card and its announced place.
+function fresh(planFn, fn) {
   freshChain = freshChain.then(() => new Promise((res) => {
     const t = S.table;
-    let count = 0;
-    try { count = countFn(t) || 0; } catch { count = 0; }
-    S.spareKeys ||= [];
+    let plan = [];
+    try { const x = planFn(t); plan = Array.isArray(x) ? x.map(String) : []; } catch { plan = []; }
+    S.spareKeys ||= []; S.sparePlan ||= [];
     const run = (keys) => {
       t.keys = S.spareKeys.concat(keys || []);
+      t.plan = S.sparePlan.concat(plan.slice(S.spareKeys.length));
       try { fn(); } finally {
         // A key the step did not use is burned at once, face up, so no key ever waits on a card nobody has seen.
         let burned = 0;
         try { while (S.table === t && t.keys?.length && t.burnCard()) burned++; } catch { /* fine */ }
-        S.spareKeys = t.keys || []; t.keys = null;
+        S.spareKeys = t.keys || []; S.sparePlan = (t.plan || []).slice(0, S.spareKeys.length); t.keys = null; t.plan = null;
         if (burned) { try { hostChanged(); } catch { /* fine */ } }
         res();
       }
     };
-    const need = count - S.spareKeys.length;
+    const need = plan.length - S.spareKeys.length;
     if (need <= 0) return run([]);
     const local = () => Array.from({ length: need }, newNonce);
     const holders = keyHolders();
@@ -800,73 +801,60 @@ function fresh(countFn, fn) {
       parts[from] = (Array.isArray(keys) ? keys : []).slice(0, need).map(cleanNonce);
       if (holders.every((c) => parts[c.clientId])) finish();
     };
-    const msg = { t: 'key-req', rid, from: (t.fair?.cards || 0) + S.spareKeys.length + 1, count: need };
+    const msg = { t: 'key-req', rid, from: (t.fair?.cards || 0) + S.spareKeys.length + 1, count: need, to: plan.slice(S.spareKeys.length) };
     holders.forEach((c) => c.send(msg));
+    // Everyone else at the table hears the same announcement (they give no keys).
+    const ann = { t: 'announce', from: msg.from, to: msg.to };
+    for (const c of Object.values(S.conns)) if (c?.open && !holders.includes(c)) { try { c.send(ann); } catch { /* gone */ } }
   })).catch(() => {});
 }
 function gotNonce(msg, from) { S.nonceWait?.[msg.rid]?.(msg.keys, from); }
 // A move the table would refuse asks for no keys, so every key a guest gives out is used for a dealt card.
-const moveCount = (msg, id) => (t) => (msg.t === 'action' ? (id && !t.allowedActions(id).includes(msg.a) ? 0 : { hit: 1, double: 1, split: 2 }[msg.a] || 0) : msg.t === 'buyin' ? { double: 1, split: 2 }[msg.then] || 0 : msg.t === 'peek' ? 1 : 0);
-// The guest's side of the guard. A key is fixed by its card number, so sending one again tells the host
-// nothing new, and a jump forward only means this phone missed a few requests while it was asleep or
-// reconnecting. What a changed host could gain from is more keys than the step on the table can use:
-// a deal needs two cards per seat plus two for the dealer, a move needs one or two. That is refused.
-//
-// Since 22 November it is stricter, so a host cannot see cards before they are dealt:
-// 1. Only the next card numbers: a request may not start past the cards already opened (or past the last key
-//    this browser gave out) plus one. Asking for card 40 while card 12 is next is refused.
-// 2. Every key given out must be used for a card the table really deals within 5 seconds. A host that asks for
-//    keys and does not deal (to look at the cards first) is caught: this browser warns its player and tells the table.
-// What went wrong is not named on screen: everyone sees "Network security breached" and the game pauses.
-function keyAlarm(text) {
-  console.warn('[fair] ' + text);
-  S.keyChecks = []; // reported once: a Resume by the host starts clean
-  const F = (S.fair ||= { mine: {}, cur: {}, checks: {} });
-  const first = !F.alert;
-  F.alert = 'Network security breached.';
-  try { send({ t: 'breach' }); } catch {}
-  if (first) { try { send({ t: 'chat', text: '⚠️ Network security breached. The game is paused.' }); } catch {} }
-  render();
-}
-// A check is settled by the first state that arrives after its due time: cards dealt (fine), a new shoe or host
-// (nothing to compare), or still not dealt (the alarm). S.stateAt is when the last state arrived.
-function checkKeys() {
-  const list = S.keyChecks || [];
-  if (!list.length) return;
-  if (S.role !== 'player') { S.keyChecks = []; return; }
-  const now = S.state?.fair, cards = Number(now?.cards) || 0;
-  S.keyChecks = list.filter((c) => {
-    if (!now || now.current?.n !== c.shoe || cards >= c.last) return false; // dealt, or a new shoe: done
-    if (Date.now() < c.due || !(S.stateAt > c.due)) return true; // not due yet, or no fresh word from the table yet: wait
-    keyAlarm(`The host's browser opened ${c.last - cards} card key(s) without dealing those cards.`);
-    return false;
-  });
-}
+const movePlanFor = (msg, id) => (t) => (msg.t === 'action' ? t.movePlan(id, msg.a, !!id) : msg.t === 'buyin' && (msg.then === 'double' || msg.then === 'split') ? t.movePlan(id, msg.then, false) : msg.t === 'peek' ? ['peek'] : []);
+// The guest's side: announce first, then reveal. A key is fixed by its card number, so giving it again tells the
+// host nothing new. This browser gives keys only when all of this holds, checked against the last table state,
+// which always arrives before the request on the same link:
+// 1. The request starts at the next card: card (cards opened so far + 1). Never a card further ahead.
+// 2. It comes with the place of every card it asks for (a seat's hand, the dealer, the hole card), and at most two
+//    cards during play (a split takes two) or one deal's worth between rounds.
+// 3. A card's place can never change: once card N was announced for seat 2, a request for card N anywhere else is
+//    refused. So a card the host opened has to go where it was announced, or be burned face up in the log.
+// A request that breaks a rule just gets no keys from this browser. Nothing pauses the game, so nothing can
+// go off by mistake when a phone was asleep or a link was slow.
+const DEST_RE = /^(s\d{1,2}\.\d{1,2}|D|H|peek)$/;
 function serveKeys(msg) {
-  const from = Number(msg.from), count = Number(msg.count), st = S.state;
+  const from = Number(msg.from), count = Number(msg.count), st = S.state, to = msg.to;
   const betting = !st || st.phase === 'betting' || st.phase === 'settled';
-  // During play at most two cards per ask (a split takes two at once).
   const most = betting ? 2 * (st?.seats?.length || 7) + 2 : 2;
-  if (!Number.isInteger(from) || from < 1 || !Number.isInteger(count) || count < 1 || count > most) {
-    keyAlarm('The host\'s browser asked for more card keys than the table needed. My browser refused.');
-    return [];
-  }
-  // The next card is always the card after the last one the table has opened. Keys given out before stay
-  // unused only if the host is looking ahead, so a request past the next card is refused even if it follows on.
-  const opened = Number(st?.fair?.cards);
-  const known = Number.isFinite(opened) ? opened : 0;
-  if (from > known + 1) {
-    keyAlarm(`The host's browser asked for card keys ahead of the game (card ${from} while card ${known + 1} is next). My browser refused.`);
-    return [];
-  }
-  const last = from + count - 1;
-  S.keyServed = Math.max(S.keyServed || 0, last);
-  // The cards these keys open have to be dealt now, every one of them. The check is made against a state the
-  // table sent after the 5 seconds are up, never against an old one: a phone whose link dropped for a moment, or a
-  // second tab that the table stopped talking to, simply has not heard about those cards yet.
-  (S.keyChecks ||= []).push({ last, shoe: st?.fair?.current?.n, due: Date.now() + 5000 });
-  setTimeout(() => checkKeys(), 5100);
+  const no = (why) => { console.warn('[fair] no keys: ' + why); return []; };
+  if (!Number.isInteger(from) || from < 1 || !Number.isInteger(count) || count < 1 || count > most) return no('too many cards');
+  if (!Array.isArray(to) || to.length !== count || !to.every((d) => typeof d === 'string' && DEST_RE.test(d))) return no('no announced place');
+  const opened = Number(st?.fair?.cards), known = Number.isFinite(opened) ? opened : 0;
+  if (from !== known + 1) return no(`card ${from} asked while card ${known + 1} is next`);
+  const A = (S.announced ||= {});
+  for (let i = 0; i < count; i++) if (A[from + i] && A[from + i] !== to[i]) return no(`card ${from + i} was announced for ${A[from + i]}, now ${to[i]}`);
+  noteAnnounce(from, to);
   return Array.from({ length: count }, (_, i) => myKey(from + i));
+}
+// Every browser keeps the places announced lately and compares them with where the cards went (the table's public
+// list fair.dealt). A card that went elsewhere is listed in the Provably fair panel. A burned card is in the log.
+function noteAnnounce(from, to) {
+  const A = (S.announced ||= {});
+  if (!Number.isInteger(from) || !Array.isArray(to)) return;
+  to.slice(0, 40).forEach((d, i) => { if (typeof d === 'string' && DEST_RE.test(d) && !A[from + i]) A[from + i] = d; });
+  const keys = Object.keys(A).map(Number).sort((a, b) => a - b);
+  for (const k of keys.slice(0, Math.max(0, keys.length - 200))) delete A[k];
+}
+function checkDealt(st) {
+  const A = S.announced, list = st?.fair?.dealt;
+  if (!A || !Array.isArray(list)) return;
+  const F = (S.fair ||= { mine: {}, cur: {}, checks: {} });
+  for (const d of list) {
+    const want = A[d?.n];
+    if (!want || d.to === 'burn' || d.to === want) continue;
+    F.moved ||= {};
+    if (!F.moved[d.n]) { F.moved[d.n] = { want, got: String(d.to) }; console.warn(`[fair] card ${d.n} was announced for ${want} and went to ${d.to}`); }
+  }
 }
 // A secret kept in this browser tab, and the key for card number k made from it.
 function myKey(k) {
@@ -888,7 +876,7 @@ function hostChanged() {
   if (S.hostWait && t && !t.inRound() && !S.handing) { const c = S.conns?.[S.hostWait]; S.hostWait = null; if (c?.open) setTimeout(() => handHostTo(c), 0); }
   // The dealer draws one card at a time so everyone can watch.
   if (t.phase === 'dealer' && !S.dealerTimer) {
-    const step = () => fresh((tb) => (tb.dealerNeedsCard() ? 1 : 0), () => {
+    const step = () => fresh((tb) => tb.dealerPlan(), () => {
       t.dealerStep();
       if (t.phase === 'dealer') S.dealerTimer = setTimeout(step, 950);
       else S.dealerTimer = null;
@@ -910,7 +898,7 @@ function hostChanged() {
       S.autoDealTimer = setTimeout(() => {
         S.autoDealTimer = null;
         const still = t.seats.filter((s) => s && !s.out && t.players[s.playerId].connected);
-        if (t.phase === 'betting' && still.length && still.every((s) => s.ready) && t.canDeal()) fresh((tb) => tb.dealCount(), () => hostDo((tb) => { if (tb.phase === 'betting' && tb.canDeal()) tb.deal(); }));
+        if (t.phase === 'betting' && still.length && still.every((s) => s.ready) && t.canDeal()) fresh((tb) => tb.dealPlan(), () => hostDo((tb) => { if (tb.phase === 'betting' && tb.canDeal()) tb.deal(); }));
       }, 900);
     }
   }
@@ -959,15 +947,15 @@ function scheduleTimer() {
   if (!want) return;
   const fire = () => {
     S.timer = null;
-    if (want.kind === 'deal') fresh((tb) => tb.dealCount(), () => hostDo((tb) => { if (tb.phase === 'betting' && tb.canDeal()) tb.deal(); }));
-    else if (want.kind === 'insurance') fresh(() => 0, () => {
+    if (want.kind === 'deal') fresh((tb) => tb.dealPlan(), () => hostDo((tb) => { if (tb.phase === 'betting' && tb.canDeal()) tb.deal(); }));
+    else if (want.kind === 'insurance') fresh(() => [], () => {
       const t2 = S.table;
       if (t2.phase !== 'insurance') return;
       const ids = t2.seats.filter((x) => x && x.hands.length && !x.insuranceDecided && t2.players[x.playerId].connected).map((x) => x.playerId);
       hostDo((tb) => tb.forceInsurance());
       if (ids.length) tellAll({ kind: 'ins-timeout', ids });
     });
-    else fresh((tb) => tb.awayMoveCount(), () => {
+    else fresh((tb) => tb.awayPlan(), () => {
       const t2 = S.table;
       if (t2.phase !== 'playing' || !t2.turn) return;
       const p = t2.players[t2.seats[t2.turn.seat].playerId];
@@ -1147,7 +1135,7 @@ function wireGuestConn(conn) {
   conn.on('data', (msg) => {
     S.lastSeen = Date.now();
     if (msg.t === 'ping') { try { conn.send({ t: 'pong' }); } catch {} return; }
-    if (msg.t === 'state') { S.stateAt = Date.now(); setState(msg.state); render(); setTimerFromState(msg.state); checkKeys(); }
+    if (msg.t === 'state') { setState(msg.state); render(); setTimerFromState(msg.state); checkDealt(msg.state); }
     else if (msg.t === 'error') { toast(msg.msg); if (msg.bet) dropPend(); }
     else if (msg.t === 'hist') { S.guestHist = Array.isArray(msg.rounds) ? msg.rounds : []; S.guestHistTotal = msg.total || S.guestHist.length; drawHistPanel(true); if ($('#modal')?.open && $('#hist-list')) showHistory(); }
     else if (msg.t === 'snap') { S.snap = String(msg.snap || '').slice(0, 400000); if (Number.isInteger(msg.gen) && msg.gen >= 0 && msg.gen < 100000) S.gen = msg.gen; }
@@ -1164,6 +1152,7 @@ function wireGuestConn(conn) {
     else if (msg.t === 'host-give') takeHost(msg);
     else if (msg.t === 'host-no') { clearTimeout(S.askHostT); S.askHostT = null; toast(String(msg.why || 'The host could not hand over the table.').slice(0, 120)); }
     else if (msg.t === 'key-req') conn.send({ t: 'keys', rid: msg.rid, keys: serveKeys(msg) });
+    else if (msg.t === 'announce') noteAnnounce(Number(msg.from), msg.to);
     else if (msg.t === 'kicked') { S.kicked = true; sessDel('bj-join-' + S.code); S.peer.destroy(); app.innerHTML = '<div class="center-msg"><h2>You were removed from the table.</h2></div>'; }
   });
   const lost = () => {
@@ -1194,7 +1183,7 @@ function send(msg) {
   if (S.role === 'host' && msg.t === 'voice') { voiceSet(S.myId, S.peer?.id, !!msg.on, !!msg.mic); return; }
   if (S.role === 'host' && msg.t === 'hurry') { relayHurry(S.myId, msg.say); return; }
   if (S.role === 'host' && msg.t === 'throw') relayThrow(S.myId, msg);
-  else if (S.role === 'host') fresh(moveCount(msg, S.myId), () => runAction(S.myId, msg, (err) => { toast(err); if (msg.t === 'bet') dropPend(); }));
+  else if (S.role === 'host') fresh(movePlanFor(msg, S.myId), () => runAction(S.myId, msg, (err) => { toast(err); if (msg.t === 'bet') dropPend(); }));
   else if (S.conn?.open) S.conn.send(msg);
   else toast('Not connected to the table.');
 }
@@ -1813,7 +1802,7 @@ function render(note) {
   queueCards(st);
   S.dealing = dealingNow();
   fairWatch(st);
-  { const fp = $('#fair-pill'), bad = !!S.fair?.alert || Object.values(S.fair?.checks || {}).some((k) => !k.ok); if (fp) { fp.classList.toggle('bad', bad); fp.innerHTML = bad ? '⚠️<span class="fp-t"> Shuffle check failed</span>' : '🔐<span class="fp-t"> Provably fair</span>'; } }
+  { const fp = $('#fair-pill'), bad = !!Object.keys(S.fair?.moved || {}).length || Object.values(S.fair?.checks || {}).some((k) => !k.ok); if (fp) { fp.classList.toggle('bad', bad); fp.innerHTML = bad ? '⚠️<span class="fp-t"> Shuffle check failed</span>' : '🔐<span class="fp-t"> Provably fair</span>'; } }
   const prev = S.prevView;
   if (prev && st.round !== prev.round) { S.undo = []; S.mainChips = []; S.sideChips = {}; }
   // Once the cards are dealt, the picked chip is put down, so the next round starts with none picked.
@@ -3181,22 +3170,6 @@ function fairWatch(st) {
     if (!ok) toast(`Shuffle check failed for shoe ${L.n}. Tap "Provably fair" at the top right.`);
   }
 }
-// The pause after "Network security breached": a notice over the table for everyone, and Resume for the host.
-function drawBreach(st) {
-  let el = document.getElementById('breach-cover');
-  const on = !!st?.halted;
-  if (!on) { el?.remove(); return; }
-  if (!el) {
-    el = document.createElement('div'); el.id = 'breach-cover'; el.setAttribute('role', 'alert');
-    el.innerHTML = '<div class="breach-box"><b>Network security breached</b><span>The game is paused.</span><button class="btn gold" data-act="h-resume" hidden>Resume game</button></div>';
-    el.addEventListener('click', (e) => { const b = e.target.closest('[data-act=h-resume]'); if (b) { e.stopPropagation(); runAct(b); } });
-    document.body.appendChild(el);
-  }
-  el.querySelector('[data-act=h-resume]').hidden = S.role !== 'host';
-  const bar = document.querySelector('.topbar');
-  el.style.top = (bar ? Math.max(0, Math.round(bar.getBoundingClientRect().bottom)) : 0) + 'px';
-}
-setInterval(() => drawBreach(S.state), 400);
 function fairHTML() {
   const f = S.state?.fair, F = S.fair;
   if (!f || !F) return '<h3>🔐 Provably fair</h3><p>No shoe yet.</p>';
@@ -3205,10 +3178,11 @@ function fairHTML() {
     <p class="fair-p">One shuffle sets the whole shoe. The order comes from a hidden code in the host's browser mixed with hidden codes from the players' browsers, so no single person picked it and nobody can read it early. Each card can only be opened at the moment it is dealt. When a shoe is finished, your browser checks that the shuffle was the one promised at the start.</p>`;
   h += `<details class="fair-how"><summary>How nobody sees the next cards</summary>
     <p class="fair-p">Each card needs two things to be opened: the host's hidden code and a key from a seated guest's browser. The key is new for every card, and only the guest's browser can make it.</p>
-    <p class="fair-p">A guest's browser gives the host keys for the next cards only, at most two at a time (a split takes two). It never gives keys for cards further ahead.</p>
-    <p class="fair-p">Every key a guest gives out has to be used for a card the table really deals within 5 seconds. If a key is asked for out of turn, or taken and not used for a dealt card (to look at the card first), the guest's browser stops the game for everyone with "Network security breached".</p>
+    <p class="fair-p">Announce first, then reveal. Before asking for keys, the host's browser tells the table where each coming card goes: which seat and hand, the dealer, or the dealer's hole card. A guest's browser then gives the key for the next card only, and only for the place announced for it.</p>
+    <p class="fair-p">A card's place can never change once it is announced. So the host cannot open a card, look at it and send it somewhere else: it goes where it was announced, or it is burned face up and written in the hand log.</p>
     <p class="fair-p">With no guest seated, the host's browser makes the keys itself.</p></details>`;
-  if (F.alert) h += `<div class="fair-box"><b>❌ Network security breached.</b><div>The game was paused.</div></div>`;
+  const moved = Object.entries(F.moved || {}).slice(-6);
+  if (moved.length) h += `<div class="fair-box"><b>❌ Cards that did not go where they were announced</b>${moved.map(([n, m]) => `<div>Card ${esc(n)}: announced for ${esc(destName(m.want))}, went to ${esc(destName(m.got))}.</div>`).join('')}</div>`;
   if (f.current) {
     const c = f.current, mine = F.mine[c.commit];
     h += `<div class="fair-box"><b>Shoe ${c.n} (in play now)</b>
@@ -3403,7 +3377,6 @@ function runAct(el) {
     }
     case 'undo': if (S.undo.length) { S.mainChips.pop(); const last = S.undo.pop(); chipSound(); placeBet(last); } break;
     case 'rebet': doRebet(); break;
-    case 'h-resume': if (S.role === 'host') { if (S.timer) { clearTimeout(S.timer.handle); S.timer = null; } hostDo((t) => t.resume()); } break;
     case 'auto-rebet': S.autoRebet = !S.autoRebet; safeSet('bj-autorebet', S.autoRebet ? '1' : '0'); toast(S.autoRebet ? 'Auto rebet on: each round your last bets go down and you are dealt in by yourself.' : 'Auto rebet off.'); render(); autoRebetStep(); break;
     case 'keys': $('#modal-body').innerHTML = keysHTML(); $('#modal').showModal(); break;
     case 'history': showHistory(); break;
@@ -3521,14 +3494,14 @@ function runAct(el) {
     case 'ins': takeIns(el.dataset.take === '1'); break;
     case 'play': playMove(el.dataset.a); break;
     // Host only
-    case 'h-deal': fresh((t) => t.dealCount(), () => hostDo((t) => t.deal())); break;
+    case 'h-deal': fresh((t) => t.dealPlan(), () => hostDo((t) => t.deal())); break;
     case 'h-frozen': hostDo((t) => {
       if (!(t.phase === 'betting' || t.phase === 'settled')) throw new Error('Change this between rounds.');
       t.setFrozen(el.dataset.on === '1');
       t.addLog(t.frozen ? 'The host froze the ledger: the house deals and those hands are practice.' : 'The ledger freeze is off. Chips and buy-ins are back to where they were before it.');
     }); break;
     case 'h-ins': hostDo((t) => t.forceInsurance()); break;
-    case 'h-skip': fresh(() => 0, () => hostDo((t) => t.skipTurn())); break;
+    case 'h-skip': fresh(() => [], () => hostDo((t) => t.skipTurn())); break;
     case 'h-shuffle':
       // Guests see this button too (in the settings they can vote on); they ask the host to shuffle.
       if (S.role !== 'host') { send({ t: 'shuffle' }); toast(st && (st.phase === 'betting' || st.phase === 'settled') ? 'Asked for a shuffle.' : 'Asked for a shuffle before the next hand.'); break; }

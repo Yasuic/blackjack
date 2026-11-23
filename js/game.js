@@ -395,13 +395,15 @@ export class Table {
     const dealt = 1 - this.shoe.length / this.shoeSize;
     return dealt * 100 >= Number(s.penetration);
   }
-  draw() {
+  // to: where the card goes ('s2.0' = seat 3 hand 1, 'D' = dealer face up, 'H' = dealer hole card). The host
+  // announced it before the guests gave the key, and the table checks it here (see pick).
+  draw(to) {
     if (this.shoe.length === 0) {
       this.fairShuffle();
       this.addLog('Shoe ran out mid round and was reshuffled.');
       this.shuffledMidRound = true;
     }
-    const c = this.pendingCard || this.pick();
+    const c = this.pendingCard || this.pick(to);
     this.pendingCard = null;
     return c;
   }
@@ -410,22 +412,58 @@ export class Table {
   // dealer burns a card. So every key a guest gives out opens a card the whole table sees within moments.
   burnCard() {
     if (!this.keys?.length || !this.shoe.length || !this.fair?.current) return null;
-    const c = this.pick();
+    const n = (this.fair.cards || 0) + 1, was = this.plan?.[0];
+    const c = this.pick('burn');
     (this.burned ||= []).push(c);
     if (this.burned.length > 20) this.burned.shift();
-    this.addLog(`Burned card: ${c.r}${c.s} (its key was not needed).`);
+    this.addLog(`Burned card ${n}: ${c.r}${c.s}${was ? ` (announced for ${destName(was)}, the move did not happen)` : ' (its key was not needed)'}.`);
     return c;
   }
+  // ---- Announce first, then reveal ----
+  // Before the host asks the guests for the keys of the next cards, it announces where each of those cards goes,
+  // in the order they are drawn. A guest gives the key of card N only for the next card in order and only for
+  // the place announced for it, and that place can never change. So the host cannot open a card to look at it
+  // and then send it somewhere else: the card has to go where it was announced, or be burned face up in the log.
+  dealPlan() {
+    if (this.phase !== 'betting' || !this.canDeal()) return [];
+    const active = [];
+    this.seats.forEach((seat, i) => {
+      if (!seat) return;
+      const p = this.players[seat.playerId];
+      if (seat.bet.main >= this.settings.minBet && seat.bet.main + sumValues(seat.bet.sides) <= p.chips && p.connected !== false) active.push(i);
+    });
+    if (!active.length) return [];
+    return [...active.map((i) => `s${i}.0`), 'D', ...active.map((i) => `s${i}.0`), 'H'];
+  }
+  // a: 'hit', 'double' or 'split' for the hand whose turn it is. check: refuse a move this player may not make.
+  movePlan(clientId, a, check = true) {
+    if (this.phase !== 'playing' || !this.turn) return [];
+    if (check && clientId && !this.allowedActions(clientId).includes(a)) return [];
+    const { seat, hand } = this.turn;
+    if (a === 'hit' || a === 'double') return [`s${seat}.${hand}`];
+    if (a === 'split') return [`s${seat}.${hand}`, `s${seat}.${hand + 1}`];
+    return [];
+  }
+  awayPlan() { return this.awayMoveCount() ? [`s${this.turn.seat}.${this.turn.hand}`] : []; }
+  dealerPlan() { return this.dealerNeedsCard() ? ['D'] : []; }
   // Take one card out of the shoe. The shoe order is set once, at the shuffle, by two things: the
   // host's hidden seed and a secret that stays in one guest's browser. Card number k needs key
   // number k from that guest (this.keys), and the keys are fixed by the guest's secret, so the
   // order never changes after the shuffle. The host cannot read a card before its key arrives,
   // and the guest cannot read it without the host's seed.
-  pick() {
+  pick(to) {
     const cur = this.fair?.current;
     if (!cur) return this.shoe.pop();
     let nonce = '';
-    if (this.keys?.length) { nonce = this.keys.shift(); this.fair.cards = (this.fair.cards || 0) + 1; }
+    if (this.keys?.length) {
+      nonce = this.keys.shift(); this.fair.cards = (this.fair.cards || 0) + 1;
+      // Where this card was announced and where it goes. Both are public; a difference is written in the log.
+      const want = this.plan?.length ? this.plan.shift() : null, got = to || '?';
+      const d = (this.fair.dealt ||= []);
+      d.push({ n: this.fair.cards, to: got, ...(want && want !== got ? { want } : {}) });
+      if (d.length > 40) d.splice(0, d.length - 40);
+      if (want && want !== got && got !== 'burn') this.addLog(`Card ${this.fair.cards} was announced for ${destName(want)} but went to ${destName(got)}.`);
+    }
     cur.draws = cur.draws || [];
     cur.draws.push(nonce);
     return this.shoe.splice(pickIndex(cur.serverSeed, nonce, cur.draws.length, this.shoe.length), 1)[0];
@@ -1009,7 +1047,7 @@ export class Table {
     // Like a rabbit hunt in poker: the card that would have come next is shown to all and then leaves
     // the shoe, so nobody can size the next bet on a card they already know. One look per round.
     this.rabbit = false;
-    return this.pick();
+    return this.pick('peek');
   }
 
   // ---- Betting ----
@@ -1199,30 +1237,8 @@ export class Table {
 
   // ---- Dealing ----
   // How many cards the next step takes from the shoe. The host asks for exactly that many keys.
-  // "Network security breached": a guest's browser saw card keys taken that were not used for dealt cards.
-  // The table stops dealing and playing until the host resumes it. Bets and chat still work.
-  halt() {
-    if (this.halted) return;
-    this.halted = { at: Date.now() };
-    this.addLog('Network security breached. The game is paused.');
-  }
-  resume() {
-    if (!this.halted) return;
-    this.halted = null;
-    this.addLog('The host resumed the game.');
-  }
-  dealCount() {
-    if (this.halted) return 0;
-    if (this.phase !== 'betting' || !this.canDeal()) return 0;
-    const n = this.seats.filter((seat) => {
-      if (!seat) return false;
-      const p = this.players[seat.playerId];
-      return seat.bet.main >= this.settings.minBet && seat.bet.main + sumValues(seat.bet.sides) <= p.chips && p.connected !== false;
-    }).length;
-    return n ? 2 * n + 2 : 0;
-  }
+  dealCount() { return this.dealPlan().length; }
   deal() {
-    if (this.halted) throw new Error('The game is paused: network security breached.');
     if (this.phase === 'settled') this.startBetting();
     if (!this.banker && !this.frozen) throw new Error('Nobody is the dealer. Someone has to sit as the dealer, or the host can deal with frozen balances.');
     this.dealerAutoBuy();
@@ -1280,8 +1296,8 @@ export class Table {
     this.markUnseated(unseated);
     this.dealer = { cards: [], revealed: false };
     for (let pass = 0; pass < 2; pass++) {
-      for (const i of active) this.seats[i].hands[0].cards.push(this.draw());
-      this.dealer.cards.push(this.draw());
+      for (const i of active) this.seats[i].hands[0].cards.push(this.draw(`s${i}.0`));
+      this.dealer.cards.push(this.draw(pass ? 'H' : 'D'));
     }
     const up = this.dealer.cards[0];
     // Side bets that only need the player's two cards and the dealer up card.
@@ -1318,7 +1334,6 @@ export class Table {
   }
 
   insurance(clientId, take, seatIdx) {
-    if (this.halted) throw new Error('The game is paused: network security breached.');
     if (this.phase !== 'insurance') throw new Error('Insurance is not offered now.');
     const { p, seat, idx } = this.mustSeat(clientId, seatIdx);
     if (!seat.hands.length || seat.insuranceDecided) return;
@@ -1362,7 +1377,7 @@ export class Table {
     if (!revealed) {
       const up = this.dealer.cards[0], looked = this.phase !== 'insurance' && (up.r === 'A' || cardValue(up) === 10);
       this.drawHole();
-      for (let n = 0; looked && this.dealerHasBlackjack() && n < 500; n++) this.dealer.cards[1] = this.draw();
+      for (let n = 0; looked && this.dealerHasBlackjack() && n < 500; n++) this.dealer.cards[1] = this.draw('H');
     }
     this.addLog('The table moved to a new host during a round. The round goes on with the same hands and bets; cards still to come are dealt from the new shoe.');
     this.ev('round carried on after a host move', null, `round ${this.round}`);
@@ -1372,7 +1387,7 @@ export class Table {
   }
 
   drawHole() {
-    if (this.dealer.cards.length === 1) this.dealer.cards.push(this.draw());
+    if (this.dealer.cards.length === 1) this.dealer.cards.push(this.draw('H'));
   }
   afterInsurance() {
     const up = this.dealer.cards[0];
@@ -1407,7 +1422,7 @@ export class Table {
 
   // ---- Player actions ----
   allowedActions(clientId) {
-    if (this.halted || this.phase !== 'playing' || !this.turn) return [];
+    if (this.phase !== 'playing' || !this.turn) return [];
     const p = this.players[clientId];
     if (!p || this.seats[this.turn.seat]?.playerId !== clientId) return [];
     const seat = this.seats[this.turn.seat];
@@ -1436,8 +1451,9 @@ export class Table {
     try { return this.actionInner(clientId, a, p, seat, h); } finally { note(); }
   }
   actionInner(clientId, a, p, seat, h) {
+    const at = `s${this.turn.seat}.${this.turn.hand}`, next = `s${this.turn.seat}.${this.turn.hand + 1}`;
     if (a === 'hit') {
-      h.cards.push(this.draw());
+      h.cards.push(this.draw(at));
       const t = handTotal(h.cards).total;
       if (t >= 21) h.done = true;
     } else if (a === 'stand') {
@@ -1447,7 +1463,7 @@ export class Table {
       seat.staked += h.bet;
       h.bet *= 2;
       h.doubled = true;
-      h.cards.push(this.draw());
+      h.cards.push(this.draw(at));
       h.done = true;
     } else if (a === 'split') {
       p.chips -= h.bet;
@@ -1456,8 +1472,8 @@ export class Table {
       const second = newHand(h.bet);
       second.cards.push(h.cards.pop());
       second.fromSplit = h.fromSplit = true;
-      h.cards.push(this.draw());
-      second.cards.push(this.draw());
+      h.cards.push(this.draw(at));
+      second.cards.push(this.draw(next));
       if (aces) {
         // Split aces get one card each. An ace that gets another ace may be split again, if the chips are there.
         h.splitAces = second.splitAces = true;
@@ -1476,7 +1492,6 @@ export class Table {
 
   // Host can stand a slow or disconnected player's current hand.
   skipTurn() {
-    if (this.halted) return;
     if (this.phase !== 'playing' || !this.turn) return;
     this.ev('stand (by the table: time ran out or the host skipped)', this.seats[this.turn.seat].playerId, `hand ${this.turn.hand + 1}`);
     this.seats[this.turn.seat].hands[this.turn.hand].done = true;
@@ -1492,7 +1507,7 @@ export class Table {
     return h && handTotal(h.cards).total <= 11 && this.allowedActions(seat.playerId).includes('hit') ? 1 : 0;
   }
   awayMove() {
-    if (this.halted || this.phase !== 'playing' || !this.turn) return null;
+    if (this.phase !== 'playing' || !this.turn) return null;
     const seat = this.seats[this.turn.seat], h = seat.hands[this.turn.hand];
     if (handTotal(h.cards).total <= 11 && this.allowedActions(seat.playerId).includes('hit')) {
       this.ev('hit (by the table: 11 or less, player is away or out of time)', seat.playerId, `hand ${this.turn.hand + 1}`);
@@ -1530,7 +1545,7 @@ export class Table {
 
   // The dealer draws one card at a time so players can watch. Returns true while more cards are needed.
   dealerNeedsCard() {
-    if (this.halted || this.phase !== 'dealer') return false;
+    if (this.phase !== 'dealer') return false;
     const anyLive = this.seats.some((s) => s && s.hands.some((h) => !h.surrendered && handTotal(h.cards).total <= 21 && !isBlackjack(h)));
     const anyBustBet = this.seats.some((s) => s && s.hands.length && s.bet.sides.bustIt);
     if (!anyLive && !anyBustBet) return false;
@@ -1541,9 +1556,8 @@ export class Table {
   }
 
   dealerStep() {
-    if (this.halted) return;
     if (this.dealerNeedsCard()) {
-      this.dealer.cards.push(this.draw());
+      this.dealer.cards.push(this.draw('D'));
       return true;
     }
     if (this.phase === 'dealer') this.finishRound();
@@ -1715,10 +1729,10 @@ export class Table {
       big: this.settings.bigBet ? { limit: this.settings.bigBet.limit, per: this.settings.bigBet.per, hands: this.settings.bigBet.hands, handsLeft: this.bigHandsLeft(), yourLeft: this.bigLeft(forClientId) } : null,
       ledger: Object.values(this.players).map((p) => { const h = this.inRound() && this.ledgerHold?.[p.id]; return { id: p.id, name: p.name, totalIn: h ? h.totalIn : p.totalIn ?? this.settings.startChips, chips: h ? h.chips : p.chips, houseNet: h ? h.houseNet : p.houseNet || 0, connected: p.connected, kicked: !!p.kicked }; }),
       buyIns: (this.buyIns || []).filter((b) => b.playerId === forClientId).map((b) => ({ id: b.id, amount: b.amount })),
-      halted: !!this.halted,
       fair: this.fair && {
         nextCommit: this.fair.next.commit,
         cards: this.fair.cards || 0, // how many cards have been opened with the guests' keys so far
+        dealt: (this.fair.dealt || []).slice(-20), // card number and where it went (announced place in want if different)
         current: this.fair.current && { n: this.fair.current.n, commit: this.fair.current.commit, clientSeeds: this.fair.current.clientSeeds, decks: this.fair.current.decks, dealt: (this.fair.current.draws || []).length },
         last: this.fair.last,
       },
@@ -1733,12 +1747,13 @@ export class Table {
 
   // Save and restore so the host can refresh the page without losing the table.
   toJSON() {
-    const { settings, seats, players, phase, dealer, turn, round, roundsSinceShuffle, log, shoe, shoeSize, banker, bankerNet, pendingBanker, buyIns, hostId, pendingSettings, frozen, fair, hist, evts, created, frozenSnap, shuffleNext, bankerLeaving, halted, ledgerHold } = this;
-    return { settings, seats, players, phase, dealer, turn, round, roundsSinceShuffle, log, shoe: packShoe(shoe), shoeSize, banker, bankerNet, pendingBanker, buyIns, hostId, pendingSettings, frozen, fair, hist, evts, created, frozenSnap, shuffleNext, bankerLeaving, halted, ledgerHold };
+    const { settings, seats, players, phase, dealer, turn, round, roundsSinceShuffle, log, shoe, shoeSize, banker, bankerNet, pendingBanker, buyIns, hostId, pendingSettings, frozen, fair, hist, evts, created, frozenSnap, shuffleNext, bankerLeaving, ledgerHold } = this;
+    return { settings, seats, players, phase, dealer, turn, round, roundsSinceShuffle, log, shoe: packShoe(shoe), shoeSize, banker, bankerNet, pendingBanker, buyIns, hostId, pendingSettings, frozen, fair, hist, evts, created, frozenSnap, shuffleNext, bankerLeaving, ledgerHold };
   }
   static fromJSON(obj) {
     const t = new Table(obj.settings);
     Object.assign(t, obj);
+    delete t.halted; // the old "network security breached" pause is gone: a table saved paused plays on
     t.shoe = unpackShoe(obj.shoe) || [];
     if (!obj.fair) t.fair.current = null; // a table saved before fair shuffles: its shoe has no seed to show
     // Tables saved before the seat count was a setting keep the seats they had.
@@ -1753,6 +1768,13 @@ export class Table {
     Object.values(t.players).forEach((p) => (p.gone = false));
     return t;
   }
+}
+
+// A place a card goes, in words.
+export function destName(d) {
+  const m = /^s(\d+)\.(\d+)$/.exec(String(d || ''));
+  if (m) return `seat ${+m[1] + 1} hand ${+m[2] + 1}`;
+  return { D: 'the dealer', H: "the dealer's hole card", burn: 'the burn pile', peek: 'a look at the next card' }[d] || 'nowhere announced';
 }
 
 function emptySeat(playerId) {
