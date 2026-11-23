@@ -1,17 +1,17 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { outerLink } from './shell.js?v=20261122zj';
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe } from './game.js?v=20261122zj';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122zj';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122zj';
-import { tickSound, winSound } from './fx.js?v=20261122zj';
-import * as HX from './history.js?v=20261122zj';
-import { webglOK, initRoom } from './room3d.js?v=20261122zj';
-import { showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261122zj';
-import { makeVault, makeOpener, cleanBox, cleanPiece } from './vault.js?v=20261122zj';
-import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122zj';
-import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122zj';
+import { outerLink } from './shell.js?v=20261122zk';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe } from './game.js?v=20261122zk';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122zk';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122zk';
+import { tickSound, winSound } from './fx.js?v=20261122zk';
+import * as HX from './history.js?v=20261122zk';
+import { webglOK, initRoom } from './room3d.js?v=20261122zk';
+import { showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261122zk';
+import { makeVault, makeOpener, cleanBox, cleanPiece } from './vault.js?v=20261122zk';
+import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122zk';
+import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122zk';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -4204,28 +4204,12 @@ function afkScreen(on) {
   const draw = () => {
     const st = S.state;
     if (!st) { el.textContent = 'Waiting for the table…'; return; }
-    const key = `${st.round}|${st.phase}|${JSON.stringify(st.dealer?.cards || [])}|${st.seats.map((x) => x ? x.hands.map((h) => h.cards.length).join('.') : '').join(',')}`;
-    if (key !== afk.key) { afk.key = key; afk.changed = Date.now(); }
-    const dealer = st.banker ? st.banker.name : st.frozen ? 'the house (frozen ledger)' : 'nobody yet';
-    const meDeal = st.banker?.id === S.myId, meHost = S.role === 'host';
-    const phase = { betting: 'Taking bets', insurance: 'Insurance', playing: 'Players are playing', dealer: 'Dealer is playing', settled: 'Round over, paying out' }[st.phase] || st.phase;
-    const ago = Math.round((Date.now() - afk.changed) / 1000);
-    const online = (st.players || []).filter((p) => p.connected).length;
     const rows = officeRows(st).sort((a, b) => b.net - a.net);
     const sign = (v) => (v > 0 ? '+' : '') + money(Math.round(v * 100) / 100);
+    // Only the ledger and the shoe (person, 2026-11-23). The shoe line shows cards left and the shuffle rule, never any order.
     const lines = [
-      'AFK screen. Tap anywhere or press a key to come back.',
-      '',
-      `You are the host: ${meHost ? 'yes' : 'no'}`,
-      `You are the dealer: ${meDeal ? 'yes' : 'no'} (dealer: ${dealer})`,
-      `Table ${S.code || ''}, round ${st.round || 0}: ${phase}`,
-      `Dealer cards: ${(st.dealer?.cards || []).map((c) => (c.hidden ? '?' : c.r + c.s)).join(' ') || 'none yet'}`,
-      `Last change at the table: ${ago < 2 ? 'just now' : ago + ' s ago'}`,
-      `Players online: ${online}`,
-      `Shoe: ${st.shoe ? st.shoe.left.toLocaleString() + ' cards left' : ''}`,
+      `Shoe: ${st.shoe ? st.shoe.left.toLocaleString() + ' cards left' : 'not shuffled yet'}, shuffle every 8 rounds ${st.settings.shuffle8 !== false ? 'on' : 'off'}`,
       ...(st.halted ? ['The game is paused (security check). Come back and press Resume game.'] : []),
-      '',
-      `Shuffle every 8 rounds: ${st.settings.shuffle8 !== false ? 'on' : 'off'}`,
       '',
       'Ledger (+/- and chips now):',
     ];
@@ -4233,8 +4217,7 @@ function afkScreen(on) {
     const mine = rows.find((r) => r.id === S.myId);
     el.innerHTML = (mine ? `<div style="font-size:26px;font-weight:700;margin-bottom:14px">Your balance: <span style="color:${col(mine.net)}">${esc(sign(mine.net))}</span>, chips ${esc(money(mine.chips))}</div>` : '')
       + lines.map((l) => `<div>${esc(l) || '&nbsp;'}</div>`).join('')
-      + rows.map((r) => `<div>${esc(r.name)}: <span style="color:${col(r.net)};font-weight:700">${esc(sign(r.net))}</span>, chips ${esc(money(r.chips))}</div>`).join('')
-      + `<div>&nbsp;</div><div style="color:#9aa3ad">Updated ${esc(new Date().toLocaleTimeString())}</div>`;
+      + rows.map((r) => `<div>${esc(r.name)}: <span style="color:${col(r.net)};font-weight:700">${esc(sign(r.net))}</span>, chips ${esc(money(r.chips))}</div>`).join('');
   };
   draw();
   afk.timer = setInterval(draw, 1000);
