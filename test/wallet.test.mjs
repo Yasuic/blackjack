@@ -19,7 +19,7 @@ const throws = (f, m) => { try { f(); ok(false, m + ' (did not throw)'); } catch
   ok(t.cashOut('a') === 1300 && t.players.a.chips === 0 && net('a') === before, 'bj: cash out keeps +/- the same');
   delete t.players.b.joinT; t.carryIn('b', 100, 'Roulette', 'c2'); ok(t.players.b.chips === 900 && t.players.b.totalIn === 900, 'bj: carry to an older player adds');
   t.sitDealer?.('b');
-  if (t.banker === 'b') throws(() => t.cashOut('b'), 'bj: the dealer cannot walk away with the bank');
+  if (t.banker === 'b') { const c = t.players.b.chips; ok(t.cashOut('b') === c && t.banker !== 'b' && t.players.b.chips === 0, 'bj: the dealer walking away between rounds stops dealing and takes the chips'); }
   // frozen ledger: the real chips are the snapshot
   const f = new Table({}); f.join('x', 'Xi', 1000); f.setFrozen(true); f.players.x.chips = 1700;
   ok(f.cashOut('x') === 1000 && f.frozenSnap.x.chips === 0 && f.frozenSnap.x.totalIn === 0, 'bj frozen: the real chips leave, not the practice chips');
@@ -37,7 +37,7 @@ for (const [name, T] of [['baccarat', BacTable], ['roulette', RouTable]]) {
   ok(t.ledgerSum() === net0, name + ': ledger zero before walking');
   const netA = t.players.a.chips - t.players.a.totalIn;
   ok(t.cashOut('a') === st + 50 && t.players.a.chips - t.players.a.totalIn === netA && t.ledgerSum() === 0, name + ': cash out keeps +/- and a zero ledger');
-  throws(() => t.cashOut('d'), name + ': the dealer cannot walk away with the bank');
+  { const nd = t.ledgerSum(); const amt = t.cashOut('d'); ok(t.bankId !== 'd' && amt >= 0 && t.players.d.chips === 0, name + ': the dealer walking away between rounds stops dealing and takes the chips'); }
 }
 // Poker
 {

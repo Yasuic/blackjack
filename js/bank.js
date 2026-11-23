@@ -73,7 +73,10 @@ export function bankAdopt(t) {
 const MAX_CARRY = 1e9;
 export function bankCashOut(t, id) {
   const p = t.mustPlayer(id);
-  if (t.bankId === id) throw new Error('You are the dealer. Stop dealing first, then walk over with your chips.');
+  // The dealer walking away stops dealing by itself: at once with no bets out, else after this round is settled.
+  if (t.bankId === id) {
+    try { clearBank(t, id); } catch { if (!t.bankLeaving) { t.bankLeaving = true; t.addLog(`${p.name} walked to another table and stops dealing after this round.`); } return 0; }
+  }
   if (t.staked(id) > 0) { if (t.phase !== 'betting') throw new Error('Your bet is still in play. Walk over when this round ends.'); t.clearBets(id, true); }
   const b = isFrozen(t) ? t.base?.[id] : null, from = b || p;
   const amount = r2(Math.max(0, from.chips));

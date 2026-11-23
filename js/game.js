@@ -871,7 +871,12 @@ export class Table {
   // adds up to zero. Chips in a hand that is being played stay until it ends.
   cashOut(clientId) {
     const p = this.mustPlayer(clientId);
-    if (this.banker === clientId) throw new Error('You are the dealer. Stop dealing first, then walk over with your chips.');
+    // The dealer walking to another table stops dealing by itself: between rounds at once, in a round after it
+    // is settled (the hand always plays to its real result). Chips can only go along once the dealer seat is free.
+    if (this.banker === clientId) {
+      if (this.inRound()) { if (!this.bankerLeaving) { this.bankerLeaving = true; this.addLog(`${p.name} walked to another table and stops dealing after this round.`); } return 0; }
+      this.leaveDealer(clientId);
+    }
     const mine = this.seatsOf(clientId);
     if (this.inRound() && mine.some((i) => this.seats[i].hands.length)) throw new Error('Your hand is still being played. Walk over when this round ends.');
     for (const i of mine) { const s = this.seats[i]; s.bet = { main: 0, sides: {} }; s.ready = false; }
