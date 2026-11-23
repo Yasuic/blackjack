@@ -1,17 +1,17 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { outerLink } from './shell.js?v=20261122zp';
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe } from './game.js?v=20261122zp';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122zp';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122zp';
-import { tickSound, winSound } from './fx.js?v=20261122zp';
-import * as HX from './history.js?v=20261122zp';
-import { webglOK, initRoom } from './room3d.js?v=20261122zp';
-import { COPY_BTN, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261122zp';
-import { makeVault, makeOpener, cleanBox, cleanPiece } from './vault.js?v=20261122zp';
-import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122zp';
-import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122zp';
+import { outerLink } from './shell.js?v=20261122zq';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe } from './game.js?v=20261122zq';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122zq';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122zq';
+import { tickSound, winSound } from './fx.js?v=20261122zq';
+import * as HX from './history.js?v=20261122zq';
+import { webglOK, initRoom } from './room3d.js?v=20261122zq';
+import { COPY_BTN, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261122zq';
+import { makeVault, makeOpener, cleanBox, cleanPiece } from './vault.js?v=20261122zq';
+import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122zq';
+import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122zq';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -709,6 +709,7 @@ function runAction(id, msg, onError) {
     switch (msg.t) {
       case 'sit': t.sit(id, Number(msg.seat), !!msg.add); break;
       case 'sit-out': t.sitOut(id, msg.seat, !!msg.on); break;
+      case 'leave-seat': t.leaveSeat(id, msg.seat); break;
       case 'stand-up': t.standUp(id, Number.isInteger(msg.seat) ? msg.seat : undefined); break;
       case 'bet': t.setBet(id, msg); break;
       case 'insurance': t.insurance(id, !!msg.take, Number.isInteger(msg.seat) ? msg.seat : undefined); break;
@@ -1389,6 +1390,7 @@ function buildLayout() {
             <div class="share"><input id="share" readonly /><button class="btn small" data-act="copy">Copy</button></div>
           </div>
           <button class="menu-item" data-act="view-pad" title="Look left, Look right, Reset view, Walk around and zoom buttons">🎥 View buttons: ${viewPadOn() ? 'on' : 'off'}</button>
+          <button class="menu-item" data-act="afk-screen" title="A black screen with plain white text while you are away: who deals, the round, the ledger. The table keeps running.">🌙 AFK screen</button>
           ${fold('m-table', '📜 Table rules and payouts', `
             <button class="menu-item" data-act="rules">💰 Side bet payouts</button>`)}
           ${fold('m-view', '🎛️ My view and sound', `
@@ -1400,13 +1402,12 @@ function buildLayout() {
             <button class="menu-item" data-act="keys">⌨️ Keyboard keys</button>`)}
           ${host ? `
           ${fold('m-round', '🃏 Round', '<div id="host-round"></div>')}
-          ${fold('m-players', '👥 Players', `<button class="menu-item" data-act="afk-screen" title="A black screen with plain white text while you are away: who deals, the round, the ledger. The table keeps running.">🌙 AFK screen</button>
-            <div class="hint" style="margin-bottom:8px">Chips for Give / Take: <input id="give-amt" type="number" value="500" min="1" style="width:90px" /></div>
+          ${fold('m-players', '👥 Players', `<div class="hint" style="margin-bottom:8px">Chips for Give / Take: <input id="give-amt" type="number" value="500" min="1" style="width:90px" /></div>
             <div id="host-players" class="player-list"></div>`)}
           ${fold('m-settings', '⚙️ Game settings', '<div id="host-settings"></div>')}
           ${fold('m-log', '📝 Table log', `<div id="host-log" class="log"></div>
             ${fold('m-logs', 'Logs', `<button class="menu-item" data-act="hist-panel" title="A small list of the hands at the left of the screen.">🕘 Hand history: ${histOn() ? 'on' : 'off'}</button>`, true)}`)}` : `
-          ${fold('m-players', '👥 Players', '<button class="menu-item" data-act="afk-screen" title="A black screen with plain white text while you are away: who deals, the round, the ledger. The table keeps running.">🌙 AFK screen</button><button class="menu-item" data-act="become-host" title="The table moves to your browser. No vote: the host\'s browser hands it over.">👑 Become host</button><button class="menu-item" data-act="force-host" title="For a host who is away and whose browser does not answer. The table opens in your browser and everyone moves there.">⚡ Force take over (AFK HOST)</button><div id="guest-players" class="player-list"></div>')}
+          ${fold('m-players', '👥 Players', '<button class="menu-item" data-act="become-host" title="The table moves to your browser. No vote: the host\'s browser hands it over.">👑 Become host</button><button class="menu-item" data-act="force-host" title="For a host who is away and whose browser does not answer. The table opens in your browser and everyone moves there.">⚡ Force take over (AFK HOST)</button><div id="guest-players" class="player-list"></div>')}
           ${fold('m-settings', '⚙️ Game settings', '<div class="hint" style="margin-bottom:8px">Any seated player can change the settings. Everyone else has to vote yes.</div><div id="host-settings"></div>')}
           ${fold('m-log', '📝 Table log', `<div id="host-log" class="log"></div>
             ${fold('m-logs', 'Logs', `<button class="menu-item" data-act="hist-panel" title="A small list of the hands at the left of the screen.">🕘 Hand history: ${histOn() ? 'on' : 'off'}</button>`, true)}`)}`}
@@ -2515,7 +2516,7 @@ function seatHTML(st, s, i, focus, spot) {
   return `<div class="seat ${cls} ${many ? 'many' : ''} ${hot} ${isMe ? 'me' : ''} ${turn ? 'turn' : ''} ${inHand ? 'inhand' : ''} ${s.out ? 'out' : ''} ${s.connected ? '' : 'away'}" id="seat-${i}" ${place} ${mini || many ? 'title="Tap to see this seat large"' : ''}>
     ${hands}
     ${bets}
-    <div class="who" ${isMe ? '' : `data-throw-at="${s.playerId}" title="Tap to throw something at ${esc(s.name)}"`}><span class="name"><b class="sn" title="Seat ${i + 1}">${i + 1}</b>${s.streak >= 3 ? `<span class="fire">🔥</span>${s.streak} ` : ''}${s.playerId === st.hostId ? '♛ ' : ''}${esc(s.name)}${isMe ? ' (you)' : ''}${s.connected ? '' : ' (away)'}</span><span class="chips">${money(s.chips)}${net}</span>${ready}${isMe && st.banker?.id !== S.myId ? `<button class="seat-out-tag ${s.out ? 'on' : ''} ${Number(spot.x) > 60 && !spot.phone ? 'tl' : ''}" data-act="sit-out" data-seat="${i}" data-on="${s.out ? 0 : 1}" title="${s.out ? 'Play this seat again from the next round' : 'Skip rounds on this seat. You keep the seat, and a hand in play is still finished.'}">${s.out ? 'Sit in' : 'Sit out'}</button>` : ''}</div>
+    <div class="who" ${isMe ? '' : `data-throw-at="${s.playerId}" title="Tap to throw something at ${esc(s.name)}"`}><span class="name"><b class="sn" title="Seat ${i + 1}">${i + 1}</b>${s.streak >= 3 ? `<span class="fire">🔥</span>${s.streak} ` : ''}${s.playerId === st.hostId ? '♛ ' : ''}${esc(s.name)}${isMe ? ' (you)' : ''}${s.connected ? '' : ' (away)'}</span><span class="chips">${money(s.chips)}${net}</span>${ready}${isMe && st.banker?.id !== S.myId ? `<button class="seat-out-tag ${s.leaving ? 'on' : ''} ${Number(spot.x) > 60 && !spot.phone ? 'tl' : ''}" data-act="leave-seat" data-seat="${i}" title="${s.leaving ? 'Tap to stay in this seat' : 'Leave this seat. A hand in play is still finished first.'}">${s.leaving ? 'Leaving' : 'Sit out'}</button>` : ''}</div>
   </div>`;
 }
 
@@ -2695,7 +2696,7 @@ function sitOutHTML(st) {
   const me = st.players.find((p) => p.id === S.myId);
   const mine = (me?.seats || []).filter((i) => st.seats[i]);
   if (!mine.length || st.banker?.id === S.myId) return '';
-  return mine.map((i) => { const o = st.seats[i].out; return `<button class="seat-out ${o ? 'on' : ''}" data-act="sit-out" data-seat="${i}" data-on="${o ? 0 : 1}" title="${o ? 'Play this seat again from the next round' : 'Skip rounds on this seat. You keep the seat, and a hand in play is still finished.'}">${mine.length > 1 ? `Seat ${i + 1}: ` : ''}${o ? 'Sit back in' : 'Sit out'}</button>`; }).join('');
+  return mine.map((i) => { const lv = st.seats[i].leaving; return `<button class="seat-out ${lv ? 'on' : ''}" data-act="leave-seat" data-seat="${i}" title="${lv ? 'Tap to stay in this seat' : 'Leave this seat. A hand in play is still finished first.'}">${mine.length > 1 ? `Seat ${i + 1}: ` : ''}${lv ? 'Leaving after this round' : 'Sit out'}</button>`; }).join('');
 }
 // ---------- Live chat ----------
 // Text chat for everyone at the table, players and watchers. It travels over the table's own
@@ -3012,8 +3013,6 @@ function trayInner(st) {
         ${sideKeys(st).length ? '<button class="btn" data-act="sides-plus" title="Adds 1 to every side bet on all your hands">+1 all side bets</button>' : ''}
         ${autoRebetBtn()}${rebet || `<button class="btn" data-act="clear" ${(myInfo(st).me?.seats || []).some((i) => betTotal(st.seats[i]?.bet)) || betTotal(b) ? '' : 'disabled'}>Clear all</button>`}
         ${bigBtnHTML(st)}
-        <button class="btn danger" data-act="stand-up">${(myInfo(st).me?.seats || []).length > 1 ? `Leave seat ${myInfo(st).me.seat + 1}` : 'Leave seat'}</button>
-        ${(myInfo(st).me?.seats || []).length > 1 ? '<button class="btn danger" data-act="stand-up-all">Leave all seats</button>' : ''}
       </div>`;
   }
   if (ph === 'insurance') {
@@ -3403,6 +3402,7 @@ function runAct(el) {
     case 'stand-up': send({ t: 'stand-up', seat: myInfo(S.state).me?.seat }); break;
     case 'stand-up-all': send({ t: 'stand-up' }); break;
     case 'sit-out': send({ t: 'sit-out', seat: Number(el.dataset.seat), on: el.dataset.on === '1' }); break;
+    case 'leave-seat': send({ t: 'leave-seat', seat: Number(el.dataset.seat) }); break;
     case 'pick-seat': pickSeat(Number(el.dataset.seat)); break;
     case 'ask-out': send({ t: 'ask-out', to: el.dataset.id }); break;
     case 'auto': S.auto = { speed: 'normal', ...(S.auto || {}), on: !S.auto?.on, key: null }; clearTimeout(S.auto.timer); render(); autoStep(); break;

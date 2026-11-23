@@ -921,6 +921,15 @@ export class Table {
     this.ev(on ? 'sit out' : 'sit back in', clientId, `seat ${idx + 1}`);
   }
 
+  // Leaving a seat. Between rounds the seat frees at once. With a hand in play there, the seat is marked and
+  // frees when the round is over (the hand always plays to a real result). Pressing it again calls it off.
+  leaveSeat(clientId, seatIdx) {
+    const { seat, idx } = this.mustSeat(clientId, seatIdx);
+    if (seat.leaving) { seat.leaving = false; this.ev('stays in the seat', clientId, `seat ${idx + 1}`); return; }
+    if (this.inRound() && seat.hands.length) { seat.leaving = true; this.ev('leaves this seat after the round', clientId, `seat ${idx + 1}`); return; }
+    this.standUp(clientId, idx);
+  }
+
   // "Leave after this round" (players) and "Stop dealing after this round" (the player who is the dealer).
   // In a round it only marks the player, and pressing again (on = false) calls it off. The player leaves the
   // seats when the round is over; the dealer leaves the dealer seat when the round is settled. Between rounds it happens at once.
@@ -1083,7 +1092,7 @@ export class Table {
       const seat = this.seats[i];
       if (!seat) continue;
       const p = this.players[seat.playerId];
-      if (p.kicked || p.leaving) { this.seats[i] = null; this.fixSeat(p); continue; }
+      if (p.kicked || p.leaving || seat.leaving) { this.seats[i] = null; this.fixSeat(p); continue; }
       // Every round starts with empty betting spots; players put fresh chips down.
       this.seats[i] = emptySeat(seat.playerId);
       if (seat.out) this.seats[i].out = true; // a seat that sits out stays out until its player comes back in
@@ -1695,6 +1704,7 @@ export class Table {
           bet: s.bet,
           ready: s.ready,
           out: !!s.out,
+          leaving: !!s.leaving,
           betSeq: s.betSeq || 0,
           streak: s.streak || 0,
           insurance: s.insurance,
