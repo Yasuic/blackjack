@@ -2,7 +2,7 @@
 // Thousands of rounds with 1, 2 and 3 players (some on two seats), random moves including ace resplits,
 // surrender, side bets, insurance, buy ins mid hand, sit out and leaving mid round, auto unseat, a player dealer
 // who walks away mid round, players dropping and coming back, and host reloads mid hand.
-// Every round: each card went to its announced place, the saved table (the host's one line) holds the hole card,
+// Every round: each card went to its announced place, the saved table holds the whole dealer hand (for a reload),
 // and every finished shoe replays card for card from its seeds and keys.
 import * as G from '../js/game.js';
 const ROUNDS = Number(process.env.ROUNDS || 1500);
@@ -11,7 +11,7 @@ const ok = (c, m) => { n++; if (!c) { fails++; if (fails < 20) console.log('FAIL
 let rnd = 12345; const rand = () => ((rnd = (rnd * 1103515245 + 12345) % 2147483648) / 2147483648);
 const pickOf = (a) => a[Math.floor(rand() * a.length)];
 let kc = 0;
-const T = { rounds: 0, hole: 0, holeBad: 0, split: 0, aceResplit: 0, double: 0, surrender: 0, hit: 0, ins: 0, insBuy: 0, dblBuy: 0, splitBuy: 0, sitOut: 0, leaveMid: 0, unseated: 0, dealerWalk: 0, drop: 0, back: 0, reload: 0, shoesReplayed: 0, replayBad: 0, wrong: 0, burns: 0, keyCards: 0 };
+const T = { rounds: 0, saved: 0, savedBad: 0, split: 0, aceResplit: 0, double: 0, surrender: 0, hit: 0, ins: 0, insBuy: 0, dblBuy: 0, splitBuy: 0, sitOut: 0, leaveMid: 0, unseated: 0, dealerWalk: 0, drop: 0, back: 0, reload: 0, shoesReplayed: 0, replayBad: 0, wrong: 0, burns: 0, keyCards: 0 };
 function track(t) {
   const orig = G.Table.prototype.pick;
   t.pick = function (to) { const c = orig.call(this, to); const k = this.fair?.current?.n; (this.__seen ||= {})[k] ||= []; this.__seen[k].push(c.r + c.s); return c; };
@@ -58,9 +58,9 @@ for (const players of [1, 2, 3]) {
     run(t, plan, () => t.deal());
     if (!t.inRound()) { t.startBetting(); continue; }
     T.rounds++;
-    // The host's one line: the saved table holds both dealer cards, the second one face down for the guests.
-    const holeCheck = (tt) => { const saved = JSON.parse(JSON.stringify(tt)); const d = saved.dealer.cards; const g = tt.publicState('b').dealer.cards; if (d.length >= 2 && d.every((c) => c.r && c.s) && (tt.dealer.revealed || !(g[1] && g[1].r))) T.hole++; else { T.holeBad++; } };
-    holeCheck(t);
+    // The saved table holds both dealer cards (for a reload), the second one face down for the guests.
+    const savedCheck = (tt) => { const saved = JSON.parse(JSON.stringify(tt)); const d = saved.dealer.cards; const g = tt.publicState('b').dealer.cards; if (d.length >= 2 && d.every((c) => c.r && c.s) && (tt.dealer.revealed || !(g[1] && g[1].r))) T.saved++; else { T.savedBad++; } };
+    savedCheck(t);
     let g = 0, reloaded = false;
     while (t.inRound() && g++ < 300) {
       // A host reload mid hand: the table comes back from its saved copy and plays on.
@@ -69,7 +69,7 @@ for (const players of [1, 2, 3]) {
         const seen = t.__seen, checked = t.__checked;
         t = G.Table.fromJSON(saved); t.__seen = seen; t.__checked = checked; track(t);
         for (const id of [...ids, banker].filter(Boolean)) if (t.players[id]) t.players[id].connected = true;
-        reloaded = true; T.reload++; holeCheck(t);
+        reloaded = true; T.reload++; savedCheck(t);
       }
       if (t.phase === 'insurance') {
         for (const id of ids) for (const s of t.seatsOf(id)) {
@@ -129,7 +129,7 @@ for (const players of [1, 2, 3]) {
 }
 console.log(JSON.stringify(T));
 ok(T.rounds > ROUNDS * 2.5, 'rounds played: ' + T.rounds);
-ok(T.holeBad === 0 && T.hole >= T.rounds, `hole card in the saved table every time (${T.hole} checks, ${T.holeBad} bad)`);
+ok(T.savedBad === 0 && T.saved >= T.rounds, `dealer hand in the saved table every time (${T.saved} checks, ${T.savedBad} bad)`);
 ok(T.wrong === 0, 'every card went where it was announced');
 ok(T.burns === 0, 'no card burned in normal play: ' + T.burns);
 ok(T.replayBad === 0 && T.shoesReplayed > 20, `every finished shoe replays card for card (${T.shoesReplayed} shoes)`);

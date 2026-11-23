@@ -26,8 +26,6 @@ assert.equal(G.evalRoyalMatch(cs('K♦ Q♦')).mult, 25);
 assert.equal(G.evalRoyalMatch(cs('2♦ 9♦')).mult, 2.5);
 assert.equal(G.evalLuckyLucky(cs('6♦ 7♦'), c('8♦')).mult, 100);
 assert.equal(G.evalLuckyLucky(cs('A♦ K♣'), c('Q♦')).mult, 3);
-assert.equal(G.evalOverUnder(cs('A♦ K♣'), false).win, true);
-assert.equal(G.evalOverUnder(cs('3♦ K♣'), true).win, false);
 assert.equal(G.evalBustIt(cs('10♦ 6♣ 9♠')).mult, 1);
 assert.equal(G.evalBustIt(cs('2♦ 3♣ 4♠ 2♠ 5♠ K♠')).mult, 50);
 // full rounds random fuzz: chips conservation

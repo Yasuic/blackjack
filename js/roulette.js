@@ -1,7 +1,8 @@
 // European roulette (one zero, 37 pockets) for up to 9 players against the house. Pure rules: the host's
 // browser owns one RouTable and every bet goes through it. Nothing here touches the page or the network.
-import { sha256, MAX_CHIPS } from './game.js?v=20261123e';
-import { isFrozen, bankJoin, setBank, clearBank, bankGone, bankSettle, ledgerNet, ledgerSum, bankAdopt, bankCashOut, bankCarryIn, dealerUnseat, unseatQueued } from './bank.js?v=20261123e';
+import { sha256, MAX_CHIPS } from './game.js?v=20261123f';
+import { pstatAdd, pstatsView } from './pstatcore.js?v=20261123f';
+import { isFrozen, bankJoin, setBank, clearBank, bankGone, bankSettle, ledgerNet, ledgerSum, bankAdopt, bankCashOut, bankCarryIn, dealerUnseat, unseatQueued } from './bank.js?v=20261123f';
 
 export const ROU_SEATS = 9;
 export const ROU_DEFAULTS = {
@@ -268,6 +269,7 @@ export class RouTable {
     { const off = r2(this.ledgerSum() - before); if (off && this.players[this.bankId]) this.players[this.bankId].chips = r2(this.players[this.bankId].chips - off); } // a rounding cent, if any, is the dealer's: the ledger stays at zero
     this.addLog(`Spin ${this.round}: ${n} ${this.spin.color}.`);
     for (const [id, pay] of Object.entries(this.pays)) this.addLog(pay.bank ? `  ${this.players[id].name} (dealer): ${pay.net > 0 ? 'won ' + pay.net : pay.net < 0 ? 'paid ' + -pay.net : 'no change'}.` : `  ${this.players[id].name}: bet ${pay.staked}, ${pay.net > 0 ? 'won ' + pay.net : pay.net < 0 ? 'lost ' + -pay.net : 'no change'}${this.roundFrozen ? ' (practice)' : ''}.`);
+    pstatAdd(this, this.round, Object.entries(this.pays).map(([id, pay]) => ({ name: this.players[id]?.name, net: pay.net, dealer: !!pay.bank })), !this.roundFrozen);
     this.history.push(n);
     if (this.history.length > 200) this.history.shift();
     this.bets = {};
@@ -285,7 +287,7 @@ export class RouTable {
     for (const b of Object.values(this.bets)) for (const [k, v] of Object.entries(b)) totals[k] = (totals[k] || 0) + v;
     return {
       game: 'roulette', settings: this.settings, phase: this.phase, round: this.round, hostId: this.hostId, spin: this.spin, pays: this.pays,
-      bets: this.bets, lastBets: this.lastBets, totals, canSpin: this.canSpin(), ready: Object.keys(this.ready), waiting: this.waitingFor(), history: this.history.slice(-60),
+      bets: this.bets, lastBets: this.lastBets, totals, canSpin: this.canSpin(), ready: Object.keys(this.ready), waiting: this.waitingFor(), history: this.history.slice(-60), pstats: pstatsView(this),
       betLeft: this.betStart !== null && this.settings.betTime ? Math.max(0, this.settings.betTime * 1000 - (Date.now() - this.betStart)) : null,
       players: Object.values(this.players).filter((p) => !p.kicked).map((p) => ({ id: p.id, name: p.name, connected: p.connected, chips: p.chips, totalIn: p.totalIn, look: p.look, seat: p.seat, away: !!p.quiet, net: ledgerNet(this, p), base: this.base?.[p.id] || null })),
       bankId: this.bankId, bankLeaving: !!this.bankLeaving, unseated: this.unseated || null, unseatLater: this.unseatLater || [], frozen: this.frozen, roundFrozen: !!this.roundFrozen, ledgerSum: this.ledgerSum(),

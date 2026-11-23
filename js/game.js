@@ -73,20 +73,6 @@ export const SIDE_BETS = {
     about: 'Your first two cards plus the dealer up card total 19, 20 or 21.',
     table: [['Suited 7-7-7', 200], ['Suited 6-7-8', 100], ['7-7-7', 50], ['6-7-8', 30], ['Suited 21', 15], ['Any 21', 3], ['20', 2], ['19', 2]],
   },
-  over13: {
-    name: 'Over 13',
-    short: '>13',
-    icon: '⬆️',
-    about: 'Your first two cards total more than 13 (aces count as 1).',
-    table: [['Total 14 or more', 1]],
-  },
-  under13: {
-    name: 'Under 13',
-    short: '<13',
-    icon: '⬇️',
-    about: 'Your first two cards total less than 13 (aces count as 1).',
-    table: [['Total 12 or less', 1]],
-  },
   bustIt: {
     name: 'Dealer Bust',
     short: 'Bust',
@@ -293,13 +279,6 @@ export function evalLuckyLucky(p, up) {
   return { win: false, label: `Total ${total}` };
 }
 
-export function evalOverUnder(p, over) {
-  const t = cardValue(p[0]) + cardValue(p[1]);
-  if (t === 13) return { win: false, label: 'Exactly 13' };
-  const win = over ? t > 13 : t < 13;
-  return win ? { win: true, label: `Total ${t}`, mult: 1 } : { win: false, label: `Total ${t}` };
-}
-
 export function evalHot3(p, up) {
   const cards = [p[0], p[1], up];
   const { total } = handTotal(cards);
@@ -489,6 +468,9 @@ export class Table {
     if (s.shuffleMode !== 'rounds') s.shuffleMode = 'penetration';
     s.shuffle8 = s.shuffle8 !== false;
     for (const k of ['dealerHitsSoft17', 'allowSurrender', 'autoDeal']) s[k] = !!s[k];
+    // There is no Deal or Stand for a slow player button: a round always starts and every move always ends on its own.
+    if (!s.betTimer) s.autoDeal = true;
+    if (!s.turnTimer) s.turnTimer = 30;
     s.seats = seatCount(s.seats, this.seats.length);
     if (s.seats < this.seats.length && this.inRound() && this.seats.slice(s.seats).some(Boolean)) throw new Error('Seats can be taken away when this round ends.');
     this.settings = s;
@@ -585,6 +567,40 @@ export class Table {
     this.addLog(`${b.name} lost ${lost} (stop at loss ${this.capAmount()}) and stopped dealing.`);
     this.ev('stopped dealing: loss cap', b.id, `lost ${lost} of ${this.capAmount()}`);
     return true;
+  }
+
+  // The dealer's Save: bet limits, shuffle every 8, Big Bets Sometimes and Stop at loss in one go. Everything is
+  // checked first, so a bad number changes nothing. Only what differs from the table is applied.
+  dealerSave(clientId, c = {}) {
+    if (this.banker !== clientId) throw new Error('Only the dealer changes these.');
+    if (this.phase !== 'betting' && this.phase !== 'settled') throw new Error('Change these between rounds.');
+    const s = this.settings, num = (v, d) => (v === undefined || v === null || v === '' ? d : Math.round(Number(v)));
+    const min = num(c.min, s.minBet), max = num(c.max, s.maxBet), side = num(c.side, s.maxSideBet);
+    if (!(min >= 1)) throw new Error('The minimum bet has to be at least 1.');
+    if (!(max >= min)) throw new Error(`The maximum bet cannot be below the minimum bet of ${min}.`);
+    if (!(side >= 0)) throw new Error('The maximum side bet cannot be below 0.');
+    if (min > 1e9 || max > 1e9 || side > 1e9) throw new Error('That amount is too large.');
+    const big = c.big && c.big.on ? { limit: num(c.big.limit, 0), per: num(c.big.per, 0), hands: num(c.big.hands, 0) } : null;
+    if (big) {
+      if (!(big.limit > max)) throw new Error(`The big bet amount has to be above the maximum bet of ${max}.`);
+      if (!(big.per >= 1) || !(big.hands >= 1)) throw new Error('Big bets each and Every need at least 1.');
+      if (big.limit > 1e9) throw new Error('That big bet amount is too large.');
+    }
+    const capAmt = c.cap ? num(c.cap.amount, null) : null;
+    if (c.cap && capAmt !== null && (!(capAmt >= 1) || capAmt > 1e9)) throw new Error('Pick a loss of at least 1.');
+    if (min !== s.minBet) { this.settings = { ...this.settings, minBet: min }; this.addLog(`${this.players[clientId].name}, the dealer, set the minimum bet to ${min}.`); }
+    if (max !== s.maxBet || side !== s.maxSideBet) this.setDealerMax(clientId, max, side);
+    if (c.shuffle8 !== undefined && !!c.shuffle8 !== (this.settings.shuffle8 !== false)) this.setShuffle8(clientId, !!c.shuffle8);
+    if (c.big !== undefined) {
+      const b = this.settings.bigBet;
+      if (!big) { if (b) this.setBigBet(clientId, { off: true }); }
+      else if (!b || b.limit !== big.limit || b.per !== big.per || b.hands !== big.hands) this.setBigBet(clientId, big);
+    }
+    if (c.cap) {
+      if (!this.lossCap || this.lossCap.id !== clientId) this.startLossCap();
+      const k = this.lossCap;
+      if (!!c.cap.on !== !!k.on || (capAmt !== null && capAmt !== this.capAmount())) this.setLossCap(clientId, !!c.cap.on, capAmt);
+    }
   }
 
   setDealerMax(clientId, amount, sideAmount) {
@@ -1352,8 +1368,6 @@ export class Table {
       if (sides.royalMatch) this.settleSide(seat, 'royalMatch', evalRoyalMatch(pc));
       if (sides.luckyLucky) this.settleSide(seat, 'luckyLucky', evalLuckyLucky(pc, up));
       if (sides.hot3) this.settleSide(seat, 'hot3', evalHot3(pc, up));
-      if (sides.over13) this.settleSide(seat, 'over13', evalOverUnder(pc, true));
-      if (sides.under13) this.settleSide(seat, 'under13', evalOverUnder(pc, false));
     }
     this.addLog(`Round ${this.round} dealt.`);
     this.ev('deal', null, `round ${this.round}`);

@@ -51,7 +51,7 @@ ok(t.fair.cards > 3000, 'cards opened with keys: ' + t.fair.cards);
   ok(v.log.some((l) => /Card 1 was announced for the dealer but went to seat 1 hand 1/.test(l)), 'a card sent elsewhere is in the log');
   ok(G.destName('s2.1') === 'seat 3 hand 2' && G.destName('H') === "the dealer's hole card", 'place names');
 }
-// The hole card stays readable in the host's saved table, as before.
+// The saved table keeps the whole dealer hand, so a reload of the host's tab carries on the same round.
 {
   const w = Object.assign(new G.Table({ decks: 8 }), { frozen: true }); w.join('a', 'A'); w.sit('a', 0); w.setBet('a', { main: 10, sides: {} });
   run(w, w.dealPlan(), () => w.deal());

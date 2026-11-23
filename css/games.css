@@ -686,8 +686,7 @@ button.tt-profit { cursor: pointer; font-family: inherit; color: inherit; backgr
 .tt-box { display: contents; }
 @media (min-width: 701px) { body.in-room .topbar .tt-box { position: absolute; left: 446px; top: 50%; transform: translateY(-50%); display: flex; align-items: center; gap: 10px; } }
 @media (max-width: 1240px) { .tt-size { display: none; } }
-@media (max-width: 1040px) { .tt-profit .tt-pl { display: none; } .tt-profit::before { content: 'P/L '; opacity: .7; } }
-@media (max-width: 1040px) { .tt-profit .tt-rl { display: none; } .tt-profit .tt-risk { margin-left: 5px; padding-left: 5px; } .tt-profit .tt-risk::before { content: 'Risk '; opacity: .7; } }
+@media (max-width: 1040px) { .tt-profit.tt-risk-only .tt-rl { display: none; } .tt-profit.tt-risk-only::before { content: 'Risk '; opacity: .7; } }
 @media (max-width: 700px) {
   body.in-room .topbar .tt-profit { flex: none; overflow: visible; padding: 3px 7px; font-size: 11px; }
   .tt-wrap { position: static; }
@@ -698,10 +697,7 @@ button.tt-profit { cursor: pointer; font-family: inherit; color: inherit; backgr
   body.in-room .topbar [data-act="copy"] { font-size: 0; padding: 6px 8px; }
   body.in-room .topbar [data-act="copy"]::before { content: '🔗'; font-size: 14px; }
 }
-@media (max-width: 430px) { body.in-room .topbar .game-switch { max-width: 88px; min-width: 52px; flex: 0 1 88px; padding-left: 6px; padding-right: 2px; } body.in-room .topbar { gap: 4px; padding-left: 6px; padding-right: 6px; } body.in-room .topbar .btn.small { padding-left: 6px; padding-right: 6px; } body.in-room .topbar .tt-profit { padding: 3px 5px; } body.in-room .topbar .tt-profit::before { content: ''; } }
-.tt-sp { font-size: 14px; font-weight: 600; color: #dfe6e2; padding-bottom: 6px; border-bottom: 1px solid rgba(255,255,255,.1); }
-.tt-sp[hidden] { display: none; }
-.tt-sp b.up { color: #7ef0b6; } .tt-sp b.down { color: #ff8a8a; }
+@media (max-width: 430px) { body.in-room .topbar .game-switch { max-width: 88px; min-width: 52px; flex: 0 1 88px; padding-left: 6px; padding-right: 2px; } body.in-room .topbar { gap: 4px; padding-left: 6px; padding-right: 6px; } body.in-room .topbar .btn.small { padding-left: 6px; padding-right: 6px; } body.in-room .topbar .tt-profit { padding: 3px 5px; } body.in-room .topbar .tt-profit.tt-risk-only::before { content: 'Risk '; } }
 body.no-cards .tt-pop .tt-row:first-child { display: grid; } body.no-cards .tt-pop .tt-row:first-of-type { display: none; }
 /* Baccarat, wide table: purple casino felt with nine numbered places round the curved side (drawn as one SVG). */
 .felt.pfelt.bfelt, .felt.pfelt.bfelt.tall { background:
@@ -798,3 +794,12 @@ body:not(.room3d) .ro-result, .pfelt.tall .ro-result { display: none; }
 .ro-last i.red, .ro-n.red { background: #c62f2f; } .ro-last i.black, .ro-n.black { background: #17191f; } .ro-last i.green, .ro-n.green { background: #1f9a4d; }
 /* Very narrow phones (iPhone SE): the speaker button needs a little room in the top bar. */
 @media (max-width: 380px) { .topbar { gap: 3px !important; } .topbar .btn.small, .topbar .pill, .topbar .tt-btn { padding-left: 5px !important; padding-right: 5px !important; } .tt-btn { min-width: 28px; } }
+/* "At risk" in the top bar while a hand is in play; session profit is in the ledger (.ld-mine). */
+.tt-profit.tt-risk-only b { color: #f2d58a; }
+.ld-mine { font-size: 15px; font-weight: 600; margin: 0 0 10px; }
+.ld-mine b.up { color: #7ef0b6; } .ld-mine b.down { color: #ff8a8a; }
+.ld-mine.ld-prac { color: #8ec5ff; font-size: 14px; } .ld-mine.ld-prac b { color: #8ec5ff; }
+.ld-tag { font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 999px; background: rgba(78,150,255,.18); border: 1px solid rgba(142,197,255,.45); color: #8ec5ff; margin-left: 6px; white-space: nowrap; }
+/* Auto rebet: a full size button in the middle of its row. */
+.btn.auto-rebet { font-size: 15px; padding: 10px 22px; min-height: 44px; }
+.tray .actions:has(> .auto-rebet) { justify-content: center; }

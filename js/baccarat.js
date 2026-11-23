@@ -1,8 +1,9 @@
 // Baccarat (punto banco) for up to 9 players against the house. Pure rules: the host's browser owns one
 // BacTable and every bet goes through it. Nothing here touches the page or the network.
-import { sha256, fairShoe, MAX_CHIPS } from './game.js?v=20261123e';
-import { pickIndex, newNonce, cleanNonce } from './cardkeys.js?v=20261123e';
-import { isFrozen, bankJoin, setBank, clearBank, bankGone, bankSettle, ledgerNet, ledgerSum, bankAdopt, bankCashOut, bankCarryIn, dealerUnseat, unseatQueued } from './bank.js?v=20261123e';
+import { sha256, fairShoe, MAX_CHIPS } from './game.js?v=20261123f';
+import { pickIndex, newNonce, cleanNonce } from './cardkeys.js?v=20261123f';
+import { pstatAdd, pstatsView } from './pstatcore.js?v=20261123f';
+import { isFrozen, bankJoin, setBank, clearBank, bankGone, bankSettle, ledgerNet, ledgerSum, bankAdopt, bankCashOut, bankCarryIn, dealerUnseat, unseatQueued } from './bank.js?v=20261123f';
 
 export const BAC_SEATS = 9;
 export const BAC_DEFAULTS = {
@@ -357,6 +358,7 @@ export class BacTable {
     const who = res.winner === 'tie' ? 'Tie' : res.winner === 'player' ? 'Player wins' : 'Banker wins';
     this.addLog(`Round ${this.round}: Player ${res.P.map(cardText).join(' ')} (${res.pt}), Banker ${res.B.map(cardText).join(' ')} (${res.bt}). ${who}${res.natural ? ' with a natural' : ''}${res.ppair ? ', Player pair' : ''}${res.bpair ? ', Banker pair' : ''}.`);
     for (const [id, pay] of Object.entries(this.pays)) this.addLog(pay.bank ? `  ${this.players[id].name} (dealer): ${pay.net > 0 ? 'won ' + pay.net : pay.net < 0 ? 'paid ' + -pay.net : 'no change'}.` : `  ${this.players[id].name}: bet ${pay.staked}, ${pay.net > 0 ? 'won ' + pay.net : pay.net < 0 ? 'lost ' + -pay.net : 'no change'}${this.roundFrozen ? ' (practice)' : ''}.`);
+    pstatAdd(this, this.round, Object.entries(this.pays).map(([id, pay]) => ({ name: this.players[id]?.name, net: pay.net, dealer: !!pay.bank })), !this.roundFrozen);
     this.history.push({ w: res.winner[0], pp: res.ppair, bp: res.bpair, n: res.natural, pt: res.pt, bt: res.bt });
     if (this.history.length > 120) this.history.shift();
     this.bets = {};
@@ -375,7 +377,7 @@ export class BacTable {
       game: 'baccarat', settings: this.settings, phase: this.phase, halted: !!this.halted, round: this.round, hostId: this.hostId, hand: this.phase === 'peel' ? this.peelView() : this.hand, pays: this.pays,
       peel: this.phase === 'peel' ? { stage: this.peel.stage, open: { ...this.peel.open }, who: { ...this.peel.who }, left: Math.max(0, 12000 - (Date.now() - this.peel.at)), dealing: this.dealing(),
         mine: Object.fromEntries(this.peelKeys().filter((k) => !this.peel.open[k] && this.peel.who[k[0]] === forId).map((k) => [k, this.full[k[0]][Number(k[1])]])) } : null,
-      bets: this.bets, lastBets: this.lastBets, totals: tot, canDeal: this.canDeal(), history: this.history.slice(-72),
+      bets: this.bets, lastBets: this.lastBets, totals: tot, canDeal: this.canDeal(), history: this.history.slice(-72), pstats: pstatsView(this),
       betLeft: this.betStart !== null && this.settings.betTime ? Math.max(0, this.settings.betTime * 1000 - (Date.now() - this.betStart)) : null,
       cardsLeft: undefined, shoeNo: this.shoeNo,
       players: Object.values(this.players).filter((p) => !p.kicked).map((p) => ({ id: p.id, name: p.name, connected: p.connected, chips: p.chips, totalIn: p.totalIn, look: p.look, seat: p.seat, net: ledgerNet(this, p), base: this.base?.[p.id] || null })),

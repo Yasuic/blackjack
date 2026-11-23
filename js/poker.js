@@ -1,7 +1,8 @@
 // No-limit Texas Hold'em for up to 9 players. Pure rules: the host's browser owns one PokerTable and
 // every action goes through it. Nothing here touches the page or the network.
-import { SUITS, RANKS, sha256, fairSeed, fairShoe, MAX_CHIPS } from './game.js?v=20261123e';
-import { openCard, keyFor } from './mental.js?v=20261123e';
+import { SUITS, RANKS, sha256, fairSeed, fairShoe, MAX_CHIPS } from './game.js?v=20261123f';
+import { openCard, keyFor } from './mental.js?v=20261123f';
+import { pstatAdd, pstatsView } from './pstatcore.js?v=20261123f';
 
 export const POKER_SEATS = 9;
 export const POKER_DEFAULTS = {
@@ -459,7 +460,7 @@ export class PokerTable {
   // Collects the cards of a finished hand and goes back to waiting. Used when too few players can play the next hand.
   clearHand() {
     if (this.phase !== 'done') return false;
-    for (const x of this.seats) if (x) Object.assign(x, { bet: 0, total: 0, cards: [], folded: false, allIn: false, acted: false, inHand: false, show: false, mask: null, cc: null, salt: null, won: 0, hand: null, allInAt: 0 });
+    for (const x of this.seats) if (x) Object.assign(x, { start: x.stack, bet: 0, total: 0, cards: [], folded: false, allIn: false, acted: false, inHand: false, show: false, mask: null, cc: null, salt: null, won: 0, hand: null, allInAt: 0 });
     this.board = []; this.board2 = []; this.rabbit = null; this.rabbit2 = null; this.pot = 0; this.result = null; this.allInRun = false; this.runAsk = null; this.runout = null; this.runs = 1; this.runBase = null; this.boards = null; this.turn = null; this.bomb = false;
     this.phase = 'waiting';
     return true;
@@ -912,9 +913,10 @@ export class PokerTable {
     this.phase = 'done';
     // The record of the hand, with the seed that anyone can check.
     const rec = { ...this.cur, dealt: [...this.dealt], board: [...this.board], board2: this.dbl ? [...this.board2] : undefined, boards: R > 1 ? boards : undefined, button: this.button, wins, bounty,
-      seats: dealtIn.map((i) => ({ seat: i, id: this.seats[i].id, name: this.name(i), cards: this.shownCards(i), folded: this.seats[i].folded, total: this.seats[i].total, won: this.seats[i].won || 0, end: this.seats[i].stack })) };
+      seats: dealtIn.map((i) => ({ seat: i, id: this.seats[i].id, name: this.name(i), cards: this.shownCards(i), folded: this.seats[i].folded, total: this.seats[i].total, won: this.seats[i].won || 0, end: this.seats[i].stack, start: this.seats[i].start })) };
     this.fair.last = { hand: rec.hand, commit: rec.commit, serverSeed: rec.serverSeed, clientSeeds: rec.clientSeeds, dealt: rec.dealt }; // host side only
     this.hist.push(rec); if (this.hist.length > 100) this.hist.shift();
+    pstatAdd(this, rec.hand, rec.seats.map((x) => ({ name: x.name, net: Number.isFinite(x.start) ? x.end - x.start : (x.won || 0) - (x.total || 0) })), true);
     this.cur = null;
     // Chips bought during the hand arrive now; seats that asked to leave are freed; broke players sit out.
     for (let i = 0; i < POKER_SEATS; i++) {
@@ -1151,6 +1153,7 @@ export class PokerTable {
       fair: this.fairState(forId),
       mp: this.mpState(forId), shuffling: !!this.shuffling,
       lastHand: this.publicHand(this.hist[this.hist.length - 1]),
+      pstats: pstatsView(this),
       log: this.log.slice(-40),
     };
   }

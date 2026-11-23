@@ -1,17 +1,18 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { startPresence } from './presence.js?v=20261123e';
-import { outerLink } from './shell.js?v=20261123e';
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe, destName } from './game.js?v=20261123e';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261123e';
-import { bestMove, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261123e';
-import { tickSound, winSound } from './fx.js?v=20261123e';
-import * as HX from './history.js?v=20261123e';
-import { webglOK, initRoom } from './room3d.js?v=20261123e';
-import { COPY_BTN, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261123e';
-import { topToolsHTML, initTopTools, setProfit, setRisk, cardScale } from './toptools.js?v=20261123e';
-import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261123e';
+import { startPresence } from './presence.js?v=20261123f';
+import { outerLink } from './shell.js?v=20261123f';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe, destName } from './game.js?v=20261123f';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261123f';
+import { bestMove, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261123f';
+import { tickSound, winSound } from './fx.js?v=20261123f';
+import * as HX from './history.js?v=20261123f';
+import { webglOK, initRoom } from './room3d.js?v=20261123f';
+import { COPY_BTN, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261123f';
+import { topToolsHTML, initTopTools, setProfit, setPractice, setRisk, cardScale, profitLineHTML } from './toptools.js?v=20261123f';
+import { statsHTML } from './pstats.js?v=20261123f';
+import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261123f';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -730,10 +731,8 @@ function runAction(id, msg, onError) {
       }
       case 'leave-dealer': t.leaveDealer(id); break;
       case 'leave-later': t.leaveLater(id, msg.on !== false); break;
-      case 'dealer-max': t.setDealerMax(id, msg.amount, msg.side); break;
+      case 'dealer-save': t.dealerSave(id, msg.cfg); break;
       case 'dealer-shuf': t.setShuffle8(id, !!msg.on); break;
-      case 'dealer-cap': t.setLossCap(id, !!msg.on, msg.amount); break;
-      case 'dealer-big': t.setBigBet(id, msg.off ? { off: true } : { limit: msg.limit, per: msg.per, hands: msg.hands }); break;
       case 'dealer-shuffle': t.dealerShuffle(id); break;
       case 'shuffle': t.playerShuffle(id); break;
       case 'seed': t.setClientSeed(id, msg.seed); return; // nothing on the table changes, so no update is sent
@@ -1317,7 +1316,7 @@ function rebetHands(st) { const n = Object.values(st.rebets || {}).filter(Boolea
 // Bets put down by hand are left alone (the player presses Deal me in for those).
 S.autoRebet = safeGet('bj-autorebet') === '1';
 function autoRebetBtn() {
-  return `<button class="btn small auto-rebet ${S.autoRebet ? 'gold on' : ''}" data-act="auto-rebet" title="Each round, bet the same as last round on all your seats and get dealt in by yourself">🔁 Auto rebet: ${S.autoRebet ? 'on' : 'off'}</button>`;
+  return `<button class="btn auto-rebet ${S.autoRebet ? 'gold on' : ''}" data-act="auto-rebet" title="Each round, bet the same as last round on all your seats and get dealt in by yourself">🔁 Auto rebet: ${S.autoRebet ? 'on' : 'off'}</button>`;
 }
 function autoRebetStep() {
   if (!S.autoRebet || S.auto?.on) return;
@@ -1332,7 +1331,7 @@ function autoRebetStep() {
   if (S.arRebet !== key || S.arReady === key || seat.ready) return;
   if (mine.every((i) => st.seats[i].bet.main >= st.settings.minBet)) { S.arReady = key; runAct({ dataset: { act: 'ready' }, disabled: false }); }
 }
-setInterval(autoRebetStep, 600);
+setInterval(autoRebetStep, 150); // also run on every update (render), so the bet goes down as soon as betting opens
 function doRebet() {
   const st = S.state;
   if (!st) return;
@@ -1377,34 +1376,28 @@ function buildLayout() {
     <div class="topbar">
       <select class="game-switch" id="game-switch" title="Switch game" aria-label="Game"><option value="blackjack" selected>🃏 Blackjack</option><option value="poker">♠️ Poker</option><option value="baccarat">🎴 Baccarat</option><option value="roulette">🎡 Roulette</option></select>
       <span id="conn-pill" class="pill">Connecting</span>
-      <span class="tt-box">${topToolsHTML()}</span>
+      <span class="tt-box">${topToolsHTML()}<button class="pill afk-pill" data-act="afk-screen" title="A black screen with plain text while you are away. The table keeps running.">🌙<span class="fp-t"> AFK</span></button></span>
       <span class="spacer"></span>
       <button id="fair-pill" class="pill fair-pill" data-act="fair" title="How the shuffle is kept fair">🔐<span class="fp-t"> Provably fair</span></button>
       <button class="btn small gold" data-act="copy">🔗 Invite</button>
       <div class="menu-wrap" id="menu-wrap">
         <button class="hamburger" data-act="menu" aria-label="Menu" aria-haspopup="true"><span></span><span></span><span></span></button>
         <div class="menu" id="menu">
-          <button class="menu-item" data-act="view-pad" title="Look left, Look right, Walk around and zoom buttons">🎥 View buttons: ${viewPadOn() ? 'on' : 'off'}</button>
-          <button class="menu-item" data-act="afk-screen" title="A black screen with plain white text while you are away: who deals, the round, the ledger. The table keeps running.">🌙 AFK screen</button>
-          ${fold('m-table', '📜 Table rules and payouts', `
-            <button class="menu-item" data-act="rules">💰 Side bet payouts</button>`)}
-          ${fold('m-view', '🎛️ My view and sound', `
+          ${fold('m-view', '🎛️ My view', `
+            <button class="menu-item" data-act="view-pad" title="Look left, Look right, Walk around and zoom buttons">🎥 View buttons: ${viewPadOn() ? 'on' : 'off'}</button>
             <button class="menu-item" data-act="four">🎨 Four colour cards</button>
             <button class="menu-item" data-act="hints" id="hints-btn">${hintsOn() ? '💡 Strategy hints: on' : '💡 Strategy hints: off'}</button>
-            <button class="menu-item" data-act="room3d">${use3D() ? '🧊 3D room: on' : '🧊 3D room: off'}</button>
-            ${use3D() ? `<button class="menu-item" data-act="pixel">${pixelOn() ? '👾 Pixel look: on' : '👾 Pixel look: off'}</button>` : ''}
-            <button class="menu-item" data-act="keys">⌨️ Keyboard keys</button>`)}
+            <button class="menu-item" data-act="room3d">${use3D() ? '🧊 3D room: on' : '🧊 3D room: off'}</button>`)}
           ${host ? `
-          ${fold('m-round', '🃏 Round', '<div id="host-round"></div>')}
           ${fold('m-players', '👥 Players', `<div class="hint" style="margin-bottom:8px">Chips for Give / Take: <input id="give-amt" type="number" value="500" min="1" style="width:90px" /></div>
             <div id="host-players" class="player-list"></div>`)}
           ${fold('m-settings', '⚙️ Game settings', '<div id="host-settings"></div>')}
           ${fold('m-log', '📝 Table log', `<div id="host-log" class="log"></div>
-            ${fold('m-logs', 'Logs', `<button class="menu-item" data-act="hist-panel" title="A small list of the hands at the left of the screen.">🕘 Hand history: ${histOn() ? 'on' : 'off'}</button>`, true)}`)}` : `
+            ${fold('m-logs', 'Logs', `<button class="menu-item" data-act="hist-panel" ${histOn() ? 'hidden' : ''}>🕘 Show hand history</button>`, true)}`)}` : `
           ${fold('m-players', '👥 Players', '<button class="menu-item" data-act="become-host" title="The table moves to your browser. No vote: the host\'s browser hands it over.">👑 Become host</button><button class="menu-item" data-act="force-host" title="For a host who is away and whose browser does not answer. The table opens in your browser and everyone moves there.">⚡ Force take over (AFK HOST)</button><div id="guest-players" class="player-list"></div>')}
-          ${fold('m-settings', '⚙️ Game settings', '<div class="hint" style="margin-bottom:8px">Any seated player can change the settings. Everyone else has to vote yes.</div><div id="host-settings"></div>')}
+          ${fold('m-settings', '⚙️ Game settings', '<div id="host-settings"></div>')}
           ${fold('m-log', '📝 Table log', `<div id="host-log" class="log"></div>
-            ${fold('m-logs', 'Logs', `<button class="menu-item" data-act="hist-panel" title="A small list of the hands at the left of the screen.">🕘 Hand history: ${histOn() ? 'on' : 'off'}</button>`, true)}`)}`}
+            ${fold('m-logs', 'Logs', `<button class="menu-item" data-act="hist-panel" ${histOn() ? 'hidden' : ''}>🕘 Show hand history</button>`, true)}`)}`}
         </div>
       </div>
     </div>
@@ -1417,7 +1410,7 @@ function buildLayout() {
       </div>
     </div>
     <div class="hud-bar" id="hud-bar">
-    <details class="sb-guide" id="sb-guide"><summary>🎲 Side bets <span>▾</span></summary><div id="sb-guide-body"></div></details>
+    <details class="sb-guide" id="sb-guide"><summary>ℹ️ Info <span>▾</span></summary><div id="sb-guide-body"></div></details>
     <button class="float-throw" data-act="throw-open" title="Pick a reaction, then tap a player or the dealer">😀 Reactions</button>
     <button class="float-hurry" data-act="hurry" title="Tell the others to hurry up. Press as often as you like.">⏰<span> Hurry up</span></button>
     <button class="float-hurry float-bus" data-act="hurry" data-say="bus" title="Shout BUSSSS!!! at the table. Press as often as you like.">💥<span> Bussss</span></button>
@@ -1431,7 +1424,7 @@ function buildLayout() {
   applyZoom();
   if (use3D()) {
     document.body.classList.add('room3d');
-    try { S.room = initRoom($('#room'), $('#felt'), { phone: innerWidth < 700, pixel: pixelOn(), hud: $('#hud3d'), size: innerWidth < 700 ? { W: Math.max(320, Math.min(460, innerWidth - 16)), H: 600 } : FELT, onGo: (g, now) => { if (!['poker', 'baccarat', 'roulette'].includes(g)) return; if (!now && (S.goAsk?.g !== g || Date.now() - S.goAsk.t > 4000)) { S.goAsk = { g, t: Date.now() }; toast(`Tap again to walk over to ${g[0].toUpperCase() + g.slice(1)}.`); return; } goGame(g); } }); }
+    try { S.room = initRoom($('#room'), $('#felt'), { phone: innerWidth < 700, hud: $('#hud3d'), size: innerWidth < 700 ? { W: Math.max(320, Math.min(460, innerWidth - 16)), H: 600 } : FELT, onGo: (g, now) => { if (!['poker', 'baccarat', 'roulette'].includes(g)) return; if (!now && (S.goAsk?.g !== g || Date.now() - S.goAsk.t > 4000)) { S.goAsk = { g, t: Date.now() }; toast(`Tap again to walk over to ${g[0].toUpperCase() + g.slice(1)}.`); return; } goGame(g); } }); }
     catch (e) { console.error(e); safeSet('bj-3d', '0'); toast('The 3D room could not start on this device.'); }
     // The first time you get to a table: a short walk round the office before your chair.
     if (S.room && S.code && S.tourFor !== S.code) { S.tourFor = S.code; S.room.tour(params.get('from') ? 1500 : 2000, params.get('from')); }
@@ -1452,7 +1445,6 @@ function use3D() {
 }
 
 // Zoom the table a little in or out. Saved for next time on this device.
-function pixelOn() { return safeGet('bj-pixel') === '1'; }
 // Who is sitting where, for the figures in the 3D room.
 function roomPeople(st) {
   const { order, spots } = seatSpots(st);
@@ -1734,7 +1726,7 @@ function renderLedger(st) {
   const box = $('#ledger');
   if (!box || !st.ledger) return;
   const net = (r) => r.chips - r.totalIn - (r.houseNet || 0); // hands against the house are left out
-  { const mine = st.ledger.find((r) => r.id === S.myId); setProfit(mine ? net(mine) : null); setRisk(['insurance', 'playing', 'dealer'].includes(st.phase) ? (st.players.find((p) => p.id === S.myId)?.seats || []).reduce((a, i) => a + (st.seats[i]?.staked || 0), 0) : 0); if (mine && S.role !== 'host') carryDone('blackjack', S.code); }
+  { const mine = st.ledger.find((r) => r.id === S.myId); setProfit(mine ? net(mine) : null); setPractice(mine && (st.frozen || mine.houseNet) ? mine.houseNet || 0 : null); setRisk(['insurance', 'playing', 'dealer'].includes(st.phase) ? (st.players.find((p) => p.id === S.myId)?.seats || []).reduce((a, i) => a + (st.seats[i]?.staked || 0), 0) : 0); if (mine && S.role !== 'host') carryDone('blackjack', S.code); }
   officeSave(S.code, 'blackjack', officeRows(st));
   const rows = st.ledger.slice().sort((a, b) => net(b) - net(a));
   const sumIn = rows.reduce((a, r) => a + r.totalIn, 0);
@@ -1747,7 +1739,7 @@ function renderLedger(st) {
   const d = $('#ledger-dlg');
   if (!d?.open) return;
   const body = d.querySelector('.office-body'), top = body.scrollTop;
-  body.innerHTML = `<button class="x-btn x-float" data-ledger-close aria-label="Close" title="Close">✕</button><h3>Ledger</h3>
+  body.innerHTML = `<button class="x-btn x-float" data-ledger-close aria-label="Close" title="Close">✕</button><h3>Ledger</h3>${profitLineHTML()}
     <div class="ld-body"><table>
       <tr><th>Player</th><th>Bought in</th><th>Chips</th><th>+/-</th></tr>
       ${rows.map((r) => `<tr class="${r.id === S.myId ? 'me' : ''}"><td>${r.id === st.hostId ? '♛ ' : ''}${esc(r.name)}${r.kicked ? ' (left)' : r.connected ? '' : ' (away)'}${st.banker?.id === r.id ? ' (dealer)' : ''}</td><td>${money(r.totalIn)}</td><td>${money(r.chips)}</td><td>${pl(net(r))}</td></tr>`).join('')}
@@ -1755,7 +1747,7 @@ function renderLedger(st) {
     </table>
     <button class="btn small office-btn" data-act="office">🏢 All tables</button>${COPY_BTN}
     <div class="hint">Bought in counts starting chips, buy-ins and chips the host gives or takes. The +/- column counts only hands played with a player as the dealer, so it always adds up to zero. Hands against the house are practice and are left out.</div></div>
-    ${statsHTML(st)}`;
+    ${statsHTML(st.pstats)}`;
   body.scrollTop = top;
 }
 function openLedger() {
@@ -1768,35 +1760,6 @@ function openLedger() {
   }
   if (!d.open) d.showModal();
   if (S.state) renderLedger(S.state);
-}
-// Player stats: hands, wins, win rate, real +/- and practice, best and worst round, and the running total chart.
-const STAT_COLORS = ['#f2c14e', '#4fc3f7', '#81c784', '#e57373', '#ba68c8', '#ffb74d', '#4db6ac', '#f06292', '#aed581', '#90a4ae'];
-function statsHTML(st) {
-  const ps = st.pstats;
-  if (!ps || !ps.players.length) return '<h3>Player stats</h3><div class="hint">No hands played yet.</div>';
-  const pl = (n) => `<span class="${n > 0 ? 'up' : n < 0 ? 'down' : ''}">${n > 0 ? '+' : ''}${money(n)}</span>`;
-  const rows = ps.players.slice().sort((a, b) => b.net - a.net);
-  const color = (name) => STAT_COLORS[ps.names.indexOf(name) % STAT_COLORS.length];
-  const table = `<div class="stats-wrap"><table class="stats-t">
-    <tr><th>Player</th><th>Hands</th><th>Won</th><th>Win rate</th><th>+/- real</th><th>Practice</th><th>Best</th><th>Worst</th></tr>
-    ${rows.map((p) => `<tr><td><i class="st-dot" style="background:${color(p.name)}"></i>${esc(p.name)}${p.dealt ? ` <span class="hint">dealt ${p.dealt}</span>` : ''}</td><td>${p.hands}</td><td>${p.wins}</td><td>${p.hands ? Math.round((p.wins / p.hands) * 100) + '%' : '-'}</td><td>${pl(p.realNet)}</td><td>${pl(p.practiceNet)}</td><td>${pl(p.best)}</td><td>${pl(p.worst)}</td></tr>`).join('')}
-  </table></div>`;
-  return `<h3>Player stats</h3>${table}<div class="hint">Rounds ${ps.first} to ${ps.last}. A split hand counts as its own hand; pushes are not wins. Side bets and insurance are in the +/-.</div>
-    <h3>Profit over time</h3>${statsChart(ps, color)}`;
-}
-function statsChart(ps, color) {
-  const pts = ps.series;
-  if (pts.length < 2) return '<div class="hint">The chart starts after two rounds.</div>';
-  const W = 640, H = 220, L = 52, R = 10, T = 10, B = 24;
-  let lo = 0, hi = 0;
-  for (const p of pts) for (const v of p.v) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
-  if (hi === lo) hi = lo + 1;
-  const x = (i) => L + (i / (pts.length - 1)) * (W - L - R), y = (v) => T + ((hi - v) / (hi - lo)) * (H - T - B);
-  const lines = ps.names.map((n, k) => `<polyline fill="none" stroke="${color(n)}" stroke-width="2" stroke-linejoin="round" points="${pts.map((p, i) => x(i).toFixed(1) + ',' + y(p.v[k]).toFixed(1)).join(' ')}" />`).join('');
-  const ticks = [hi, (hi + lo) / 2, lo].map((v) => `<text x="${L - 6}" y="${(y(v) + 4).toFixed(1)}" text-anchor="end" class="st-ax">${money(Math.round(v))}</text>`).join('');
-  const xt = `<text x="${L}" y="${H - 6}" class="st-ax">Round ${pts[0].round}</text><text x="${W - R}" y="${H - 6}" text-anchor="end" class="st-ax">Round ${pts[pts.length - 1].round}</text>`;
-  const legend = `<div class="og-key">${ps.names.map((n) => `<i style="background:${color(n)}"></i>${esc(n)}`).join('')}</div>`;
-  return `<svg class="st-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Running total of each player"><line x1="${L}" x2="${W - R}" y1="${y(0).toFixed(1)}" y2="${y(0).toFixed(1)}" class="st-zero" />${lines}${ticks}${xt}</svg>${legend}`;
 }
 
 // The host sees a pop-up for each buy-in request.
@@ -1812,6 +1775,8 @@ function renderHostPops() {
 // every chip anyone moves; leaving untouched parts alone keeps buttons, hover and focus steady.
 function setHTML(el, html) {
   if (!el || el._html === html) return;
+  // Typing in the dealer's settings: the box is not redrawn under the finger. The next update after it draws it.
+  if (el.contains(document.activeElement) && document.activeElement.matches('.dealer-panel input[type=number]')) return;
   el._html = html;
   el.innerHTML = html;
 }
@@ -1823,6 +1788,7 @@ function render(note) {
   if (S.role && $('#modal')?.open && $('#hist-list') && S.state && S.state.histN !== S.histShown) showHistory();
   if (!S.role) return;
   const st = S.state;
+  if (S.autoRebet && st?.phase === 'betting') setTimeout(autoRebetStep, 0);
   const pill = $('#conn-pill');
   if (pill) {
     pill.className = 'pill ' + (S.online ? 'live' : 'off');
@@ -1868,7 +1834,7 @@ function render(note) {
   setHTML($('#felt'), feltHTML(st));
   // In the 3D room the status line, the timer and "Deal me in" sit with the buttons at the bottom of the screen, so they never leave it.
   if (S.room) {
-    $('#hud-top').innerHTML = `<div class="status">${esc(statusText(st))} <span id="timer" class="timer" hidden></span></div>${dealMeInHTML(st)}`;
+    $('#hud-top').innerHTML = `<div class="status" ${dealerBar(st) ? 'hidden' : ''}>${esc(statusText(st))} <span id="timer" class="timer" hidden></span></div>${dealMeInHTML(st)}`;
     S.room.setPeople(...roomPeople(st));
     S.room.setOthers(S.others, S.views);
     S.room.setChips(st.seats.map((seat, i) => { const pl = seat && st.players.find((x) => x.seat === i); return seat ? { seat: i, main: seat.bet?.main || 0, balance: pl ? Math.max(0, pl.chips - betTotal(seat.bet)) : 0, mine: seat.playerId === S.myId,
@@ -2128,6 +2094,8 @@ function runDealQueue() {
   });
 }
 
+// The dealer is not told to place bets: during betting the felt line gives way to the yellow bar under the dealer settings.
+function dealerBar(st) { return st.phase === 'betting' && !st.noDealer && !st.bankShort && st.banker?.id === S.myId; }
 function statusText(st) {
   const turnSeat = st.turn && st.seats[st.turn.seat];
   if (S.dealing && S.dealMany && (st.phase === 'insurance' || st.phase === 'playing')) return 'Dealing the cards';
@@ -2327,7 +2295,7 @@ function feltHTML(st) {
   if (b) {
     const net = b.net && !S.dealing ? `<span class="net ${b.net > 0 ? 'up' : 'down'}">${b.net > 0 ? '+' : ''}${money(b.net)}</span>` : '';
     dealerSeat = `<div class="dealer-name" ${isBanker ? '' : `data-throw-at="${b.id}" title="Tap to throw something at the dealer"`}>${esc(b.name)}${isBanker ? ' (you)' : ''} is the dealer ${isBanker ? '' : `<span class="chips">${money(b.chips)}</span>`} ${net}
-${isBanker && st.settings.decks !== 'csm' ? `<button class="btn small gold" data-act="d-shuffle" title="${st.phase === 'betting' || st.phase === 'settled' ? 'Shuffle the shoe now' : 'Shuffle the shoe before the next hand'}">🔀 Shuffle</button>` : ''}</div>`;
+</div>`;
   } else {
     dealerSeat = `<div class="dealer-name">${st.frozen ? 'Dealer: house (automatic)' : 'No dealer yet'}
       ${me && !st.vote ? '<button class="btn small gold" data-act="sit-dealer">Ask to be dealer</button>' : ''}</div>`;
@@ -2355,7 +2323,7 @@ ${isBanker && st.settings.decks !== 'csm' ? `<button class="btn small gold" data
     ${arcTextHTML(st, box)}
     <div class="mid-band" style="--lane-y:${dealerH + 4}px;--lane-w:${laneW}px">
       ${frozenHTML(st)}
-      ${S.room ? '' : `<div class="status">${esc(statusText(st))} <span id="timer" class="timer" hidden></span></div>
+      ${S.room ? '' : `<div class="status" ${dealerBar(st) ? 'hidden' : ''}>${esc(statusText(st))} <span id="timer" class="timer" hidden></span></div>
       ${dealMeInHTML(st)}`}
     </div>
     <div class="seats">${order.map((i, pos) => seatHTML(st, st.seats[i], i, spots[pos].mode === 'focus', spots[pos])).join('')}</div>
@@ -2414,15 +2382,15 @@ function dealMeInHTML(st) {
   // do not cover the bets, the line above already says what the table is waiting for.
   // A new hand with nothing down yet: the big middle button puts last hand's whole bet back, side bets included.
   if (!isBanker && seat && st.phase === 'betting' && st.rebet && !(me?.seats || [me?.seat]).some((i) => st.seats[i] && betTotal(st.seats[i].bet))) return `<div class="deal-me-in"><button class="deal-btn rebet-btn" data-act="rebet" title="The same bet as last hand, side bets included (B)">↻ Rebet ${money(rebetSum(st))}${rebetHands(st)}</button></div>`;
-  if (isBanker || !seat || st.phase !== 'betting' || !seat.bet.main || st.noDealer || st.bankShort) return '';
-  if (seat.ready) {
-    const slow = st.seats.filter((s) => s && !s.ready && s.connected !== false && s.playerId !== S.myId).map((s) => s.name);
-    return `<div class="deal-me-in waiting"><span>Waiting for ${slow.length ? esc(slow.slice(0, 2).join(' and ')) + (slow.length > 2 ? ' and others' : '') : 'the deal'}</span><button class="btn small" data-act="ready">Not ready</button></div>`;
-  }
-  if (seat.bet.main < st.settings.minBet) return `<div class="deal-me-in waiting"><span class="under-min">Table minimum ${money(st.settings.minBet)}. Add ${money(st.settings.minBet - seat.bet.main)} more to be dealt in.</span></div>`;
-  // One press deals in every seat of mine that has a bet of the minimum or more.
-  const open = (me?.seats || []).filter((i) => st.seats[i] && !st.seats[i].out && !st.seats[i].ready && st.seats[i].bet.main >= st.settings.minBet).length;
-  return `<div class="deal-me-in"><button class="deal-btn" data-act="ready" ${open > 1 ? 'title="Deals in all your seats that have a bet"' : ''}>Deal me in${open > 1 ? ` (${open} hands)` : ''}</button></div>`;
+  if (isBanker || !seat || st.phase !== 'betting' || st.noDealer || st.bankShort) return '';
+  // One button for all my seats: it counts every seat of mine with a bet, not only the one in hand.
+  const mineB = (me?.seats || [me.seat]).map((i) => st.seats[i]).filter((x) => x && !x.out && x.bet.main > 0);
+  if (!mineB.length) return '';
+  const openN = mineB.filter((x) => !x.ready && x.bet.main >= st.settings.minBet).length, under = mineB.find((x) => !x.ready && x.bet.main < st.settings.minBet);
+  if (openN) return `<div class="deal-me-in"><button class="deal-btn" data-act="ready">Deal me in${openN > 1 ? ` (${openN} hands)` : ''}</button></div>`;
+  if (under) return `<div class="deal-me-in waiting"><span class="under-min">Table minimum ${money(st.settings.minBet)}. Add ${money(st.settings.minBet - under.bet.main)} more to be dealt in.</span></div>`;
+  const slow = st.seats.filter((s) => s && !s.ready && s.connected !== false && s.playerId !== S.myId).map((s) => s.name);
+  return `<div class="deal-me-in waiting"><span>Waiting for ${slow.length ? esc(slow.slice(0, 2).join(' and ')) + (slow.length > 2 ? ' and others' : '') : 'the deal'}</span><button class="btn small" data-act="ready">Not ready</button></div>`;
 }
 
 // Table writing that follows the curve of the table, like a casino felt: three arcs around the same
@@ -2541,7 +2509,7 @@ function seatHTML(st, s, i, focus, spot) {
   if (!s) {
     const canSit = me && !isBanker;
     const more = canSit && me.seat !== null;
-    return `<div class="seat empty ${cls}" id="seat-${i}" ${place}>${mini ? '' : `<div class="hands"></div>${spotAreaHTML(st, null, i, false, 0)}`}${canSit ? `<button class="btn small ${more ? 'add-seat' : ''}" data-act="sit" data-seat="${i}" ${more ? 'data-add="1" title="Play this seat as well. Each seat has its own bet and hand."' : ''}>${st.phase === 'betting' || st.phase === 'settled' ? '<span class="sit-float"><span>Sit<i>▼</i></span></span>' : ''}<b class="sn">${i + 1}</b>${more ? '+ Seat' : 'Sit here'}</button>` : `<span class="seat-no">Seat ${i + 1}</span>`}</div>`;
+    return `<div class="seat empty ${cls}" id="seat-${i}" ${place}>${mini ? '' : `<div class="hands"></div>${spotAreaHTML(st, null, i, false, 0)}`}${canSit ? `<button class="sit-btn" data-act="sit" data-seat="${i}" ${more ? 'data-add="1"' : ''} aria-label="${more ? 'Play' : 'Sit in'} seat ${i + 1}${more ? ' as well' : ''}" title="${more ? 'Play this seat as well' : 'Sit here'}"><span class="sit-float"><span>Sit<i>▼</i></span></span></button>` : `<span class="seat-no">Seat ${i + 1}</span>`}</div>`;
   }
   const isMe = s.playerId === S.myId;
   // Whose turn it is shows once the deal is finished, not while the first cards are still going round.
@@ -2938,15 +2906,10 @@ function trayInner(st) {
   const ph = st.phase;
   if (isBanker) {
     if (!(ph === 'betting' || ph === 'settled')) return '';
-    // On a phone the dealer's settings fold away behind one small button, so the table stays in view.
-    if (innerWidth < 700 && !S.dealerOpen) return `<div class="tray-msg dealer-mini">${st.banker.chips < 0 ? `You owe ${money(-st.banker.chips)}. Tap your balance to buy in.` : 'You are the dealer'}<button class="btn small" data-act="dealer-open">⚙ Settings</button></div>`;
-    return `<div class="tray-msg${innerWidth < 700 ? ' has-x' : ''}">${st.banker.chips < 0 ? `You are the dealer and you owe ${money(-st.banker.chips)} chips. Tap your balance to buy in.` : 'You are the dealer. Your chips pay winners and collect losing bets.'}${innerWidth < 700 ? '<button class="x-btn" data-act="dealer-open" aria-label="Close" title="Close">✕</button>' : ''}</div>
-      <div class="actions dealer-max"><label for="dealer-max">Max bet</label><input id="dealer-max" type="number" inputmode="numeric" min="${st.settings.minBet}" step="1" value="${st.settings.maxBet}" /><label for="dealer-max-side">Max side bet</label><input id="dealer-max-side" type="number" inputmode="numeric" min="0" step="1" value="${st.settings.maxSideBet}" /><button class="btn small" data-act="dealer-max">Set</button><button class="btn small ${st.settings.shuffle8 !== false ? 'gold' : ''}" data-act="dealer-shuf" title="A fresh shuffle every 8 rounds. Tap to turn it ${st.settings.shuffle8 !== false ? 'off' : 'on'}.">Shuffle every 8: ${st.settings.shuffle8 !== false ? 'On' : 'Off'}</button><button class="btn" data-act="leave-dealer">Leave dealer seat</button></div>
-      ${lossCapHTML(st)}
-      <div class="actions dealer-max dealer-big"><span class="dealer-big-title" title="Each player may bet above the maximum a few times. Unused ones expire after the hands, then they come back.">Big Bets Sometimes</span><label for="big-limit">Big bet up to</label><input id="big-limit" type="number" inputmode="numeric" min="${st.settings.maxBet + 1}" step="1" value="${st.big?.limit ?? st.settings.maxBet * 4}" /><label for="big-per">Big bets each</label><input id="big-per" type="number" inputmode="numeric" min="1" step="1" value="${st.big?.per ?? 2}" /><label for="big-hands">Every</label><input id="big-hands" type="number" inputmode="numeric" min="1" step="1" value="${st.big?.hands ?? 10}" /><label>hands</label><button class="btn small ${st.big ? '' : 'gold'}" data-act="dealer-big">${st.big ? 'Update' : 'Turn on'}</button>${st.big ? '<button class="btn small" data-act="dealer-big-off">Turn off</button>' : ''}</div>`;
+    return dealerPanelHTML(st);
   }
   if (!seat) {
-    return `<div class="tray-msg">${S.role === 'host' ? 'You are hosting. Press "Sit here" to play, or "Ask to be dealer" to be the bank.' : 'Press "Sit here" on an empty seat to play, or "Ask to be dealer" to be the bank.'} You have ${money(me.chips)} chips.</div>${askOutHTML(st)}`;
+    return `<div class="tray-msg">Tap Sit on a seat to play, or Ask to be dealer.</div>${askOutHTML(st)}`;
   }
   if (ph === 'settled') {
     // The round is over. Say what it paid; the bets on the table are last round's, not new ones.
@@ -2965,7 +2928,7 @@ function trayInner(st) {
     const queued = S.rebetWhenOpen === st.round;
     const rb = st.rebet ? `<button class="btn gold rebet-btn ${queued ? 'on' : ''}" data-act="rebet" title="Bet the same as last round (B)">${queued ? `✓ Rebet ${money(rebetSum(st))}${rebetHands(st)} goes down when betting opens. Tap to cancel` : `↻ Rebet ${money(rebetSum(st))}${rebetHands(st)}`}</button>` : '';
     return `<div class="tray-msg round-result"><b class="${rnet > 0 ? 'up' : rnet < 0 ? 'down' : ''}">${head}</b>${breakdown}</div>
-      <div class="actions">${rb}${autoRebetBtn()}<span class="hint">Betting opens when the cards are cleared.</span></div>`;
+      <div class="actions">${rb}${autoRebetBtn()}</div>`;
   }
   if (ph === 'betting') {
     const b = seat.bet;
@@ -3049,13 +3012,6 @@ function renderHostPanel(st) {
   const ph = st.phase;
   const ready = t.seats.filter((s) => s && s.ready).length;
   const bettors = t.seats.filter((s) => s && s.bet.main > 0).length;
-  $('#host-round').innerHTML = `
-    <div class="actions" style="justify-content:flex-start">
-      <button class="btn primary" data-act="h-deal" ${ph === 'betting' && t.canDeal() ? '' : 'disabled'}>Deal</button>
-      <button class="btn" data-act="h-ins" ${ph === 'insurance' ? '' : 'disabled'}>Close insurance</button>
-      <button class="btn" data-act="h-skip" ${ph === 'playing' ? '' : 'disabled'}>Stand for slow player</button>
-    </div>
-    <div class="hint" style="margin-top:8px">${bettors} player${bettors === 1 ? '' : 's'} betting, ${ready} ready. ${t.settings.betTimer ? `The dealer deals on its own ${t.settings.betTimer} seconds after bets go down` : 'Press Deal to start the round'}${t.settings.autoDeal !== false ? ', or as soon as everyone is ready' : ''}.${t.settings.turnTimer ? ` Players get ${t.settings.turnTimer} seconds per move.` : ''}</div>`;
   $('#host-players').innerHTML = st.players.map((p) => `
     <div class="player-row">
       <div><b>${p.id === st.hostId ? '<span class="crown" title="Host">♛</span> ' : ''}${esc(p.name)}</b>${p.id === S.myId ? ' (you)' : ''}${p.id === st.hostId ? ' <span class="role-tag host">Host</span>' : ''}${st.banker?.id === p.id ? ' <span class="role-tag">Dealer</span>' : ''}<br><span class="hint">${money(p.chips)} chips${p.boughtIn ? ` (bought in ${money(p.boughtIn)} extra)` : ''} · ${p.seat === null ? 'not seated' : 'seat ' + (p.seat + 1)} · ${p.connected ? 'online' : 'away'}</span></div>
@@ -3075,8 +3031,11 @@ function renderSettings(st) {
   const ph = st.phase;
   // Settings are only redrawn when they change, so typing in them is not interrupted.
   const locked = !(ph === 'betting' || ph === 'settled');
-  const canShuffle = S.role === 'host' || !!myInfo(st).seat || myInfo(st).isBanker;
-  const key = JSON.stringify(st.settings) + locked + canShuffle;
+  // Each setting shows in one place only: with a player dealer, the bet limits, the shuffle every 8 rounds and
+  // the dealer's own Shuffle now are in the dealer settings, not here.
+  const dealer = !!st.banker, isB = myInfo(st).isBanker;
+  const canShuffle = !isB && (S.role === 'host' || !!myInfo(st).seat);
+  const key = JSON.stringify(st.settings) + locked + canShuffle + dealer;
   const box = $('#host-settings');
   if (!box || key === S.settingsKey || box.contains(document.activeElement)) return;
   S.settingsKey = key;
@@ -3091,16 +3050,15 @@ function renderSettings(st) {
         </select></label>
       <label class="full">Reshuffle when <span id="pen-val">${s.penetration}%</span> of the shoe is used
         <input id="set-pen" type="range" min="20" max="95" step="5" value="${s.penetration}" /></label>
+      ${!dealer && S.role === 'host' ? `<label class="check full"><input id="set-shuf8" type="checkbox" ${s.shuffle8 !== false ? 'checked' : ''} /> Shuffle every 8 rounds</label>` : ''}
       ${canShuffle ? `<button class="btn full" data-act="h-shuffle">${locked ? 'Shuffle before next hand' : 'Shuffle now'}</button>` : ''}
     </div>`, true)}
     ${fold('set-seats', '🪑 Seats', `<div class="settings-grid">
       <label class="full">Seats at the table<input id="set-seats" type="number" min="1" step="1" inputmode="numeric" value="${s.seats}" ${dis} /></label>
-      <div class="hint full">Most casino tables have 7. Anyone at the table can change this, with no vote. Fewer seats than players: seats are taken from whoever holds the most first, then from the highest seat numbers. It happens between rounds.</div>
     </div>`, true)}
-    ${fold('set-bets', '💵 Chips and bet limits', `<div class="settings-grid">
+    ${fold('set-bets', dealer ? '💵 Starting chips' : '💵 Chips and bet limits', `<div class="settings-grid">
       <label>Starting chips<input id="set-start" type="number" min="1" value="${s.startChips}" ${dis} /></label>
-      <label>Min bet<input id="set-min" type="number" min="1" value="${s.minBet}" ${dis} /></label>
-      <div class="hint full">Starting chips apply to new players. The dealer sets the max bets at the table.</div>
+      ${dealer ? '' : `<label>Min bet<input id="set-min" type="number" min="1" value="${s.minBet}" ${dis} /></label>`}
     </div>`, true)}
     ${fold('set-rules', '📏 Rules', `<div class="settings-grid">
       <label class="check full"><input id="set-h17" type="checkbox" ${s.dealerHitsSoft17 ? 'checked' : ''} ${dis} /> Dealer hits soft 17</label>
@@ -3112,12 +3070,13 @@ function renderSettings(st) {
       ${SIDE_KEYS.map((k) => `<label class="check full"><input type="checkbox" data-sidebet="${k}" ${sideKeys(st).includes(k) ? 'checked' : ''} ${dis} /> ${SIDE_BETS[k].icon || ''} ${SIDE_BETS[k].name}</label>`).join('')}
     </div>`, true)}
     ${fold('set-auto', '⏱️ Automatic dealer and timers', `<div class="settings-grid">
-      <label class="check full"><input id="set-auto" type="checkbox" ${s.autoDeal !== false ? 'checked' : ''} ${dis} /> Deal as soon as everyone is ready</label>
+      <label class="check full"><input id="set-auto" type="checkbox" ${s.autoDeal !== false ? 'checked' : ''} ${dis} /> Deal as soon as everyone is ready (always on when the betting time is off)</label>
       <label>Betting time (seconds, 0 = off)<input id="set-bettimer" type="number" inputmode="numeric" min="0" max="300" step="1" value="${Number(s.betTimer) || 0}" ${dis} /></label>
       <label>Time per move<select id="set-turntimer" ${dis}>${timerOpts(s.turnTimer)}</select></label>
-      <div class="hint full">When betting time runs out, the dealer deals to everyone with a bet. When time per move runs out, the dealer stands for that player.</div>
     </div>`, true)}
-    <button class="btn primary" style="width:100%;margin-top:10px" data-act="h-settings" ${dis}>Save settings</button>`;
+    <button class="btn dp-save" style="width:100%;margin-top:10px" data-act="h-settings" ${dis}>Save settings</button>`;
+  // Save lights up green only while a box differs from the table's settings (the boxes that save at once are left out).
+  for (const el of box.querySelectorAll('input, select')) el.dataset.orig = el.type === 'checkbox' ? String(el.checked) : el.value;
   // The deck choice saves as soon as it is picked; during a hand it starts when the hand ends.
   $('#set-decks').addEventListener('change', (e) => {
     const v = e.target.value === 'csm' ? 'csm' : Number(e.target.value);
@@ -3126,6 +3085,7 @@ function renderSettings(st) {
   });
   // The reshuffle point saves as soon as it is changed too. Shuffling every 8 rounds is the dealer's button at the table.
   $('#set-pen').addEventListener('change', (e) => { e.target.blur(); proposeSettings({ shuffleMode: 'penetration', penetration: Number(e.target.value) }); });
+  $('#set-shuf8')?.addEventListener('change', (e) => send({ t: 'dealer-shuf', on: e.target.checked }));
   $('#set-pen').addEventListener('input', (e) => ($('#pen-val').textContent = e.target.value + '%'));
 }
 
@@ -3193,7 +3153,7 @@ function isStrip(s) {
   return (s.decks === 'csm' || Number(s.decks) >= 4) && !s.dealerHitsSoft17 && s.blackjackPays === 1.5 && s.allowSurrender;
 }
 function timerOpts(v) {
-  return [[0, 'Off'], [10, '10 seconds'], [15, '15 seconds'], [20, '20 seconds'], [30, '30 seconds'], [45, '45 seconds'], [60, '60 seconds']]
+  return [[10, '10 seconds'], [15, '15 seconds'], [20, '20 seconds'], [30, '30 seconds'], [45, '45 seconds'], [60, '60 seconds']]
     .map(([x, l]) => `<option value="${x}" ${Number(v) === x ? 'selected' : ''}>${l}</option>`).join('');
 }
 
@@ -3256,10 +3216,10 @@ function fairHTML() {
   return h;
 }
 
-function rulesHTML() {
+function rulesHTML(st) {
   return `<h2 style="margin-top:0">Side bets</h2><div class="paytable">
     <div class="hint">Payouts are "to 1": a 10 chip bet that pays 25 to 1 wins 250 and you get your 10 back. There is no rake or fee.</div>
-    ${sideKeys(S.state).map((k) => {
+    ${sideKeys(st).map((k) => {
       const sb = SIDE_BETS[k];
       return `<div><h4>${sb.icon || ''} ${sb.name}</h4><p>${esc(sb.about)}</p><table>${sb.table.map(([l, m]) => `<tr><td>${esc(l)}</td><td>${m} to 1</td></tr>`).join('')}</table></div>`;
     }).join('')}
@@ -3337,7 +3297,6 @@ function runAct(el) {
       (navigator.clipboard?.writeText(link) || Promise.reject()).then(() => toast('Invite link copied. Send it to your friends.'), () => { $('#modal-body').innerHTML = `<h3>Invite link</h3><input readonly value="${esc(link)}" style="width:100%" onfocus="this.select()" />`; if (!$('#modal').open) $('#modal').showModal(); });
       break;
     }
-    case 'rules': $('#modal-body').innerHTML = rulesHTML(); $('#modal').showModal(); break;
     case 'fair': $('#modal-body').innerHTML = fairHTML(); $('#modal').showModal(); break;
     case 'four': document.body.classList.toggle('four-colour'); safeSet('bj-four', document.body.classList.contains('four-colour') ? '1' : '0'); break;
     case 'sit': send({ t: 'sit', seat: Number(el.dataset.seat), add: el.dataset.add === '1' }); if (el.dataset.add === '1') S.seatAim = Number(el.dataset.seat); break;
@@ -3433,10 +3392,9 @@ function runAct(el) {
     case 'undo': if (S.undo.length) { S.mainChips.pop(); const last = S.undo.pop(); chipSound(); placeBet(last); } break;
     case 'rebet': doRebet(); break;
     case 'auto-rebet': S.autoRebet = !S.autoRebet; safeSet('bj-autorebet', S.autoRebet ? '1' : '0'); toast(S.autoRebet ? 'Auto rebet on: each round your last bets go down and you are dealt in by yourself.' : 'Auto rebet off.'); render(); autoRebetStep(); break;
-    case 'keys': $('#modal-body').innerHTML = keysHTML(); $('#modal').showModal(); break;
     case 'history': showHistory(); break;
     case 'view-pad': safeSet('bj-view-pad', viewPadOn() ? '0' : '1'); if (!viewPadOn() && S.room?.walking?.()) S.room.walk(false); document.body.classList.toggle('view-hidden', !viewPadOn()); for (const b of document.querySelectorAll('.menu-item[data-act=view-pad]')) b.textContent = '🎥 View buttons: ' + (viewPadOn() ? 'on' : 'off'); break;
-    case 'hist-panel': safeSet('bj-hist-panel', histOn() ? '0' : '1'); drawHistPanel(true); for (const b of document.querySelectorAll('.menu-item[data-act=hist-panel]')) b.textContent = '🕘 Hand history: ' + (histOn() ? 'on' : 'off'); break;
+    case 'hist-panel': safeSet('bj-hist-panel', histOn() ? '0' : '1'); drawHistPanel(true); for (const b of document.querySelectorAll('.menu-item[data-act=hist-panel]')) b.hidden = histOn(); break; // the menu offers it only while it is off; the panel's x turns it off
     case 'export': showExport(); break;
     case 'big-bet': {
       S.bigOn = !S.bigOn;
@@ -3477,34 +3435,17 @@ function runAct(el) {
     case 'view-reset': S.room?.home(); $('.view-walk')?.classList.remove('on'); break;
     case 'turn': S.room?.look(Number(el.dataset.d)); break;
     case 'walk': if (S.room) { const on = S.room.walk(!S.room.walking()); el.classList.toggle('on', on); if (on) toast(matchMedia('(pointer: coarse)').matches ? 'Walking: drag to move through the office. Two fingers turn and zoom. ⟲ takes you back to your seat.' : 'Walking: drag to move through the office. Right button turns, the wheel zooms. Reset view takes you back to your seat.'); } break;
-    case 'pixel': safeSet('bj-pixel', pixelOn() ? '0' : '1'); el.textContent = pixelOn() ? '👾 Pixel look: on' : '👾 Pixel look: off'; S.room?.setPixel(pixelOn()); break;
     case 'room3d': safeSet('bj-3d', use3D() ? '0' : '1'); location.reload(); break;
     case 'zoom': if (S.room) { S.room.zoomBy(Number(el.dataset.d)); break; } safeSet('bj-zoom', String(Math.round(Math.min(1.6, Math.max(0.6, getZoom() + 0.1 * Number(el.dataset.d))) * 10) / 10)); applyZoom(); break;
     case 'menu': $('#menu-wrap').classList.toggle('open'); break;
     case 'mute': setMuted(!isMuted()); el.textContent = isMuted() ? '🔇 Sound: off' : '🔊 Sound: on'; if (!isMuted()) chipSound(); break;
     case 'sit-dealer': send({ t: 'sit-dealer' }); break;
-    case 'dealer-open': S.dealerOpen = !S.dealerOpen; render(); break;
+    case 'dealer-open': S.dealerOpen = !dealerOpen(); safeSet('bj-dpanel', S.dealerOpen ? '1' : '0'); render(); break;
     case 'leave-dealer': send({ t: 'leave-dealer' }); break;
     case 'leave-later': send({ t: 'leave-later', on: el.dataset.on !== '1' }); break;
     case 'd-shuffle': send({ t: 'dealer-shuffle' }); toast(st.phase === 'betting' || st.phase === 'settled' ? 'The shoe was shuffled.' : 'The shoe will be shuffled before the next hand.'); break;
-    case 'dealer-big': {
-      const limit = Math.round(Number($('#big-limit')?.value)), per = Math.round(Number($('#big-per')?.value)), hands = Math.round(Number($('#big-hands')?.value));
-      if (!(limit > st.settings.maxBet)) { toast(`The big bet has to be above the maximum bet of ${money(st.settings.maxBet)}.`); break; }
-      if (!(per >= 1) || !(hands >= 1)) { toast('Big bets each and the number of hands have to be at least 1.'); break; }
-      send({ t: 'dealer-big', limit, per, hands });
-      toast(`Big Bets Sometimes: ${per} bet${per === 1 ? '' : 's'} of up to ${money(limit)} each, every ${hands} hand${hands === 1 ? '' : 's'}.`);
-      break;
-    }
+    case 'dealer-save': dealerSaveNow(st); break;
     case 'dealer-shuf': send({ t: 'dealer-shuf', on: S.state?.settings?.shuffle8 === false }); break;
-    case 'dealer-big-off': send({ t: 'dealer-big', off: true }); toast('Big Bets Sometimes is off.'); break;
-    case 'dealer-max': {
-      const v = Math.round(Number($('#dealer-max')?.value)), sv = Math.round(Number($('#dealer-max-side')?.value));
-      if (!(v >= st.settings.minBet)) { toast(`The maximum bet cannot be below the minimum bet of ${money(st.settings.minBet)}.`); break; }
-      if (!(sv >= 0)) { toast('The maximum side bet cannot be below 0.'); break; }
-      send({ t: 'dealer-max', amount: v, side: sv });
-      toast(`Maximum bet ${money(v)}, side bets up to ${money(sv)}.`);
-      break;
-    }
     case 'side-clear': delete bet.sides[el.dataset.k]; sendBet(); break;
     case 'clear': {
       // Clear all: the main bet and every side bet, on each of my seats that is still open for betting.
@@ -3536,27 +3477,27 @@ function runAct(el) {
       break;
     }
     case 'ready': {
-      // Deal me in counts for all my seats with a bet down, not only the seat in hand.
-      if (!seat.ready) for (const i of me.seats || []) {
+      // One press for all my seats: deals in every seat with a bet of the minimum or more. When they are all
+      // dealt in already, the same press (Not ready) takes them all back out.
+      const mine = (me.seats || [me.seat]).filter((i) => st.seats[i] && !st.seats[i].out && st.seats[i].bet.main > 0);
+      const goIn = mine.some((i) => !st.seats[i].ready && st.seats[i].bet.main >= st.settings.minBet);
+      for (const i of mine) {
         const o = st.seats[i];
-        if (i === me.seat || !o || o.out || o.ready || o.bet.main < st.settings.minBet) continue;
-        send({ t: 'bet', main: o.bet.main, sides: { ...o.bet.sides }, ready: true, seq: ++S.betSeq, seat: i, auto: !!S.auto?.on });
-        if (S.role !== 'host') o.ready = true; // shown at once; the table's answer follows
+        if (goIn ? o.ready || o.bet.main < st.settings.minBet : !o.ready) continue;
+        if (i === me.seat) { sendBet(goIn); continue; }
+        send({ t: 'bet', main: o.bet.main, sides: { ...o.bet.sides }, ready: goIn, seq: ++S.betSeq, seat: i, auto: !!S.auto?.on });
+        if (S.role !== 'host') o.ready = goIn; // shown at once; the table's answer follows
       }
-      sendBet(!seat.ready);
       break;
     }
     case 'ins': takeIns(el.dataset.take === '1'); break;
     case 'play': playMove(el.dataset.a); break;
     // Host only
-    case 'h-deal': fresh((t) => t.dealPlan(), () => hostDo((t) => t.deal())); break;
     case 'h-frozen': hostDo((t) => {
       if (!(t.phase === 'betting' || t.phase === 'settled')) throw new Error('Change this between rounds.');
       t.setFrozen(el.dataset.on === '1');
       t.addLog(t.frozen ? 'The host froze the ledger: the house deals and those hands are practice.' : 'The ledger freeze is off. Chips and buy-ins are back to where they were before it.');
     }); break;
-    case 'h-ins': hostDo((t) => t.forceInsurance()); break;
-    case 'h-skip': fresh(() => [], () => hostDo((t) => t.skipTurn())); break;
     case 'h-shuffle':
       // Guests see this button too (in the settings they can vote on); they ask the host to shuffle.
       if (S.role !== 'host') { send({ t: 'shuffle' }); toast(st && (st.phase === 'betting' || st.phase === 'settled') ? 'Asked for a shuffle.' : 'Asked for a shuffle before the next hand.'); break; }
@@ -3588,7 +3529,7 @@ function runAct(el) {
       if (!(seats >= 1)) { toast('The table needs at least 1 seat.'); break; }
       proposeSettings({
         seats, decks, shuffleMode: 'penetration', penetration: Number(v('set-pen')),
-        startChips: Number(v('set-start')), minBet: Number(v('set-min')),
+        startChips: Number(v('set-start')), ...($('#set-min') ? { minBet: Number(v('set-min')) } : {}),
         dealerHitsSoft17: $('#set-h17').checked, allowSurrender: $('#set-sur').checked, autoDeal: $('#set-auto').checked,
         betTimer: Number(v('set-bettimer')), turnTimer: Number(v('set-turntimer')),
         sideBets: [...document.querySelectorAll('[data-sidebet]')].filter((x) => x.checked).map((x) => x.dataset.sidebet),
@@ -3636,7 +3577,7 @@ function playMove(a) {
 const KEY_HELP = [['H', 'Hit'], ['S', 'Stand'], ['D', 'Double'], ['P', 'Split'], ['U', 'Surrender'], ['Y / N', 'Take insurance, or say no'],
   ['R', 'Type your bet, then Enter'], ['B', 'Rebet: the same bet as last round'], ['Space / Enter', 'Deal me in'], ['L', 'Open or close the ledger'], ['?', 'Show this list'], ['Esc', 'Put the picked chip down'], ['W / A / S / D', 'Move freely through the office (the arrow keys work too). On your turn S and D play your hand'], ['Esc', 'After moving: back to your seat']];
 function keysHTML() {
-  return `<h2 style="margin-top:0">Keyboard keys</h2><table class="keys-help">${KEY_HELP.map(([k, what]) => `<tr><td>${k.split(' / ').map((x) => `<kbd>${x}</kbd>`).join(' ')}</td><td>${what}</td></tr>`).join('')}</table>
+  return `<h2>Keyboard keys</h2><table class="keys-help">${KEY_HELP.map(([k, what]) => `<tr><td>${k.split(' / ').map((x) => `<kbd>${x}</kbd>`).join(' ')}</td><td>${what}</td></tr>`).join('')}</table>
     <p class="hint">Keys work when you are not typing in a box.</p>`;
 }
 document.addEventListener('keydown', (e) => {
@@ -3645,7 +3586,7 @@ document.addEventListener('keydown', (e) => {
   const st = S.state;
   if (!st) return;
   const k = e.key.toLowerCase();
-  if (e.key === '?') { $('#modal-body').innerHTML = keysHTML(); $('#modal').showModal(); return; }
+  if (e.key === '?') { const g = $('#sb-guide'); if (g) g.open = !g.open; return; }
   if (k === 'l') { const d = $('#ledger-dlg'); if (d?.open) d.close(); else openLedger(); return; }
   const map = { h: 'hit', s: 'stand', d: 'double', p: 'split', u: 'surrender' };
   // While the first cards are still being dealt there is nothing to decide yet.
@@ -3937,18 +3878,14 @@ addEventListener('resize', () => { applyZoom(); placeSeats(); placePanels(); });
 
 
 
-// Top-left guide to the side bets this table offers.
+// Info at the top left: payouts, the main rules and the keyboard keys. Facts to read, so not in the settings.
 function renderGuide(st) {
   const body = $('#sb-guide-body');
   if (!body) return;
   const key = sideKeys(st).join(',');
   if (body.dataset.key === key) return;
   body.dataset.key = key;
-  body.innerHTML = sideKeys(st).map((k) => {
-    const sb = SIDE_BETS[k];
-    return `<div class="g-item"><div class="g-head">${sb.icon || ''} <b>${sb.name}</b></div><p>${esc(sb.about)}</p>
-      <table>${sb.table.map(([l, m]) => `<tr><td>${esc(l)}</td><td>${m} to 1</td></tr>`).join('')}</table></div>`;
-  }).join('') || '<p>No side bets at this table.</p>';
+  body.innerHTML = rulesHTML(st) + (matchMedia('(pointer: fine)').matches ? keysHTML() : '');
 }
 
 
@@ -4074,16 +4011,50 @@ document.addEventListener('change', (e) => {
   goGame(e.target.value);
 });
 // This table's ledger lines for the office ledger (common.js officeLedgerHTML).
-// ---------- Stop at loss (player dealer) ----------
-// A tick box and one chip amount, saved as soon as either changes. Ticked by default at 30 x the max bet.
-function lossCapHTML(st) {
-  const c = st.lossCap; if (!c) return '';
-  return `<div class="actions dealer-max dealer-cap"><label class="cap-tick" title="After the hand that brings your loss as the dealer to this amount, you stop dealing. Untick to keep dealing whatever happens."><input type="checkbox" id="cap-on" ${c.on ? 'checked' : ''} /> Stop at loss</label><input id="cap-amt" type="number" inputmode="numeric" min="1" step="1" value="${c.amount}" ${c.on ? '' : 'disabled'} aria-label="Stop at loss amount" /><span class="cap-lost">Lost ${money(c.lost)}</span></div>`;
+// ---------- Dealer settings (player dealer) ----------
+// Three parts: normal bets, Big Bets Sometimes and Stop at loss. Nothing is sent until Save, which lights up green
+// only while a box differs from the table. The panel folds away with the arrow at its top; it stays the way you left it.
+function dealerOpen() { return S.dealerOpen ?? (safeGet('bj-dpanel') ? safeGet('bj-dpanel') === '1' : innerWidth >= 700); }
+function dealerCur(st) {
+  const s = st.settings, b = s.bigBet, c = st.lossCap || { on: true, amount: 30 * s.maxBet, lost: 0 };
+  return { min: s.minBet, max: s.maxBet, side: s.maxSideBet, shuffle8: s.shuffle8 !== false, bigOn: !!b, bigLimit: b?.limit ?? s.maxBet * 4, bigPer: b?.per ?? 2, bigHands: b?.hands ?? 10, capOn: !!c.on, capAmt: c.amount };
 }
-document.addEventListener('change', (e) => {
-  if (e.target.id !== 'cap-on' && e.target.id !== 'cap-amt') return;
-  const on = $('#cap-on')?.checked, v = Number($('#cap-amt')?.value);
-  send({ t: 'dealer-cap', on, amount: e.target.id === 'cap-amt' && v >= 1 ? Math.round(v) : undefined });
+function dealerVals(st) { return { ...dealerCur(st), ...(S.dealerDraft || {}) }; }
+function dealerDirty(st) { const cur = dealerCur(st), d = S.dealerDraft || {}; return Object.keys(d).some((k) => String(d[k]) !== String(cur[k])); }
+function dealerPanelHTML(st) {
+  const open = dealerOpen(), v = dealerVals(st), owe = st.banker.chips < 0;
+  const num = (k, label, min = 0) => `<label>${label}<input type="number" inputmode="numeric" min="${min}" step="1" data-dk="${k}" value="${esc(String(v[k]))}" /></label>`;
+  const tick = (k, label) => `<label class="dp-tick"><input type="checkbox" data-dk="${k}" ${v[k] ? 'checked' : ''} /> ${label}</label>`;
+  return `<div class="dealer-panel${open ? '' : ' shut'}">
+    <button class="dp-head" data-act="dealer-open" aria-expanded="${open}"><span>${owe ? `You owe ${money(-st.banker.chips)}. Tap your balance to buy in.` : 'Dealer settings'}</span><i>${open ? '▾' : '▸'}</i></button>
+    ${open ? `<div class="dp-secs">
+      <section class="dp-sec"><h4>Normal bets</h4>${num('min', 'Min bet', 1)}${num('max', 'Max bet', 1)}${num('side', 'Max side bet')}${tick('shuffle8', 'Shuffle every 8 rounds')}</section>
+      <section class="dp-sec"><h4>Big bets sometimes</h4>${tick('bigOn', 'On')}${num('bigLimit', 'Up to', 1)}${num('bigPer', 'Times', 1)}${num('bigHands', 'Every (hands)', 1)}</section>
+      <section class="dp-sec"><h4>Stop at loss</h4>${tick('capOn', 'On')}${num('capAmt', 'Loss', 1)}<span class="cap-lost">Lost ${money(st.lossCap?.lost || 0)}</span></section>
+    </div>
+    <div class="dp-foot"><button class="btn dp-save${dealerDirty(st) ? ' dirty' : ''}" data-act="dealer-save">Save</button>${st.settings.decks !== 'csm' ? '<button class="btn" data-act="d-shuffle">🔀 Shuffle now</button>' : ''}<button class="btn" data-act="leave-dealer">Leave dealer seat</button></div>` : ''}
+  </div>${dealerBar(st) ? '<div class="dp-bar">Players, place your bets</div>' : ''}`;
+}
+function dealerSaveNow(st) {
+  if (!dealerDirty(st)) return;
+  const v = dealerVals(st), n = (x) => Math.round(Number(x));
+  send({ t: 'dealer-save', cfg: { min: n(v.min), max: n(v.max), side: n(v.side), shuffle8: !!v.shuffle8, big: { on: !!v.bigOn, limit: n(v.bigLimit), per: n(v.bigPer), hands: n(v.bigHands) }, cap: { on: !!v.capOn, amount: n(v.capAmt) } } });
+  S.dealerDraft = null;
+  document.activeElement?.blur?.();
+  render();
+}
+for (const ev of ['input', 'change']) document.addEventListener(ev, (e) => {
+  const box = e.target.closest?.('#host-settings');
+  if (box) {
+    const live = new Set(['set-decks', 'set-pen', 'set-shuf8']);
+    const dirty = [...box.querySelectorAll('input, select')].some((el) => !live.has(el.id) && el.dataset.orig !== undefined && el.dataset.orig !== (el.type === 'checkbox' ? String(el.checked) : el.value));
+    box.querySelector('[data-act=h-settings]')?.classList.toggle('dirty', dirty);
+    return;
+  }
+  const k = e.target.dataset?.dk;
+  if (!k || !S.state) return;
+  S.dealerDraft = { ...(S.dealerDraft || {}), [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value };
+  e.target.closest('.dealer-panel')?.querySelector('.dp-save')?.classList.toggle('dirty', dealerDirty(S.state));
 });
 
 // ---------- AFK screen ----------

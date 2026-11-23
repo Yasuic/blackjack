@@ -1,17 +1,18 @@
 // The poker page: a Texas Hold'em table for up to 9 in the big meeting room. The host's browser runs
 // the table (js/poker.js); every other browser sends its moves there and is told only what it may see.
-import { startPresence } from './presence.js?v=20261123e';
-import { outerLink } from './shell.js?v=20261123e';
-import { PokerTable, POKER_SEATS, pokerDeck, cardText, mpClientMoves, mpMine, mpCheck, bestHand, bestOmaha } from './poker.js?v=20261123e';
-import { plainDeck, shufflePass, lockPass, checkDeck, keyFor } from './mental.js?v=20261123e';
-import { sha256 } from './game.js?v=20261123e';
-import { botMove, isBot, BOT_NAMES } from './pokerbot.js?v=20261123e';
-import { chipSound, cardSound, hitSound, standSound, potSound, tickSound, turnSound, punchSound } from './fx.js?v=20261123e';
-import { webglOK, initRoom } from './room3d.js?v=20261123e';
-import { topToolsHTML, initTopTools, setProfit, setRisk, cardScale } from './toptools.js?v=20261123e';
-import { COPY_BTN, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML } from './common.js?v=20261123e';
+import { startPresence } from './presence.js?v=20261123f';
+import { outerLink } from './shell.js?v=20261123f';
+import { PokerTable, POKER_SEATS, pokerDeck, cardText, mpClientMoves, mpMine, mpCheck, bestHand, bestOmaha } from './poker.js?v=20261123f';
+import { plainDeck, shufflePass, lockPass, checkDeck, keyFor } from './mental.js?v=20261123f';
+import { sha256 } from './game.js?v=20261123f';
+import { botMove, isBot, BOT_NAMES } from './pokerbot.js?v=20261123f';
+import { chipSound, cardSound, hitSound, standSound, potSound, tickSound, turnSound, punchSound } from './fx.js?v=20261123f';
+import { webglOK, initRoom } from './room3d.js?v=20261123f';
+import { statsHTML as ledgerStatsHTML } from './pstats.js?v=20261123f';
+import { topToolsHTML, initTopTools, setProfit, setRisk, cardScale, profitLineHTML } from './toptools.js?v=20261123f';
+import { COPY_BTN, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML } from './common.js?v=20261123f';
 
-import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261123e';
+import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261123f';
 const PREFIX = 'bjt-pk-';
 // A settings change by vote (js/vote.js): any player at the table may ask, every other player at the table who is online has to say yes.
 const VOTE = {
@@ -598,7 +599,7 @@ function showTable() {
   if (d3) {
     document.body.classList.add('room3d');
     try {
-      S.room = initRoom($('#room'), felt, { phone: phone(), pixel: safeGet('bj-pixel') === '1', hud: $('#hud3d'), size: F, game: 'poker', onGo: (g, now) => goToGame('poker', g, S.code || params.get('room'), S.role === 'host', now), metres: F.H > F.W ? 2.0 * F.W / F.H : 2.4 });
+      S.room = initRoom($('#room'), felt, { phone: phone(), hud: $('#hud3d'), size: F, game: 'poker', onGo: (g, now) => goToGame('poker', g, S.code || params.get('room'), S.role === 'host', now), metres: F.H > F.W ? 2.0 * F.W / F.H : 2.4 });
       if (params.has('roomdebug')) window.__room = S.room;
       if (S.tourFor !== S.code) { S.tourFor = S.code; S.room.tour(params.get('from') ? 1500 : 2000, params.get('from')); }
     } catch (e) { console.error(e); S.room = null; document.body.classList.remove('room3d'); toast('The 3D room could not start on this device.'); }
@@ -1133,7 +1134,7 @@ function drawMenu(st) {
     ${S.role === 'guest' ? '<button class="menu-item" data-act="become-host" title="The table moves to your browser. No vote.">👑 Become host</button>' : ''}
     <button class="menu-item" data-act="log">📝 Hand log</button>
     <button class="menu-item" data-act="dl-hands">⬇️ Download hand history</button>
-    <button class="menu-item" data-act="rules">📖 Table rules</button>
+    <button class="menu-item" data-act="rules">ℹ️ Info</button>
     <button class="menu-item" data-act="test-mode">🧪 Test mode: ${S.testMode ? 'on' : 'off'}</button>
     ${S.testMode ? `<div class="menu-head">Test</div>
     ${mySeatNow(st) ? '<button class="menu-item" data-act="test-punch">👊 Punch the next player</button>' : '<div class="menu-note">Take a seat to test the punch.</div>'}
@@ -1144,7 +1145,7 @@ function drawMenu(st) {
     <button class="menu-item" data-act="test-trip" data-who="Henry" data-kind="visit" data-note="Henry walks over to David or Jeff.">🗣 Henry visits David or Jeff</button>
     <button class="menu-item" data-act="test-trip" data-who="any" data-kind="coffee" data-note="Somebody leaves for a coffee.">☕ Coffee run</button>` : '<div class="menu-note">The office people show in the 3D room only.</div>'}` : ''}
     <button class="menu-item" data-act="bbview">👁 Amounts shown in: ${bbOn() ? 'big blinds' : 'chips'}</button>
-    ${isHost || st.seats.some((x) => x && x.id === S.myId) ? `<button class="menu-item" data-act="settings" data-note="${isHost ? '' : 'Everyone else at the table votes on your change.'}">⚙️ Table settings</button>` : ''}
+    ${isHost || st.seats.some((x) => x && x.id === S.myId) ? `<button class="menu-item" data-act="settings">⚙️ Table settings</button>` : ''}
     ${isHost ? `    <button class="menu-item" data-act="players">👥 Players</button>
     ${st.seats.some((x) => !x) ? '<button class="menu-item" data-act="bot-add">🤖 Add a computer player</button>' : ''}${st.seats.some((x) => x && String(x.id).startsWith('bot-')) ? '<button class="menu-item" data-act="bot-clear">🤖 Remove computer players</button>' : ''}
     <button class="menu-item" data-act="bomb">💣 Bomb pot next hand: ${st.bombNext ? 'on' : 'off'}</button>
@@ -1155,11 +1156,11 @@ function drawMenu(st) {
     <button class="menu-item" data-act="leave">↩️ Leave the table</button>`;
 }
 function ledgerHTML(st) {
-  return ledgerTable(st) + '<button class="btn small office-btn" data-act="office">🏢 All tables</button>' + COPY_BTN;
+  return ledgerTable(st) + ledgerStatsHTML({ ...st.pstats, note: 'Win means the hand ended with more chips.', tail: 'The 7-2 bounty is in the +/-.' }) + '<button class="btn small office-btn" data-act="office">🏢 All tables</button>' + COPY_BTN;
 }
 function ledgerTable(st) {
   const rows = [...st.ledger].sort((a, b) => b.net - a.net);
-  return `<h3>Ledger</h3><div class="ledger-body"><table class="pk-table"><tr><th>Player</th><th>Bought in</th><th>Chips</th><th>Net</th></tr>${rows.map((r) => `<tr class="${r.id === S.myId ? 'me' : ''}"><td>${esc(r.name)}</td><td>${money(r.totalIn + (r.stack ? 0 : 0))}</td><td>${money(r.stack)}</td><td class="${r.net > 0 ? 'up' : r.net < 0 ? 'down' : ''}">${r.net > 0 ? '+' : ''}${money(r.net)}</td></tr>`).join('')}</table><p class="hint">Net is chips now minus chips bought. A player who left keeps the result they left with.</p></div>`;
+  return `<h3>Ledger</h3>${profitLineHTML()}<div class="ledger-body"><table class="pk-table"><tr><th>Player</th><th>Bought in</th><th>Chips</th><th>Net</th></tr>${rows.map((r) => `<tr class="${r.id === S.myId ? 'me' : ''}"><td>${esc(r.name)}</td><td>${money(r.totalIn + (r.stack ? 0 : 0))}</td><td>${money(r.stack)}</td><td class="${r.net > 0 ? 'up' : r.net < 0 ? 'down' : ''}">${r.net > 0 ? '+' : ''}${money(r.net)}</td></tr>`).join('')}</table></div>`;
 }
 function rulesHTML(st) {
   const s = st.settings;
@@ -1186,8 +1187,7 @@ function settingsHTML(st) {
     <label>Bomb pot game<select id="ps-bombGame">${[['same', 'Same as the table'], ['nlh', "Hold'em"], ['plo', 'Omaha (PLO)']].map(([v, l]) => `<option value="${v}"${s.bombGame === v ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
     <label>Bomb pot boards<select id="ps-bombBoards">${[[0, 'Same as the table'], [1, 'One board'], [2, 'Two boards']].map(([v, l]) => `<option value="${v}"${s.bombBoards === v ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
     ${tick('straddle', 'Straddle allowed')}${tick('autoStart', 'Deal the next hand automatically')}
-    <button class="btn primary" data-act="save-settings">${S.role === 'host' ? 'Save' : 'Ask for a vote'}</button>
-    <p class="hint">Changes made during a hand start with the next hand.</p></div>`;
+    <button class="btn dp-save" data-act="save-settings">${S.role === 'host' ? 'Save' : 'Ask for a vote'}</button></div>`;
 }
 function playersHTML(st) {
   return `<h3>Players</h3><div class="pk-players">${st.players.map((p) => { const seat = p.seat >= 0 ? st.seats[p.seat] : null; return `<div class="pk-prow"><b>${esc(p.name)}</b><span>${seat ? `Seat ${p.seat + 1} · ${money(seat.stack)}` : 'Watching'}${p.connected ? '' : ' · offline'}</span>

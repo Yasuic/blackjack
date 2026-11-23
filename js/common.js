@@ -1,7 +1,8 @@
 // Shared by the poker and baccarat pages: small helpers, the playing card picture, the game switch at the
 // top left, and the link between the host's browser and the players' browsers.
-import { office, openTable } from './shell.js?v=20261123e';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261123e';
+import { office, openTable } from './shell.js?v=20261123f';
+import { profitLineHTML } from './toptools.js?v=20261123f';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261123f';
 export const params = new URLSearchParams(location.search);
 export const $ = (sel, el = document) => el.querySelector(sel);
 export function safeGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
@@ -37,7 +38,15 @@ document.addEventListener('click', (e) => {
   const r = d.getBoundingClientRect();
   if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) d.close();
 });
-export function modal(html) { $('#modal-body').innerHTML = html; const d = $('#modal'); if (!d.open) d.showModal(); }
+export function modal(html) { const b = $('#modal-body'); b.innerHTML = html; markOrig(b); const d = $('#modal'); if (!d.open) d.showModal(); }
+// A settings Save button (.dp-save) lights up green only while a box near it differs from what it showed at first.
+const valOf = (el) => (el.type === 'checkbox' || el.type === 'radio' ? String(el.checked) : el.value);
+export function markOrig(root) { for (const el of root.querySelectorAll('input, select, textarea')) el.dataset.orig = valOf(el); }
+for (const ev of ['input', 'change']) document.addEventListener(ev, (e) => {
+  const root = e.target.closest?.('#modal-body'); if (!root) return;
+  const btn = root.querySelector('.dp-save'); if (!btn) return;
+  btn.classList.toggle('dirty', [...root.querySelectorAll('input, select, textarea')].some((el) => el.dataset.orig !== undefined && el.dataset.orig !== valOf(el)));
+});
 const suitClass = (s) => ({ '♠': 's-s', '♥': 's-h', '♦': 's-d', '♣': 's-c' }[s] || '');
 // One playing card. c = null draws the back.
 export function cardHTML(c, cls = '') {
@@ -653,5 +662,5 @@ export function bankLedgerHTML(st, myId) {
   const rows = [...st.players].sort((a, b) => b.net - a.net);
   const cell = (n) => `<td class="${n > 0 ? 'up' : n < 0 ? 'down' : ''}">${n > 0 ? '+' : ''}${money(Math.round(n * 100) / 100)}</td>`;
   const sum = Math.round(rows.reduce((a, r) => a + r.net, 0) * 100) / 100;
-  return `<h3>Ledger${st.frozen ? ' (frozen)' : ''}</h3><div class="ledger-body"><table class="pk-table"><tr><th>Player</th><th>Bought in</th><th>Chips</th><th>+/-</th></tr>${rows.map((r) => { const b = st.frozen && r.base ? r.base : r; return `<tr class="${r.id === myId ? 'me' : ''}"><td>${esc(r.name)}${r.id === st.bankId ? ' (dealer)' : ''}</td><td>${money(b.totalIn)}</td><td>${money(b.chips)}</td>${cell(r.net)}</tr>`; }).join('')}<tr><td>Total</td><td></td><td></td>${cell(sum)}</tr></table><p class="hint">The +/- column counts only rounds played with a player as the dealer, so it always adds up to zero. Rounds against the house are practice and are left out${st.frozen ? '. The ledger is frozen now: the chips on the table are practice chips' : ''}.</p><button class="btn small office-btn" data-act="office">🏢 All tables</button>${COPY_BTN}</div>`;
+  return `<h3>Ledger${st.frozen ? ' (frozen)' : ''}</h3>${profitLineHTML()}<div class="ledger-body"><table class="pk-table"><tr><th>Player</th><th>Bought in</th><th>Chips</th><th>+/-</th></tr>${rows.map((r) => { const b = st.frozen && r.base ? r.base : r; return `<tr class="${r.id === myId ? 'me' : ''}"><td>${esc(r.name)}${r.id === st.bankId ? ' (dealer)' : ''}</td><td>${money(b.totalIn)}</td><td>${money(b.chips)}</td>${cell(r.net)}</tr>`; }).join('')}<tr><td>Total</td><td></td><td></td>${cell(sum)}</tr></table><p class="hint">The +/- column counts only rounds played with a player as the dealer, so it always adds up to zero. Rounds against the house are practice and are left out${st.frozen ? '. The ledger is frozen now: the chips on the table are practice chips' : ''}.</p><button class="btn small office-btn" data-act="office">🏢 All tables</button>${COPY_BTN}</div>`;
 }

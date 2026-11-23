@@ -218,7 +218,7 @@ function buildOffice(signText, midShift = 0, midScale = 1, skipRoom = null, live
     chrome: mk({ color: '#b9bec4', roughness: 0.25, metalness: 0.9 }),
     screen: mk({ color: '#0d0f12', roughness: 0.25, metalness: 0.2 }),
     // What the office screens show: the ARC Group logo, from the photo of it, lit like a screen that is on.
-    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261123e'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
+    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261123f'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
     dark: mk({ color: '#30353c', roughness: 0.6 }),
   };
   const group = new THREE.Group();
@@ -996,7 +996,7 @@ function buildStorefront() {
     lamp: lam('#c8161d', 0.6), bulb: lit('#ffe9a8'), red: lit('#c8161d'), gold: lit('#f4c542'), wood: lam('#7a5234', 0.35),
     glass: new THREE.MeshBasicMaterial({ color: '#dff3f7', transparent: true, opacity: 0.13, depthWrite: false }),
     awning: new THREE.MeshBasicMaterial({ map: canvasTexture(512, 64, (g, w, h) => { for (let i = 0; i < 16; i++) { g.fillStyle = i % 2 ? '#fff6e6' : '#f08a1c'; g.fillRect((i * w) / 16, 0, w / 16 + 1, h); } }), side: THREE.DoubleSide }),
-    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261123e') }),
+    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261123f') }),
     menu: new THREE.MeshBasicMaterial({ map: canvasTexture(256, 384, (g, w, h) => {
       g.fillStyle = '#c8161d'; g.fillRect(0, 0, w, h); g.fillStyle = '#f4c542'; g.fillRect(14, 14, w - 28, 44);
       const r = rng(11); g.fillStyle = '#fff3d6';
@@ -1080,7 +1080,7 @@ function buildStorefront() {
 // metres: how wide the felt is in the room (a blackjack felt is 1.61 m).
 // onGo(game): called when the player taps another game's table in the room.
 // wheel: a roulette wheel lying on the felt ({ x, y } in percent of the felt, d its width in felt pixels); it gets a raised wooden bowl.
-export function initRoom(container, feltEl, { phone, pixel = false, hud = null, size = null, game = 'blackjack', metres = 1.61, onGo = null, wheel = null } = {}) {
+export function initRoom(container, feltEl, { phone, hud = null, size = null, game = 'blackjack', metres = 1.61, onGo = null, wheel = null } = {}) {
   OVAL = game === 'poker';
   // The felt keeps the size and shape its own style sheet gives it, so the 3D table always matches the
   // flat one: the height and the rounded end are read from the page, not fixed here. On a phone the felt
@@ -1108,7 +1108,7 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
 
   const css = new CSS3DRenderer();
   css.domElement.className = 'room-css';
-  const gl = new THREE.WebGLRenderer({ antialias: !pixel, alpha: true, powerPreference: 'high-performance' });
+  const gl = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
   gl.toneMapping = THREE.ACESFilmicToneMapping;
   gl.toneMappingExposure = 1.05;
   gl.shadowMap.enabled = true;
@@ -2099,22 +2099,25 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
   }
 
   // Seat lock, on by default: nothing you tap, drag, scroll or type moves you out of your chair. The button at the
-  // top unlocks it for looking and walking around; Back to my seat at the bottom always brings you back to the chair.
+  // top left unlocks it for looking and walking around; Back to seat beside it always brings you back to the chair.
   let locked = true;
   try { locked = localStorage.getItem('bj-seat-lock') !== '0'; } catch { /* no storage: stay locked */ }
-  document.querySelectorAll('.room-lock, .room-reset').forEach((b) => b.remove());
+  document.querySelectorAll('.room-view').forEach((b) => b.remove());
   const lockBtn = document.createElement('button'), resetBtn = document.createElement('button');
   // Poker on a computer: a second view, from your own eyes in the chair. The seat view stays the default.
   const povBtn = document.createElement('button'); povBtn.className = 'room-pov';
   const drawPov = () => { povBtn.textContent = firstPerson ? '👁 First person' : '👁 Seat view'; povBtn.title = firstPerson ? 'You see the table from your own eyes. Tap for the higher seat view.' : 'Tap to see the table from your own eyes.'; povBtn.classList.toggle('on', firstPerson); document.body.classList.toggle('room-fp', firstPerson); };
   povBtn.addEventListener('click', (e) => { e.stopPropagation(); firstPerson = !firstPerson; try { localStorage.setItem('pk-pov', firstPerson ? '1' : '0'); } catch { /* fine */ } drawPov(); resize(); home(true); });
   if (OVAL) { document.body.append(povBtn); drawPov(); }
-  lockBtn.className = 'room-lock'; resetBtn.className = 'room-reset'; resetBtn.textContent = '🪑 Back to my seat'; resetBtn.title = 'Back to your chair';
+  lockBtn.className = 'room-lock'; resetBtn.className = 'room-reset'; resetBtn.textContent = '🪑 Back to seat'; resetBtn.title = 'Back to your chair';
   const drawLock = () => { lockBtn.textContent = locked ? '🔒 Seat locked' : '🔓 Free view'; lockBtn.title = locked ? 'You stay in your chair. Drag to look around. Tap to unlock and walk around.' : 'Tap to lock yourself in your chair again.'; lockBtn.classList.toggle('on', locked); container.classList.toggle('seat-locked', locked); };
   const setLock = (v) => { locked = !!v; try { localStorage.setItem('bj-seat-lock', locked ? '1' : '0'); } catch { /* fine */ } if (locked) { moveKeys.clear(); home(true); } drawLock(); };
   lockBtn.addEventListener('click', (e) => { e.stopPropagation(); setLock(!locked); });
   resetBtn.addEventListener('click', (e) => { e.stopPropagation(); home(true); });
-  document.body.append(lockBtn, resetBtn);
+  // One view control at the top left: the seat lock and, beside it, the way back to your chair.
+  const viewBox = document.createElement('div'); viewBox.className = 'room-view';
+  viewBox.append(lockBtn, resetBtn);
+  document.body.append(viewBox);
   drawLock();
 
   // Drag to look or walk around, wheel or pinch to move in and out. Presses on buttons, chips and
@@ -2220,19 +2223,16 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     camera.fov = w / h < 0.8 ? 56 : OVAL ? (firstPerson ? 76 : 58) : 42; // poker looks across the table from the chair, so it sees wider
     camera.updateProjectionMatrix();
     css.setSize(w, h);
-    applyPixel();
+    sizeGl();
     if (seated) seatGoal(!!homeFit); else homeFit = fitHome();
     touch();
   }
-  let pixelOn = !!pixel;
-  function applyPixel() {
+  function sizeGl() {
     const w = container.clientWidth, h = container.clientHeight;
     if (!w || !h) return;
-    // Pixel look: draw the room small and let the browser blow it up without smoothing.
     // A phone draws at one and a half times its screen points at most: sharp enough, and far fewer pixels to fill each frame.
-    gl.setPixelRatio(pixelOn ? 1 / (Math.min(w, h) < 520 ? 3 : 4) : Math.min(Math.min(w, h) < 520 ? 1.5 : 2, devicePixelRatio || 1));
+    gl.setPixelRatio(Math.min(Math.min(w, h) < 520 ? 1.5 : 2, devicePixelRatio || 1));
     gl.setSize(w, h);
-    gl.domElement.classList.toggle('pixel', pixelOn);
     touch();
   }
   new ResizeObserver(resize).observe(container);
@@ -2531,6 +2531,9 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     // That rule is only for the resting view from your chair. Once you turn your head, lean in or look up or down,
     // everybody is drawn, so nobody vanishes while you look at them from close by.
     const turned = Math.abs(cur.yaw) > 0.05 || Math.abs(cur.pitch) > 0.05 || cur.r < homeFit.r * 0.97;
+    // Your own arms rest on the rail right in front of the camera and would hide the felt lettering and the chip tray:
+    // they show only when you look round or stand up.
+    if (myFig?.userData.arms) for (const A of myFig.userData.arms) A.visible = !seated || !!tour || turned;
     for (const f of others) { f.updateMatrixWorld(); f.visible = !f.userData.gone && (!seated || !!tour || turned || side === 'dealer' || (brawl && (f === brawl.a || f === brawl.b)) || !(low(f, 0.35) || edge(f))); }
     // The other players' stools in front of you would be drawn as big shapes across the bottom of the screen: left out the same way.
     if (stoolGroup && game === 'roulette') for (const st of stoolGroup.children) { if (st === myStool) continue; st.updateMatrixWorld(); const seat = st.children[0]; tmp.setFromMatrixPosition(seat.matrixWorld).project(camera); st.visible = !seated || !!tour || turned || side === 'dealer' || tmp.y > -0.55; }
@@ -2673,7 +2676,6 @@ export function initRoom(container, feltEl, { phone, pixel = false, hud = null, 
     dealCard() { for (const f of figs.values()) if (f.userData.isDealer) { f.userData.deal = 1; touch(); } },
     // For tests only: the drawing parts, so a test can look at one spot of the room.
     dbg: () => ({ gl, scene, camera, figs }),
-    setPixel(on) { pixelOn = !!on; applyPixel(); },
     // For checks and tests: where the camera is and how fast the room is drawing.
     info: () => ({ calls: gl.info.render.calls, triangles: gl.info.render.triangles, fps, seated, side, pos: camera.position.toArray().map(Math.round), yaw: cur.yaw, r: Math.round(cur.r), home: homeFit && Math.round(homeFit.r), phi: homeFit && homeFit.phi, people: figs.size, others: otherGroup.children.length }),
     // Jump straight to where the camera is heading (used by tests, which cannot wait for the glide).
