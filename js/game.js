@@ -1702,6 +1702,7 @@ export class Table {
           betSeq: s.betSeq || 0,
           streak: s.streak || 0,
           insurance: s.insurance,
+          staked: s.hands.length ? s.staked || 0 : 0,
           insuranceDecided: s.insuranceDecided,
           sideResults: s.sideResults,
           net: s.net,

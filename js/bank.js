@@ -103,3 +103,30 @@ export function bankCarryIn(t, id, amount, fromName, cid) {
   t.addLog(`${p.name} brought ${amount} from ${String(fromName || 'another table').slice(0, 20)}.`);
   return amount;
 }
+// The dealer (or the host while the house deals) takes a player out of a seat. The player keeps the chips and
+// watches; a bet sits them down again. During a round it waits until the round is over (next()), so no bet
+// in play is ever touched.
+export function dealerUnseat(t, byId, id) {
+  if (t.bankId ? t.bankId !== byId : t.hostId && t.hostId !== byId) throw new Error('Only the dealer can unseat a player.');
+  const p = t.players[id];
+  if (!p || p.kicked || id === byId || id === t.bankId) return;
+  if (t.phase !== 'betting' && t.phase !== 'done') {
+    t.unseatLater ||= [];
+    if (t.unseatLater.includes(id)) { t.unseatLater = t.unseatLater.filter((x) => x !== id); t.addLog(`The dealer lets ${p.name} stay.`); }
+    else { t.unseatLater.push(id); t.addLog(`The dealer unseats ${p.name} after this round.`); }
+    return;
+  }
+  if (p.seat < 0) return;
+  t.clearBets(id, true);
+  p.seat = -1;
+  t.addLog(`The dealer unseated ${p.name}.`);
+  markDealerUnseat(t, [id]);
+}
+// Run when a round is over: the players the dealer picked during it leave their seats now.
+export function unseatQueued(t) {
+  const ids = (t.unseatLater || []).filter((id) => t.players[id] && t.players[id].seat >= 0);
+  t.unseatLater = [];
+  for (const id of ids) { t.players[id].seat = -1; t.addLog(`The dealer unseated ${t.players[id].name}.`); }
+  if (ids.length) markDealerUnseat(t, ids);
+}
+function markDealerUnseat(t, ids) { t.unseatSeq = (t.unseatSeq || 0) + 1; t.unseated = { round: 'u' + t.unseatSeq, ids, dealer: true }; }

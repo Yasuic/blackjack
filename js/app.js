@@ -10,7 +10,7 @@ import { tickSound, winSound } from './fx.js?v=20261122zx';
 import * as HX from './history.js?v=20261122zx';
 import { webglOK, initRoom } from './room3d.js?v=20261122zx';
 import { COPY_BTN, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261122zx';
-import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122zx';
+import { topToolsHTML, initTopTools, setProfit, setRisk, cardScale } from './toptools.js?v=20261122zx';
 import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122zx';
 
 const $ = (sel, el = document) => el.querySelector(sel);
@@ -1740,7 +1740,7 @@ function renderLedger(st) {
   const box = $('#ledger');
   if (!box || !st.ledger) return;
   const net = (r) => r.chips - r.totalIn - (r.houseNet || 0); // hands against the house are left out
-  { const mine = st.ledger.find((r) => r.id === S.myId); setProfit(mine ? net(mine) : null); if (mine && S.role !== 'host') carryDone('blackjack', S.code); }
+  { const mine = st.ledger.find((r) => r.id === S.myId); setProfit(mine ? net(mine) : null); setRisk(['insurance', 'playing', 'dealer'].includes(st.phase) ? (st.players.find((p) => p.id === S.myId)?.seats || []).reduce((a, i) => a + (st.seats[i]?.staked || 0), 0) : 0); if (mine && S.role !== 'host') carryDone('blackjack', S.code); }
   officeSave(S.code, 'blackjack', officeRows(st));
   const rows = st.ledger.slice().sort((a, b) => net(b) - net(a));
   const sumIn = rows.reduce((a, r) => a + r.totalIn, 0);

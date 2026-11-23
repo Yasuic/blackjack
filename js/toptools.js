@@ -84,14 +84,23 @@ export function initTopTools({ css = false, onChange = null } = {}) {
 }
 
 // The player's own net result of the session, the same number as their line in the ledger. null hides it.
+// What the player has put in on the hand in play (the ledger only moves once it is settled). 0 or null hides it.
+let risk = 0, lastProfit = null;
+export function setRisk(n) {
+  const v = Number.isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : 0;
+  if (v === risk) return;
+  risk = v;
+  setProfit(lastProfit);
+}
 export function setProfit(n) {
+  lastProfit = n;
   const el = document.getElementById('tt-profit');
   if (!el) return;
   const sp = document.getElementById('tt-sp');
   if (n === null || n === undefined || !Number.isFinite(n)) { el.hidden = true; if (sp) sp.hidden = true; return; }
   const r = Math.round(n * 100) / 100, txt = (r > 0 ? '+' : r < 0 ? '-' : '') + Math.abs(r).toLocaleString();
-  const html = `<span class="tt-pl">Session profit:</span> <b>${txt}</b>`;
+  const html = `<span class="tt-pl">Session profit:</span> <b>${txt}</b>${risk ? `<span class="tt-risk" title="Chips you have put in on the hand in play"><span class="tt-rl">At risk</span> <b>${risk.toLocaleString()}</b></span>` : ''}`;
   if (el.dataset.v !== html) { el.dataset.v = html; el.innerHTML = html; el.className = 'pill tt-profit ' + (r > 0 ? 'up' : r < 0 ? 'down' : ''); }
   el.hidden = false;
-  if (sp) { if (sp.dataset.v !== txt) { sp.dataset.v = txt; sp.innerHTML = `Session profit: <b class="${r > 0 ? 'up' : r < 0 ? 'down' : ''}">${txt}</b>`; } sp.hidden = false; }
+  if (sp) { if (sp.dataset.v !== txt + '|' + risk) { sp.dataset.v = txt + '|' + risk; sp.innerHTML = `Session profit: <b class="${r > 0 ? 'up' : r < 0 ? 'down' : ''}">${txt}</b>${risk ? ` · At risk <b>${risk.toLocaleString()}</b>` : ''}`; } sp.hidden = false; }
 }

@@ -8,7 +8,7 @@ import { sha256 } from './game.js?v=20261122zx';
 import { botMove, isBot, BOT_NAMES } from './pokerbot.js?v=20261122zx';
 import { chipSound, cardSound, hitSound, standSound, potSound, tickSound, turnSound, punchSound } from './fx.js?v=20261122zx';
 import { webglOK, initRoom } from './room3d.js?v=20261122zx';
-import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122zx';
+import { topToolsHTML, initTopTools, setProfit, setRisk, cardScale } from './toptools.js?v=20261122zx';
 import { COPY_BTN, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML } from './common.js?v=20261122zx';
 
 import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261122zx';
@@ -838,6 +838,7 @@ function render() {
   }
   playSounds(st);
   setProfit(st.ledger?.find((r) => r.id === S.myId)?.net ?? null);
+  { const x = st.seats?.find((y) => y && y.id === S.myId); setRisk(x && !['waiting', 'done'].includes(st.phase) ? x.total || 0 : 0); } // chips put in the pot this hand
   officeSave(S.code, GAME, officeRows(st)); if (S.role === 'guest' && (st.ledger?.some((r) => r.id === S.myId))) carryDone(GAME, S.code);
   if (st.punch && S.punched !== st.punch.at) { S.punched = st.punch.at; if (st.punch.left > 400) showPunch(st); }
   const { mySeat, at, rel } = seatLayout(st);

@@ -667,6 +667,7 @@ body:not(.room3d) .felt.pk-brawl { animation: pk-shake .16s 1.2s linear infinite
 .tt-profit { font-weight: 600; white-space: nowrap; border-color: rgba(255,255,255,.16); }
 .tt-profit b { font-weight: 800; }
 .tt-profit.up b { color: #7ef0b6; } .tt-profit.down b { color: #ff8a8a; }
+.tt-profit .tt-risk { margin-left: 8px; padding-left: 8px; border-left: 1px solid rgba(255,255,255,.2); font-weight: 600; } .tt-profit .tt-risk b { color: #f2d58a !important; }
 .tt-size { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .tt-size .tt-ico { font-size: 18px; line-height: 1; opacity: .85; }
 .tt-size input { width: 96px; accent-color: #e8c46a; }
@@ -686,6 +687,7 @@ button.tt-profit { cursor: pointer; font-family: inherit; color: inherit; backgr
 @media (min-width: 701px) { body.in-room .topbar .tt-box { position: absolute; left: 446px; top: 50%; transform: translateY(-50%); display: flex; align-items: center; gap: 10px; } }
 @media (max-width: 1240px) { .tt-size { display: none; } }
 @media (max-width: 1040px) { .tt-profit .tt-pl { display: none; } .tt-profit::before { content: 'P/L '; opacity: .7; } }
+@media (max-width: 1040px) { .tt-profit .tt-rl { display: none; } .tt-profit .tt-risk { margin-left: 5px; padding-left: 5px; } .tt-profit .tt-risk::before { content: 'Risk '; opacity: .7; } }
 @media (max-width: 700px) {
   body.in-room .topbar .tt-profit { flex: none; overflow: visible; padding: 3px 7px; font-size: 11px; }
   .tt-profit:not([hidden]) ~ .tt-wrap .tt-btn { display: none; }

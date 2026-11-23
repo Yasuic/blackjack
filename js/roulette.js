@@ -1,7 +1,7 @@
 // European roulette (one zero, 37 pockets) for up to 9 players against the house. Pure rules: the host's
 // browser owns one RouTable and every bet goes through it. Nothing here touches the page or the network.
 import { sha256, MAX_CHIPS } from './game.js?v=20261122zx';
-import { isFrozen, bankJoin, setBank, clearBank, bankGone, bankSettle, ledgerNet, ledgerSum, bankAdopt, bankCashOut, bankCarryIn } from './bank.js?v=20261122zx';
+import { isFrozen, bankJoin, setBank, clearBank, bankGone, bankSettle, ledgerNet, ledgerSum, bankAdopt, bankCashOut, bankCarryIn, dealerUnseat, unseatQueued } from './bank.js?v=20261122zx';
 
 export const ROU_SEATS = 9;
 export const ROU_DEFAULTS = {
@@ -276,7 +276,8 @@ export class RouTable {
     this.phase = 'done';
     this.doneAt = Date.now();
   }
-  next() { if (this.phase !== 'done') return; this.phase = 'betting'; this.spin = null; this.pays = {}; this.betStart = null; this.ready = {};  if (this.bankLeaving) { this.bankLeaving = false; try { this.clearBank(this.bankId); } catch { this.bankLeaving = true; } } }
+  dealerUnseat(byId, id) { dealerUnseat(this, byId, id); }
+  next() { if (this.phase !== 'done') return; unseatQueued(this); this.phase = 'betting'; this.spin = null; this.pays = {}; this.betStart = null; this.ready = {};  if (this.bankLeaving) { this.bankLeaving = false; try { this.clearBank(this.bankId); } catch { this.bankLeaving = true; } } }
 
   // What everyone is told. The seed of the coming spin is never in it; the seed of a finished spin is.
   publicState(forId) {
@@ -287,7 +288,7 @@ export class RouTable {
       bets: this.bets, lastBets: this.lastBets, totals, canSpin: this.canSpin(), ready: Object.keys(this.ready), waiting: this.waitingFor(), history: this.history.slice(-60),
       betLeft: this.betStart !== null && this.settings.betTime ? Math.max(0, this.settings.betTime * 1000 - (Date.now() - this.betStart)) : null,
       players: Object.values(this.players).filter((p) => !p.kicked).map((p) => ({ id: p.id, name: p.name, connected: p.connected, chips: p.chips, totalIn: p.totalIn, look: p.look, seat: p.seat, away: !!p.quiet, net: ledgerNet(this, p), base: this.base?.[p.id] || null })),
-      bankId: this.bankId, bankLeaving: !!this.bankLeaving, unseated: this.unseated || null, frozen: this.frozen, roundFrozen: !!this.roundFrozen, ledgerSum: this.ledgerSum(),
+      bankId: this.bankId, bankLeaving: !!this.bankLeaving, unseated: this.unseated || null, unseatLater: this.unseatLater || [], frozen: this.frozen, roundFrozen: !!this.roundFrozen, ledgerSum: this.ledgerSum(),
       fair: { nextCommit: this.fair.next.commit, mySeed: !!this.fair.seeds[forId], seeds: Object.keys(this.fair.seeds).filter((id) => id !== this.hostId).length, spins: this.spins.slice(-25) },
       log: this.log.slice(-50),
     };

@@ -54,5 +54,19 @@ const ok = (c, m) => { n++; if (!c) { bad++; console.log('FAIL', m); } };
   t.next(); t.bet('b', 'odd', 5);
   ok(t.players.b.seat >= 0, 'a bet sits b down again');
 }
+for (const [T, name, place, start, end] of [[BacTable, 'baccarat', (t, id) => t.bet(id, 'player', 10), (t) => t.deal(), (t) => { for (let i = 0; i < 30 && t.phase === 'peel'; i++) { if (t.need()) t.more(); else { for (const k of t.peelKeys()) t.peel.open[k] = true; t.peelAdvance(); } } }], [RouTable, 'roulette', (t, id) => t.bet(id, 'red', 10), (t) => t.closeBets(), (t) => t.doSpin()]]) {
+  const t = new T(); t.join('h', 'Hal'); t.join('a', 'Ann'); t.join('b', 'Bob');
+  let threw = false; try { t.dealerUnseat('a', 'b'); } catch { threw = true; } ok(threw, name + ': a player cannot unseat another');
+  t.dealerUnseat('h', 'b'); ok(t.players.b.seat === -1 && t.unseated.dealer, name + ': host (house dealer) unseats between rounds');
+  place(t, 'b'); ok(t.players.b.seat >= 0, name + ': a bet sits b down again');
+  place(t, 'a'); start(t);
+  if (t.phase !== 'done' && t.phase !== 'betting') {
+    const before = t.staked('b');
+    t.dealerUnseat('h', 'b'); ok(t.players.b.seat >= 0 && t.staked('b') === before, name + ': mid round the seat and the bet stay');
+    end(t);
+    ok(t.phase === 'done' && t.players.b.seat >= 0, name + ': round played out with b seated');
+    t.next(); ok(t.players.b.seat === -1 && t.unseated.ids.includes('b'), name + ': b leaves once the round is over');
+  } else ok(false, name + ': round did not stay in play: ' + t.phase);
+}
 console.log(bad ? `${bad} of ${n} unseat checks failed` : `${n}/${n} unseat checks passed`);
 process.exit(bad ? 1 : 0);

@@ -6,7 +6,7 @@ import { RouTable, ROU_SEATS, WHEEL, colorOf, betNumbers, betName, betPays, veri
 import { showSpin, drawWheel as paintWheel, wheelState } from './wheel.js?v=20261122zx';
 import { winSound } from './fx.js?v=20261122zx';
 import { webglOK, initRoom } from './room3d.js?v=20261122zx';
-import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122zx';
+import { topToolsHTML, initTopTools, setProfit, setRisk, cardScale } from './toptools.js?v=20261122zx';
 import { autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML } from './common.js?v=20261122zx';
 
 import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261122zx';
@@ -117,6 +117,7 @@ function doMove(id, m) {
     case 'unbet': t.unbet(id, String(m.spot)); break;
     case 'clear': t.clearBets(id); break;
     case 'rebet': t.rebet(id); break;
+    case 'unseat': t.dealerUnseat(id, String(m.id || '')); break;
     case 'add': t.addChips(id, m.amount); break;
     case 'take': t.takeChips(id, m.amount); break;
     case 'bank':
@@ -415,7 +416,7 @@ function render() {
   if (!body) return;
   const st = S.st;
   // Freed from a seat for not betting in the round that just started (unseatIdle).
-  if (st?.unseated && st.unseated.round !== S.unseatSeen) { const first = S.unseatSeen === undefined; S.unseatSeen = st.unseated.round; if (!first && st.unseated.ids?.includes(S.myId)) toast('You were unseated for not betting. Place a bet to sit down again.'); }
+  if (st?.unseated && st.unseated.round !== S.unseatSeen) { const first = S.unseatSeen === undefined; S.unseatSeen = st.unseated.round; if (!first && st.unseated.ids?.includes(S.myId)) toast(st.unseated.dealer ? 'The dealer unseated you. Place a bet to sit down again.' : 'You were unseated for not betting. Place a bet to sit down again.'); }
   if (!st) {
     body.innerHTML = `<div class="pk-wait pk-stand">${S.nohost ? (params.get('open') ? 'Opening the table…' : 'The roulette table is not open yet. Waiting for the host…') : 'Joining the table…'}</div>`;
     $('#tray').innerHTML = ''; $('#hud-top').innerHTML = '';
@@ -426,6 +427,7 @@ function render() {
   const turn = turning(st), done = st.phase === 'done', final = done && !turn;
   // Session profit on the top bar: the player's own line of the ledger, held back like the chips while the result is still coming out.
   setProfit(me ? (st.frozen && me.base ? Math.round((me.base.chips - me.base.totalIn) * 100) / 100 : Math.round((me.net - (me.chips - shownChips(st, me, turn))) * 100) / 100) : null);
+  setRisk(st.phase === 'closing' ? Object.values(st.bets?.[S.myId] || {}).reduce((a, x) => a + (Number(x) || 0), 0) : done && turn ? Number(st.pays?.[S.myId]?.staked) || 0 : 0); // what is on this spin until the ball stops
   const win = final ? st.spin.n : null;
   const mine = (done ? (st.pays[S.myId] ? st.lastBets[S.myId] : null) : st.bets[S.myId]) || {};
   const tall = FELT().H > FELT().W;
@@ -550,6 +552,7 @@ function drawMenu(st) {
     <button class="menu-item" data-act="log">📝 Spin log</button>
     <button class="menu-item" data-act="rules">📖 Rules and payouts</button>
     ${isHost || (st.players.find((p) => p.id === S.myId)?.seat ?? -1) >= 0 ? `<button class="menu-item" data-act="settings" data-note="${isHost ? '' : 'Everyone else at the table votes on your change.'}">⚙️ Table settings</button>` : ''}
+    ${(st.bankId ? st.bankId === S.myId : isHost) ? '<button class="menu-item" data-act="unseat-list">🪑 Unseat a player</button>' : ''}
     ${isHost ? `    <button class="menu-item" data-act="players">👥 Players</button>
     <button class="menu-item" data-act="pause">${S.paused ? '▶️ Spin by the clock again' : '⏸️ Stop the clock (spin by hand)'}</button>` : ''}
     <button class="menu-item" data-act="view3d">🧊 3D room: ${use3D() ? 'on' : 'off'}</button>
@@ -573,6 +576,11 @@ function settingsHTML(st) {
     <label>Seconds from the first bet to the spin (0 = no timer, all press Spin)<input id="bs-betTime" type="number" inputmode="numeric" min="0" max="300" step="1" value="${Number(s.betTime) || 0}" /></label>
     <button class="btn primary" data-act="save-settings">${S.role === 'host' ? 'Save' : 'Ask for a vote'}</button>
     <p class="hint">Changes start when no bets are on the table.</p></div>`;
+}
+// The dealer's list: every seated player, with Unseat (after this round while one is in play).
+function unseatHTML(st) {
+  const later = st.unseatLater || [], list = st.players.filter((p) => p.seat >= 0 && p.id !== S.myId && p.id !== st.bankId);
+  return `<h3>Unseat a player</h3><div class="pk-players" id="unseat-box">${list.length ? list.map((p) => `<div class="pk-prow"><b>${esc(p.name)}</b><span>Seat ${p.seat + 1}${later.includes(p.id) ? ' · leaves after this round' : ''}</span><button class="btn small" data-act="d-unseat" data-id="${esc(p.id)}">${later.includes(p.id) ? 'Let stay' : 'Unseat'}</button></div>`).join('') : '<p class="hint">Nobody else is seated.</p>'}</div><p class="hint">They keep their chips and watch. A bet sits them down again. During a round they leave once it is over.</p>`;
 }
 function playersHTML(st) {
   return `<h3>Players</h3><div class="pk-players">${st.players.map((p) => `<div class="pk-prow"><b>${esc(p.name)}</b><span>${p.seat >= 0 ? `Seat ${p.seat + 1}` : 'Watching'} · ${money(p.chips)}${p.connected ? '' : ' · offline'}</span>${p.id !== S.myId ? `<button class="btn small danger" data-act="h-kick" data-id="${esc(p.id)}">Remove</button>` : ''}</div>`).join('')}</div>`;
@@ -637,6 +645,8 @@ document.addEventListener('click', (e) => {
       break;
     }
     case 'players': closeMenu(); modal(playersHTML(st)); break;
+    case 'unseat-list': closeMenu(); modal(unseatHTML(st)); break;
+    case 'd-unseat': send({ t: 'unseat', id: el.dataset.id }); setTimeout(() => { if ($('#unseat-box')) modal(unseatHTML(S.st)); }, 400); break;
     case 'h-kick': t.kick(el.dataset.id); S.net.send(el.dataset.id, { t: 'kicked' }); push(); modal(playersHTML(S.st)); break;
     case 'view3d': safeSet('bj-3d', use3D() ? '0' : '1'); location.reload(); break;
     case 'walk': closeMenu(); S.room?.walk(true); break;
