@@ -13,6 +13,7 @@ const tableStaked = (t) => Object.keys(t.bets).reduce((a, id) => a + t.staked(id
 
 export function setBank(t, id) {
   const p = t.mustPlayer(id);
+  if (p.seat < 0 && t.phase === 'betting') { const s = t.freeSeat?.() ?? -1; if (s >= 0) p.seat = s; } // a watcher who steps up as the dealer takes a free seat
   if (p.seat < 0) throw new Error('Take a seat first.');
   if (t.phase !== 'betting' || tableStaked(t) > 0) throw new Error('Bets are on the table. Wait for this round to end.');
   if (t.bankId === id) return;

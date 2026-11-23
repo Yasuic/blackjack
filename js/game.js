@@ -777,6 +777,26 @@ export class Table {
     this.regroup();
   }
 
+  // The dealer (or the host when the house deals) takes a player out of a seat. The player keeps the chips and
+  // watches. A hand in play on that seat is finished first: the seat is freed when that round is settled.
+  dealerUnseat(byId, seatIdx) {
+    if (this.banker ? this.banker !== byId : this.hostId && this.hostId !== byId) throw new Error('Only the dealer can unseat a player.');
+    const seat = this.seats[seatIdx];
+    if (!seat || seat.playerId === byId) return;
+    const p = this.players[seat.playerId];
+    if (this.inRound() && seat.hands.length) {
+      if (seat.leaving && seat.byDealer) { seat.leaving = false; seat.byDealer = false; this.addLog(`The dealer lets ${p?.name || 'the player'} stay in seat ${seatIdx + 1}.`); return; }
+      seat.leaving = true; seat.byDealer = true;
+      this.addLog(`The dealer unseats ${p?.name || 'a player'} from seat ${seatIdx + 1} after this hand.`);
+      return;
+    }
+    this.ev('unseated by the dealer', seat.playerId, `seat ${seatIdx + 1}`);
+    this.seats[seatIdx] = null;
+    if (p) { this.fixSeat(p); this.addLog(`The dealer unseated ${p.name} from seat ${seatIdx + 1}.`); this.markUnseated([p.id], true); }
+    this.regroup();
+  }
+  markUnseated(ids, dealer = false) { this.unseatSeq = (this.unseatSeq || 0) + 1; this.unseated = { round: 'u' + this.unseatSeq, ids, dealer }; }
+
   disconnect(clientId) {
     const p = this.players[clientId];
     if (!p) return;
@@ -921,6 +941,7 @@ export class Table {
   // frees when the round is over (the hand always plays to a real result). Pressing it again calls it off.
   leaveSeat(clientId, seatIdx) {
     const { seat, idx } = this.mustSeat(clientId, seatIdx);
+    if (seat.leaving && seat.byDealer) throw new Error('The dealer has unseated you after this hand.');
     if (seat.leaving) { seat.leaving = false; this.ev('stays in the seat', clientId, `seat ${idx + 1}`); return; }
     if (this.inRound() && seat.hands.length) { seat.leaving = true; this.ev('leaves this seat after the round', clientId, `seat ${idx + 1}`); return; }
     this.standUp(clientId, idx);
@@ -1076,7 +1097,7 @@ export class Table {
       const seat = this.seats[i];
       if (!seat) continue;
       const p = this.players[seat.playerId];
-      if (p.kicked || p.leaving || seat.leaving) { this.seats[i] = null; this.fixSeat(p); continue; }
+      if (p.kicked || p.leaving || seat.leaving) { if (seat.byDealer && !p.kicked) this.markUnseated([p.id], true); this.seats[i] = null; this.fixSeat(p); continue; }
       // Every round starts with empty betting spots; players put fresh chips down.
       this.seats[i] = emptySeat(seat.playerId);
       if (seat.out) this.seats[i].out = true; // a seat that sits out stays out until its player comes back in
@@ -1256,7 +1277,7 @@ export class Table {
       this.seats[i] = null;
     });
     for (const id of unseated) { const p = this.players[id]; if (!p) continue; this.fixSeat(p); this.addLog(`${p.name} was unseated for not betting.`); }
-    this.unseated = { round: this.round, ids: unseated };
+    this.markUnseated(unseated);
     this.dealer = { cards: [], revealed: false };
     for (let pass = 0; pass < 2; pass++) {
       for (const i of active) this.seats[i].hands[0].cards.push(this.draw());

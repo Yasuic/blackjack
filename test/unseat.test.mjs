@@ -19,6 +19,23 @@ const ok = (c, m) => { n++; if (!c) { bad++; console.log('FAIL', m); } };
   t.startBetting(); t.sit('b', 1);
   ok(t.seats[1]?.playerId === 'b', 'b can sit again');
 }
+{ // blackjack: the dealer unseats a player, after the hand when one is in play
+  const t = new Table({}); for (const id of 'dab') t.join(id, id.toUpperCase(), 500);
+  t.sitDealer ? null : null;
+  t.sit('a', 0); t.sit('b', 1); t.setFrozen(true); t.hostId = 'd';
+  let threw = false; try { t.dealerUnseat('a', 1); } catch { threw = true; } ok(threw, 'a player cannot unseat another');
+  t.dealerUnseat('d', 1); ok(t.seats[1] === null && t.players.b.chips === 500 && t.unseated.dealer && t.unseated.ids[0] === 'b', 'between rounds: seat freed at once, chips kept');
+  t.sit('b', 1);
+  t.setBet('a', { main: 10, sides: {}, ready: true, seat: 0 }); t.setBet('b', { main: 10, sides: {}, ready: true, seat: 1 });
+  t.deal();
+  if (t.inRound()) {
+    t.dealerUnseat('d', 1); ok(t.seats[1] && t.seats[1].hands.length === 1 && t.seats[1].leaving, 'mid hand: the hand plays on, seat marked');
+    threw = false; try { t.leaveSeat('b', 1); } catch { threw = true; } ok(threw && t.seats[1].leaving, 'the player cannot cancel it');
+    let g = 0; while (t.inRound() && g++ < 50) { if (t.phase === 'insurance') { for (const id of 'ab') try { t.insurance(id, false); } catch {} } else if (t.phase === 'playing') t.action(t.seats[t.turn.seat].playerId, 'stand'); else if (t.phase === 'dealer') t.dealerStep(); }
+    ok(t.seats[1] && t.seats[1].hands.length >= 1, 'seat still there until the next betting opens');
+    t.startBetting(); ok(t.seats[1] === null && t.unseated.dealer && t.unseated.ids.includes('b'), 'freed when the round is over');
+  } else ok(true, 'round ended at once');
+}
 { // baccarat
   const t = new BacTable(); t.join('a', 'Ann'); t.join('b', 'Bob');
   const sb = t.players.b.seat, chipsB = t.players.b.chips;

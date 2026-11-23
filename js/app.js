@@ -702,6 +702,7 @@ function runAction(id, msg, onError) {
       case 'sit': t.sit(id, Number(msg.seat), !!msg.add); break;
       case 'sit-out': t.sitOut(id, msg.seat, !!msg.on); break;
       case 'leave-seat': t.leaveSeat(id, msg.seat); break;
+      case 'dealer-unseat': t.dealerUnseat(id, Number(msg.seat)); break;
       case 'stand-up': t.standUp(id, Number.isInteger(msg.seat) ? msg.seat : undefined); break;
       case 'bet': t.setBet(id, msg); break;
       case 'insurance': t.insurance(id, !!msg.take, Number.isInteger(msg.seat) ? msg.seat : undefined); break;
@@ -819,12 +820,27 @@ const moveCount = (msg, id) => (t) => (msg.t === 'action' ? (id && !t.allowedAct
 // What went wrong is not named on screen: everyone sees "Network security breached" and the game pauses.
 function keyAlarm(text) {
   console.warn('[fair] ' + text);
+  S.keyChecks = []; // reported once: a Resume by the host starts clean
   const F = (S.fair ||= { mine: {}, cur: {}, checks: {} });
   const first = !F.alert;
   F.alert = 'Network security breached.';
   try { send({ t: 'breach' }); } catch {}
   if (first) { try { send({ t: 'chat', text: '⚠️ Network security breached. The game is paused.' }); } catch {} }
   render();
+}
+// A check is settled by the first state that arrives after its due time: cards dealt (fine), a new shoe or host
+// (nothing to compare), or still not dealt (the alarm). S.stateAt is when the last state arrived.
+function checkKeys() {
+  const list = S.keyChecks || [];
+  if (!list.length) return;
+  if (S.role !== 'player') { S.keyChecks = []; return; }
+  const now = S.state?.fair, cards = Number(now?.cards) || 0;
+  S.keyChecks = list.filter((c) => {
+    if (!now || now.current?.n !== c.shoe || cards >= c.last) return false; // dealt, or a new shoe: done
+    if (Date.now() < c.due || !(S.stateAt > c.due)) return true; // not due yet, or no fresh word from the table yet: wait
+    keyAlarm(`The host's browser opened ${c.last - cards} card key(s) without dealing those cards.`);
+    return false;
+  });
 }
 function serveKeys(msg) {
   const from = Number(msg.from), count = Number(msg.count), st = S.state;
@@ -845,13 +861,11 @@ function serveKeys(msg) {
   }
   const last = from + count - 1;
   S.keyServed = Math.max(S.keyServed || 0, last);
-  // The cards these keys open have to be dealt now, every one of them.
-  const shoe = st?.fair?.current?.n;
-  setTimeout(() => {
-    const now = S.state?.fair;
-    if (!now || S.role !== 'player' || now.current?.n !== shoe) return; // a new shoe or a new host: nothing to compare
-    if ((Number(now.cards) || 0) < last) keyAlarm(`The host's browser opened ${last - (Number(now.cards) || 0)} card key(s) without dealing those cards.`);
-  }, 5000);
+  // The cards these keys open have to be dealt now, every one of them. The check is made against a state the
+  // table sent after the 5 seconds are up, never against an old one: a phone whose link dropped for a moment, or a
+  // second tab that the table stopped talking to, simply has not heard about those cards yet.
+  (S.keyChecks ||= []).push({ last, shoe: st?.fair?.current?.n, due: Date.now() + 5000 });
+  setTimeout(() => checkKeys(), 5100);
   return Array.from({ length: count }, (_, i) => myKey(from + i));
 }
 // A secret kept in this browser tab, and the key for card number k made from it.
@@ -1133,7 +1147,7 @@ function wireGuestConn(conn) {
   conn.on('data', (msg) => {
     S.lastSeen = Date.now();
     if (msg.t === 'ping') { try { conn.send({ t: 'pong' }); } catch {} return; }
-    if (msg.t === 'state') { setState(msg.state); render(); setTimerFromState(msg.state); }
+    if (msg.t === 'state') { S.stateAt = Date.now(); setState(msg.state); render(); setTimerFromState(msg.state); checkKeys(); }
     else if (msg.t === 'error') { toast(msg.msg); if (msg.bet) dropPend(); }
     else if (msg.t === 'hist') { S.guestHist = Array.isArray(msg.rounds) ? msg.rounds : []; S.guestHistTotal = msg.total || S.guestHist.length; drawHistPanel(true); if ($('#modal')?.open && $('#hist-list')) showHistory(); }
     else if (msg.t === 'snap') { S.snap = String(msg.snap || '').slice(0, 400000); if (Number.isInteger(msg.gen) && msg.gen >= 0 && msg.gen < 100000) S.gen = msg.gen; }
@@ -1854,7 +1868,7 @@ function render(note) {
   runDealQueue();
   animateChanges(prev, st);
   // Freed from a seat for not betting in the round that was just dealt (game.js deal).
-  if (st.unseated && st.unseated.round !== S.unseatSeen) { S.unseatSeen = st.unseated.round; if (st.unseated.ids?.includes(S.myId) && S.prevView) toast('You were unseated for not betting. Sit again any time.'); }
+  if (st.unseated && st.unseated.round !== S.unseatSeen) { S.unseatSeen = st.unseated.round; if (st.unseated.ids?.includes(S.myId) && S.prevView) toast(st.unseated.dealer ? 'The dealer unseated you. Sit again any time.' : 'You were unseated for not betting. Sit again any time.'); }
   S.prevView = { phase: st.phase, round: st.round, ins: Object.fromEntries(st.seats.filter(Boolean).map((s) => [s.playerId, s.insurance || 0])), bets: Object.fromEntries(st.seats.filter(Boolean).map((s) => [s.playerId, betTotal(s.bet)])) };
 }
 
@@ -2506,7 +2520,7 @@ function seatHTML(st, s, i, focus, spot) {
   return `<div class="seat ${cls} ${many ? 'many' : ''} ${hot} ${isMe ? 'me' : ''} ${turn ? 'turn' : ''} ${inHand ? 'inhand' : ''} ${s.out ? 'out' : ''} ${s.connected ? '' : 'away'}" id="seat-${i}" ${place} ${mini || many ? 'title="Tap to see this seat large"' : ''}>
     ${hands}
     ${bets}
-    <div class="who" ${isMe ? '' : `data-throw-at="${s.playerId}" title="Tap to throw something at ${esc(s.name)}"`}><span class="name"><b class="sn" title="Seat ${i + 1}">${i + 1}</b>${s.streak >= 3 ? `<span class="fire">🔥</span>${s.streak} ` : ''}${s.playerId === st.hostId ? '♛ ' : ''}${esc(s.name)}${isMe ? ' (you)' : ''}${s.connected ? '' : ' (away)'}</span><span class="chips">${money(s.chips)}${net}</span>${ready}${isMe && st.banker?.id !== S.myId ? `<button class="seat-out-tag ${s.leaving ? 'on' : ''} ${Number(spot.x) > 60 && !spot.phone ? 'tl' : ''}" data-act="leave-seat" data-seat="${i}" title="${s.leaving ? 'Tap to stay in this seat' : 'Leave this seat. A hand in play is still finished first.'}">${s.leaving ? 'Leaving' : 'Sit out'}</button>` : ''}</div>
+    <div class="who" ${isMe ? '' : `data-throw-at="${s.playerId}" title="Tap to throw something at ${esc(s.name)}"`}><span class="name"><b class="sn" title="Seat ${i + 1}">${i + 1}</b>${s.streak >= 3 ? `<span class="fire">🔥</span>${s.streak} ` : ''}${s.playerId === st.hostId ? '♛ ' : ''}${esc(s.name)}${isMe ? ' (you)' : ''}${s.connected ? '' : ' (away)'}</span><span class="chips">${money(s.chips)}${net}</span>${ready}${isMe && st.banker?.id !== S.myId ? `<button class="seat-out-tag ${s.leaving ? 'on' : ''} ${Number(spot.x) > 60 && !spot.phone ? 'tl' : ''}" data-act="leave-seat" data-seat="${i}" title="${s.leaving ? 'Tap to stay in this seat' : 'Leave this seat. A hand in play is still finished first.'}">${s.leaving ? 'Leaving' : 'Sit out'}</button>` : ''}${!isMe && s.playerId !== st.banker?.id && (st.banker ? st.banker.id === S.myId : st.hostId === S.myId) ? `<button class="seat-out-tag ${s.leaving ? 'on' : ''} ${Number(spot.x) > 60 && !spot.phone ? 'tl' : ''}" data-act="dealer-unseat" data-seat="${i}" title="${s.leaving ? 'Tap to let them stay' : 'Take this player out of the seat. A hand in play is finished first.'}">${s.leaving ? 'Unseating' : 'Unseat'}</button>` : ''}</div>
   </div>`;
 }
 
@@ -3055,8 +3069,8 @@ function renderSettings(st) {
       ${canShuffle ? `<button class="btn full" data-act="h-shuffle">${locked ? 'Shuffle before next hand' : 'Shuffle now'}</button>` : ''}
     </div>`, true)}
     ${fold('set-seats', '🪑 Seats', `<div class="settings-grid">
-      <label class="full">Seats at the table<input id="set-seats" type="number" min="1" step="1" inputmode="numeric" value="${s.seats}" ${S.role === 'host' ? dis : 'disabled'} /></label>
-      <div class="hint full">Most casino tables have 7. Only the host can change this, with no vote. Fewer seats than players: seats are taken from whoever holds the most first, then from the highest seat numbers. It happens between rounds.</div>
+      <label class="full">Seats at the table<input id="set-seats" type="number" min="1" step="1" inputmode="numeric" value="${s.seats}" ${dis} /></label>
+      <div class="hint full">Most casino tables have 7. Anyone at the table can change this, with no vote. Fewer seats than players: seats are taken from whoever holds the most first, then from the highest seat numbers. It happens between rounds.</div>
     </div>`, true)}
     ${fold('set-bets', '💵 Chips and bet limits', `<div class="settings-grid">
       <label>Starting chips<input id="set-start" type="number" min="1" value="${s.startChips}" ${dis} /></label>
@@ -3119,8 +3133,8 @@ function hostPropose(by, patch) {
   if (clean.sideBets !== undefined) clean.sideBets = (Array.isArray(clean.sideBets) ? clean.sideBets : []).filter((k) => SIDE_BETS[k]).slice(0, 20);
   const changes = settingChanges(t.settings, clean);
   if (!changes.length) return 'none';
-  // The number of seats is the host's alone, with no vote. It still waits for the round to end.
-  if (changes.includes('seats') && by !== S.myId) throw new Error('Only the host can change the number of seats.');
+  // Anyone at the table sets the number of seats, with no vote. It still waits for the round to end.
+  if (changes.includes('seats') && !t.players[by]) throw new Error('Join the table first.');
   if (changes.includes('seats')) {
     t.addLog(`${t.players[by]?.name || 'A player'} set the table to ${clean.seats} seat${clean.seats > 1 ? 's' : ''}${t.inRound() ? ' (from the next round)' : ''}.`);
     t.applySettings({ seats: clean.seats });
@@ -3321,6 +3335,7 @@ function runAct(el) {
     case 'stand-up-all': send({ t: 'stand-up' }); break;
     case 'sit-out': send({ t: 'sit-out', seat: Number(el.dataset.seat), on: el.dataset.on === '1' }); break;
     case 'leave-seat': send({ t: 'leave-seat', seat: Number(el.dataset.seat) }); break;
+    case 'dealer-unseat': send({ t: 'dealer-unseat', seat: Number(el.dataset.seat) }); break;
     case 'pick-seat': pickSeat(Number(el.dataset.seat)); break;
     case 'ask-out': send({ t: 'ask-out', to: el.dataset.id }); break;
     case 'auto': S.auto = { speed: 'normal', ...(S.auto || {}), on: !S.auto?.on, key: null }; clearTimeout(S.auto.timer); render(); autoStep(); break;
@@ -3868,7 +3883,7 @@ function openThrow(target, anchor) {
 function closeThrow() { $('#throw-pop')?.remove(); }
 document.addEventListener('click', (e) => {
   const who = e.target.closest('[data-throw-at]');
-  if (who) { e.stopPropagation(); if (who.dataset.throwAt !== S.myId) openThrow(who.dataset.throwAt, who); return; }
+  if (who && !e.target.closest('[data-act]')) { e.stopPropagation(); if (who.dataset.throwAt !== S.myId) openThrow(who.dataset.throwAt, who); return; }
   if (!e.target.closest('#throw-pop') && !S.aim) closeThrow();
 }, true);
 
