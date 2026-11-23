@@ -121,9 +121,11 @@ import { bestMove } from '../js/strategy.js';
   t.proposeSettings('h', { decks: 1 }, 'x'); t.castVote('a', true); assert.equal(t.settings.decks, 1000);
   t.castVote('b', true); assert.equal(t.settings.decks, 1);
   t.proposeSettings('h', { decks: 8 }, 'x'); t.castVote('a', false); assert.equal(t.settings.decks, 1);
-  // count matches cards drawn
-  const t2 = Object.assign(new G.Table({ decks: 1 }), { frozen: true }); let rc = 0; for (let i = 0; i < 20; i++) rc += G.hiLo(t2.draw()); assert.equal(t2.runCount, rc);
-  console.log('settings vote and count tests passed');
+  // no card counting anywhere: no count helper, no running count, nothing about a count in what players see
+  assert.equal(G.hiLo, undefined);
+  const t2 = Object.assign(new G.Table({ decks: 1 }), { frozen: true }); for (let i = 0; i < 20; i++) t2.draw();
+  assert.equal(t2.runCount, undefined); assert.ok(!('count' in t2.publicState('x')) && !('countTraining' in t2.settings));
+  console.log('settings vote and no count tests passed');
 }
 {
   const t = new G.Table(); t.join('a', 'A'); t.sit('a', 0); t.setBet('a', { main: 50, sides: {} });
@@ -565,7 +567,7 @@ console.log('ok two seats');
     const phase = t.phase;
     if (!t.inRound()) { betweenRounds++; continue; }
     // what the next host holds: the table without the shoe and without the face down card
-    const { shoe, shoeSize, fair, hist, evts, created, runCount, dealer, turn, pendingSettings, ...lite } = JSON.parse(JSON.stringify(t.toJSON()));
+    const { shoe, shoeSize, fair, hist, evts, created, dealer, turn, pendingSettings, ...lite } = JSON.parse(JSON.stringify(t.toJSON()));
     const seen = { revealed: !!dealer.revealed, cards: dealer.revealed ? dealer.cards : dealer.cards.slice(0, 1) };
     const m = G.Table.fromJSON(lite);
     for (const p of Object.values(m.players)) { p.connected = true; p.gone = false; }

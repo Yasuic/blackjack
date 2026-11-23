@@ -1,8 +1,8 @@
 // Shared by the poker and baccarat pages: small helpers, the playing card picture, the game switch at the
 // top left, and the link between the host's browser and the players' browsers.
-import { office, openTable } from './shell.js?v=20261122zu';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122zu';
-import { cleanBox, cleanPiece } from './vault.js?v=20261122zu';
+import { office, openTable } from './shell.js?v=20261122zv';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122zv';
+import { cleanBox, cleanPiece } from './vault.js?v=20261122zv';
 export const params = new URLSearchParams(location.search);
 export const $ = (sel, el = document) => el.querySelector(sel);
 export function safeGet(k) { try { return localStorage.getItem(k); } catch { return null; } }

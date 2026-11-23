@@ -16,7 +16,6 @@ export const DEFAULT_SETTINGS = {
   maxBet: 75,
   maxSideBet: 10,
   dealerHitsSoft17: false,
-  countTraining: false,  // the host can switch the card count display on for the whole table
   blackjackPays: 1.5,    // 3:2
   allowSurrender: true,
   autoDeal: true,        // deal as soon as every seated player is ready
@@ -98,15 +97,12 @@ export const SIDE_BETS = {
 };
 export const SIDE_KEYS = Object.keys(SIDE_BETS);
 // A new table offers every side bet (the host can untick any of them).
-DEFAULT_SETTINGS.sideBets = SIDE_KEYS.filter((k) => k !== 'friendBust');
+DEFAULT_SETTINGS.sideBets = [...SIDE_KEYS];
 
 // ---------- Card helpers ----------
 export const cardValue = (c) => (c.r === 'A' ? 1 : ['J', 'Q', 'K'].includes(c.r) ? 10 : Number(c.r));
 export const rankIndex = (c) => RANKS.indexOf(c.r) + 1; // A=1 .. K=13
 export const isRed = (c) => c.s === '♥' || c.s === '♦';
-
-// Hi-Lo card counting value: 2-6 are +1, 7-9 are 0, tens and aces are -1.
-export const hiLo = (c) => { const v = cardValue(c); return c.r === 'A' || v === 10 ? -1 : v <= 6 ? 1 : 0; };
 
 export function handTotal(cards) {
   let total = 0;
@@ -118,8 +114,6 @@ export function handTotal(cards) {
   const soft = aces > 0 && total + 10 <= 21;
   return { total: soft ? total + 10 : total, soft };
 }
-
-export const PVP_BUST_PAYS = 5;
 
 export function isBlackjack(hand) {
   return hand.cards.length === 2 && !hand.fromSplit && handTotal(hand.cards).total === 21;
@@ -359,7 +353,6 @@ export class Table {
     f.next = newFairNext();
     this.shoe = fairShoe(decks, nx.seed, nx.seeds);
     this.shoeSize = this.shoe.length;
-    this.runCount = 0;
   }
   setClientSeed(clientId, seed) {
     if (!this.players[clientId] || !this.fair) return;
@@ -410,7 +403,6 @@ export class Table {
     }
     const c = this.pendingCard || this.pick();
     this.pendingCard = null;
-    this.runCount = (this.runCount || 0) + hiLo(c);
     return c;
   }
   // A card key a step could not use (the move it was asked for did not happen, for example a hit after the turn
@@ -459,7 +451,6 @@ export class Table {
     if (s.shuffleMode !== 'rounds') s.shuffleMode = 'penetration';
     s.shuffle8 = s.shuffle8 !== false;
     for (const k of ['dealerHitsSoft17', 'allowSurrender', 'autoDeal']) s[k] = !!s[k];
-    s.countTraining = false; // no card count is ever shown at this table
     s.seats = seatCount(s.seats, this.seats.length);
     if (s.seats < this.seats.length && this.inRound() && this.seats.slice(s.seats).some(Boolean)) throw new Error('Seats can be taken away when this round ends.');
     this.settings = s;
@@ -704,7 +695,7 @@ export class Table {
     this.voteSeq = (this.voteSeq || 0) + 1;
     // A change of the seat count alone passes when all but one say yes: one player away from the screen
     // (often the dealer) does not hold it up.
-    const seatsOnly = Object.keys(patch || {}).every((k) => k === 'seats' || k === 'countTraining') && 'seats' in (patch || {});
+    const seatsOnly = Object.keys(patch || {}).every((k) => k === 'seats') && 'seats' in (patch || {});
     const need = Math.max(0, voters.length - (seatsOnly ? 1 : 0));
     if (!need) { this.applySettings(patch); return null; }
     this.vote = { id: this.voteSeq, kind: 'settings', candidate: hostId, patch, summary, voters, votes: {}, need };
@@ -1014,16 +1005,10 @@ export class Table {
     const main = Math.max(0, Math.round(Number(bet.main) || 0));
     const sides = {};
     const on = s.sideBets || SIDE_KEYS;
-    let target = null;
     for (const k of SIDE_KEYS) {
       const v = Math.max(0, Math.round(Number(bet.sides?.[k]) || 0));
       if (v > 0) {
         if (!on.includes(k)) throw new Error(`${SIDE_BETS[k].name} is not offered at this table.`);
-        if (k === 'friendBust') {
-          target = Number(bet.target);
-          const ts = this.seats[target];
-          if (!ts || ts.playerId === clientId) throw new Error('Pick a friend who is sitting at the table.');
-        }
         if (main === 0) throw new Error('Place a main bet before side bets.');
         if (v > s.maxSideBet) throw new Error(`Side bets are at most ${s.maxSideBet}.`);
         sides[k] = v;
@@ -1043,7 +1028,7 @@ export class Table {
     }
     const total = main + sumValues(sides);
     if (total + this.otherStakes(clientId, idx) > p.chips) throw new Error('Not enough chips.');
-    seat.bet = target === null ? { main, sides, big } : { main, sides, target, big };
+    seat.bet = { main, sides, big };
     if (main || Object.values(sides).some(Boolean)) this.rabbit = false; // a new round has begun: the look at the next card is over
     seat.ready = main > 0 && !!bet.ready;
     // The number the player's browser gave this bet. It comes back in their state, so the browser
@@ -1053,7 +1038,7 @@ export class Table {
   }
 
   // The player's bet from the last round they played, cut down to what fits now: their chips, the
-  // table limits, the side bets still offered and a PvP friend who is still sitting. Null if there is none.
+  // table limits and the side bets still offered. Null if there is none.
   // Nothing is placed here; the player presses Rebet and it goes through setBet like any other bet.
   otherStakes(clientId, idx) {
     if (this.phase !== 'betting') return 0; // bets left on the felt from a finished round are cleared before the next one
@@ -1072,19 +1057,13 @@ export class Table {
     left -= main;
     const on = s.sideBets || SIDE_KEYS;
     const sides = {};
-    let target = null;
     for (const k of SIDE_KEYS) {
       const v = Math.min(last.sides?.[k] || 0, s.maxSideBet, left);
       if (!(v > 0) || !on.includes(k)) continue;
-      if (k === 'friendBust') {
-        const ti = this.seats.findIndex((x) => x && x.playerId === last.targetId && x.playerId !== clientId);
-        if (ti < 0) continue;
-        target = ti;
-      }
       sides[k] = v;
       left -= v;
     }
-    return target === null ? { main, sides } : { main, sides, target };
+    return { main, sides };
   }
 
   startBetting() {
@@ -1245,7 +1224,7 @@ export class Table {
       // A bet under the minimum when betting closes stays on the spot but is not dealt.
       if (seat.bet.main >= this.settings.minBet && stake <= p.chips && p.connected !== false) {
         p.chips -= stake;
-        p.lastBet = { main: seat.bet.main, sides: { ...seat.bet.sides }, targetId: this.seats[seat.bet.target]?.playerId ?? null };
+        p.lastBet = { main: seat.bet.main, sides: { ...seat.bet.sides } };
         if (p.lastRound !== this.round) { p.lastRound = this.round; p.lastBets = {}; }
         p.lastBets[i] = p.lastBet;
         // A big bet used up one of this player's chances. Reset their count when the window has rolled over.
@@ -1550,27 +1529,6 @@ export class Table {
       if (!seat || !seat.hands.length) continue;
       const p = this.players[seat.playerId];
       if (seat.bet.sides.bustIt) this.settleSide(seat, 'bustIt', evalBustIt(this.dealer.cards));
-      if (seat.bet.sides.friendBust) {
-        const ts = this.seats[seat.bet.target];
-        const fh = ts && ts.hands[0];
-        const name = ts ? this.players[ts.playerId]?.name || 'Your friend' : 'Your friend';
-        if (!fh || !fh.cards.length) {
-          // The friend was not dealt in: the bet comes back.
-          const stake = seat.bet.sides.friendBust;
-          p.chips += stake; seat.returned += stake;
-          seat.sideResults.push({ key: 'friendBust', name: 'PvP: friend busts', label: `${name} was not dealt in`, win: false, push: true, stake, pay: stake });
-        } else {
-          // Only one fifth of the friend's own bet counts, so two players cannot make chips by one of
-          // them busting on purpose. The rest of the stake goes back.
-          const stake = seat.bet.sides.friendBust;
-          const counts = Math.min(stake, Math.floor(ts.bet.main / PVP_BUST_PAYS));
-          const back = stake - counts;
-          if (back > 0) { p.chips += back; seat.returned += back; }
-          const bust = handTotal(fh.cards).total > 21;
-          if (counts > 0) this.settleSide(seat, 'friendBust', bust ? { win: true, label: `${name} busted`, mult: PVP_BUST_PAYS } : { win: false, label: `${name} did not bust` }, counts);
-          else seat.sideResults.push({ key: 'friendBust', name: 'PvP: friend busts', label: `${name} bet too little for this to count`, win: false, push: true, stake, pay: back });
-        }
-      }
       for (const h of seat.hands) {
         const t = handTotal(h.cards).total;
         let pay = 0;
@@ -1670,7 +1628,6 @@ export class Table {
   // ---- What each player is allowed to see ----
   publicState(forClientId) {
     const hide = !this.dealer.revealed && this.dealer.cards.length >= 1 && this.dealer.cards.length <= 2;
-    const hole = this.dealer.cards[1];
     return {
       settings: this.settings,
       phase: this.phase,
@@ -1723,10 +1680,6 @@ export class Table {
       hostId: this.hostId || null,
       bankerLeaving: !!this.bankerLeaving,
       big: this.settings.bigBet ? { limit: this.settings.bigBet.limit, per: this.settings.bigBet.per, hands: this.settings.bigBet.hands, handsLeft: this.bigHandsLeft(), yourLeft: this.bigLeft(forClientId) } : null,
-      count: !this.settings.countTraining ? null : {
-        running: (this.runCount || 0) - (hide && hole ? hiLo(hole) : 0),
-        decksLeft: (this.shoe.length + (hide && hole ? 1 : 0)) / 52,
-      },
       ledger: Object.values(this.players).map((p) => { const h = this.inRound() && this.ledgerHold?.[p.id]; return { id: p.id, name: p.name, totalIn: h ? h.totalIn : p.totalIn ?? this.settings.startChips, chips: h ? h.chips : p.chips, houseNet: h ? h.houseNet : p.houseNet || 0, connected: p.connected, kicked: !!p.kicked }; }),
       buyIns: (this.buyIns || []).filter((b) => b.playerId === forClientId).map((b) => ({ id: b.id, amount: b.amount })),
       halted: !!this.halted,
@@ -1747,8 +1700,8 @@ export class Table {
 
   // Save and restore so the host can refresh the page without losing the table.
   toJSON() {
-    const { settings, seats, players, phase, dealer, turn, round, roundsSinceShuffle, log, shoe, shoeSize, banker, bankerNet, pendingBanker, buyIns, runCount, hostId, pendingSettings, frozen, fair, hist, evts, created, frozenSnap, shuffleNext, bankerLeaving, halted, ledgerHold } = this;
-    return { settings, seats, players, phase, dealer, turn, round, roundsSinceShuffle, log, shoe: packShoe(shoe), shoeSize, banker, bankerNet, pendingBanker, buyIns, runCount, hostId, pendingSettings, frozen, fair, hist, evts, created, frozenSnap, shuffleNext, bankerLeaving, halted, ledgerHold };
+    const { settings, seats, players, phase, dealer, turn, round, roundsSinceShuffle, log, shoe, shoeSize, banker, bankerNet, pendingBanker, buyIns, hostId, pendingSettings, frozen, fair, hist, evts, created, frozenSnap, shuffleNext, bankerLeaving, halted, ledgerHold } = this;
+    return { settings, seats, players, phase, dealer, turn, round, roundsSinceShuffle, log, shoe: packShoe(shoe), shoeSize, banker, bankerNet, pendingBanker, buyIns, hostId, pendingSettings, frozen, fair, hist, evts, created, frozenSnap, shuffleNext, bankerLeaving, halted, ledgerHold };
   }
   static fromJSON(obj) {
     const t = new Table(obj.settings);
@@ -1758,10 +1711,10 @@ export class Table {
     // Tables saved before the seat count was a setting keep the seats they had.
     if (!Array.isArray(t.seats) || !t.seats.length) t.seats = Array(seatCount(obj.settings?.seats)).fill(null);
     t.settings = { ...DEFAULT_SETTINGS, ...obj.settings, seats: t.seats.length };
-    // The bet between players was taken out of the game: a saved table no longer offers it.
-    t.settings.countTraining = false;
+    // Side bets and settings that were taken out of the game: a table saved before keeps none of them.
+    delete t.settings.countTraining;
     if (Array.isArray(t.settings.sideBets)) t.settings.sideBets = t.settings.sideBets.filter((k) => SIDE_BETS[k]);
-    if (t.phase === 'betting' || t.phase === 'settled') for (const seat of t.seats) if (seat?.bet?.sides?.friendBust) { delete seat.bet.sides.friendBust; delete seat.bet.target; }
+    if (t.phase === 'betting' || t.phase === 'settled') for (const seat of t.seats) if (seat?.bet?.sides) { for (const k of Object.keys(seat.bet.sides)) if (!SIDE_BETS[k]) delete seat.bet.sides[k]; delete seat.bet.target; }
     Object.values(t.players).forEach((p) => (p.connected = false));
     // Nobody is here straight after a reload. They get the usual short while to come back.
     Object.values(t.players).forEach((p) => (p.gone = false));

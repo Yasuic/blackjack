@@ -408,15 +408,6 @@ button.sb:hover { border-color: var(--gold); background: rgba(232,196,106,.25); 
 .vote-list { text-align: left; margin: 6px 0 10px; padding-left: 18px; color: var(--text); font-size: 14px; }
 
 /* Count training */
-.count-badge { position: absolute !important; top: 22px; left: 26px; z-index: 3 !important; display: flex; gap: 12px; background: rgba(0,0,0,.55); border: 1px solid rgba(232,196,106,.35); border-radius: 12px; padding: 8px 12px; flex-wrap: wrap; max-width: 300px; }
-.count-badge > div { display: grid; text-align: center; }
-.count-badge small { font-size: 9px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); font-weight: 700; }
-.count-badge b { font-size: 18px; color: var(--gold); font-variant-numeric: tabular-nums; }
-.count-badge .hint { flex-basis: 100%; font-size: 10px; }
-@media (max-width: 700px) { .count-badge { top: 8px; left: 8px; gap: 8px; padding: 4px 8px; } .count-badge b { font-size: 13px; } }
-.coach { position: fixed; left: 50%; top: 70px; transform: translateX(-50%); z-index: 72; padding: 10px 18px; border-radius: 12px; font-weight: 700; font-size: 15px; max-width: calc(100vw - 24px); text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,.5); pointer-events: none; }
-.coach.good { background: #134a2e; border: 1px solid #4fd18a; color: #c9ffe1; }
-.coach.bad { background: #4a1616; border: 1px solid #ff7b7b; color: #ffd6d6; }
 
 /* Strategy chart */
 .chart-pop { position: fixed; inset: 0; z-index: 75; background: rgba(0,0,0,.6); display: grid; place-items: center; padding: 12px; overflow: auto; }
@@ -595,7 +586,6 @@ body.in-room .controls { display: none; }
 .felt { height: 820px; }
 .mid-band { top: 300px; }
 @media (max-width: 700px) { .felt { height: 560px; } .mid-band { top: 175px; } }
-.felt:has(.frozen-banner.on) .count-badge { top: 100px; }
 .table-stage { --spin: 0deg; }
 .table-stage .felt { transform: rotateX(var(--tilt)) rotateZ(var(--spin)); transform-origin: 50% 70%; }
 @media (max-width: 700px) { .table-stage .felt { transform: rotateX(calc(var(--tilt) * .7)) rotateZ(var(--spin)); } }
@@ -652,7 +642,6 @@ body.in-room .float-balance { display: block; }
 .float-throw { position: fixed; left: 14px; bottom: 150px; z-index: 40; background: rgba(12,15,20,.92); border: 1px solid rgba(232,196,106,.5); color: var(--text); border-radius: 12px; padding: 8px 12px; font: inherit; font-weight: 700; cursor: pointer; }
 .float-throw:hover { border-color: var(--gold); }
 .throw-pop.wide { width: 260px; }
-.friend-list { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-bottom: 8px; }
 .badbeat { position: fixed; left: 50%; top: 68%; transform: translateX(-50%); z-index: 60; background: rgba(40,20,0,.94); border: 2px solid #c98a2b; border-radius: 14px; padding: 10px 16px; text-align: center; box-shadow: 0 14px 40px rgba(0,0,0,.6); animation: pop .2s ease-out; }
 .badbeat b { color: #ffc56b; margin-right: 6px; }
 .badbeat .btn { margin-left: 8px; }
@@ -708,14 +697,6 @@ body.aiming .seat[id^="seat-"]:not(.empty), body.aiming #dealer-zone { cursor: c
 body.room3d.in-room .tray { position: fixed; left: 50%; right: auto; top: auto; bottom: 10px; transform: translateX(-50%); z-index: 30; margin: 0; }
 
 /* PvP bet: a bet about another player, kept apart from the ring of bets on your own cards. */
-.pvp-tags { position: absolute; left: 50%; top: 100%; transform: translateX(-50%); display: grid; gap: 2px; z-index: 3; pointer-events: none; width: max-content; max-width: 220px; }
-.pvp-tag { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 999px; background: rgba(120,30,40,.85); border: 1px solid rgba(255,140,150,.6); color: #ffd9dc; white-space: nowrap; }
-.pvp-tag.mine { background: rgba(60,40,120,.85); border-color: rgba(180,160,255,.6); color: #e6dcff; }
-.pvp-ctl { display: inline-flex; gap: 4px; }
-.pvp-btn { border-color: rgba(255,140,150,.6); color: #ffd9dc; background: rgba(120,30,40,.35); font-size: 13px; }
-.pvp-x { padding-left: 10px; padding-right: 10px; }
-.pvp-chip { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 999px; background: rgba(120,30,40,.85); color: #ffd9dc; vertical-align: middle; }
-.g-item.pvp { border-top: 1px dashed rgba(255,140,150,.5); margin-top: 8px; padding-top: 8px; }
 /* ===== Interaction and round flow =====
    Taps, the settle screen, Rebet, table limits, the timeout warning, the keys list and strategy hints.
    Everything for those features lives in this one block. */
@@ -814,7 +795,6 @@ body.in-room .table-stage::after { display: none; }
   background: linear-gradient(180deg, rgba(255,255,255,.14), rgba(255,255,255,.04)); border: 2px solid rgba(255,255,255,.28); box-shadow: 0 5px 12px rgba(0,0,0,.45), inset 0 -9px 0 rgba(176,48,48,.75), inset 0 -11px 0 rgba(255,255,255,.5); }
 .felt.flip > .chip-tray { top: auto; bottom: 6px; }
 .felt.flip > .discard-box { top: auto; bottom: 22px; }
-.felt > .count-badge { left: 112px; }
 
 /* ---------- The line between the dealer and your seat: status, the deal button, short messages ---------- */
 .felt > .mid-band { left: 0; right: 0; top: var(--lane-y, 146px); gap: 6px; }
@@ -862,7 +842,6 @@ body.in-room .table-stage::after { display: none; }
 .seat.empty .seat-no, .seat.empty > .btn { margin-top: 10px; font-size: 14px; }
 .seat.empty .seat-no { color: rgba(255,255,255,.55); }
 .seat .ins-tag { bottom: auto; top: -8px; }
-.seat .pvp-tags { top: auto; bottom: -12px; }
 /* Side bet ring: larger writing. On other players' rings an empty slice shows only its picture. */
 .ring-name { font-size: 9.5px; }
 .ring-name.small { font-size: 7.5px; }
@@ -1013,7 +992,6 @@ body.aiming .seat.me[id^="seat-"] { outline: none; cursor: default; }
   body.in-room .table-stage .felt { border-radius: 16px 16px 38% 38% / 16px 16px 11% 11%; }
   body.in-room .table-stage .felt::before { inset: 6px; border-radius: 12px 12px 38% 38% / 12px 12px 11% 11%; }
   .felt > .arc-svg, .felt > .chip-tray, .felt > .discard-box { display: none; }
-  .felt > .count-badge { left: 8px; }
   body.in-room .table-stage .felt { box-shadow: 0 0 0 2px #7a5230, 0 3px 0 7px #2b170c, 0 12px 30px rgba(0,0,0,.7), inset 0 0 60px rgba(0,0,0,.45); }
   .felt > .dealer { top: 6px; max-width: calc(100% - 128px); gap: 3px; }
   .dealer-name { font-size: 12.5px; height: 20px; letter-spacing: .5px; gap: 5px; display: block; text-overflow: ellipsis; text-align: center; line-height: 20px; }
@@ -1031,7 +1009,6 @@ body.aiming .seat.me[id^="seat-"] { outline: none; cursor: default; }
   .mid-band .frozen-banner.on { left: 6px; top: calc(30px - var(--lane-y)); max-width: none; font-size: 0; padding: 2px 7px; border-width: 1px; border-radius: 8px; }
   .mid-band .frozen-banner.on b { font-size: 9.5px; letter-spacing: 0; }
   .mid-band .frozen-banner.on .btn { display: none; }
-  .felt:has(.frozen-banner.on) .count-badge { top: 26px; }
   .result-pop { padding: 4px 16px; column-gap: 8px; }
   .result-pop small { font-size: 11px; letter-spacing: 2px; }
   .result-pop b { font-size: 24px; }
@@ -1062,7 +1039,6 @@ body.aiming .seat.me[id^="seat-"] { outline: none; cursor: default; }
   .tray .actions { gap: 5px; }
   .tray .actions .btn { min-width: 0; max-width: 100%; height: 34px; padding: 0 9px; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .tray .actions .btn.big { height: 46px; padding: 0 16px; font-size: 15px; }
-  .tray .actions .pvp-ctl { order: 1; max-width: 100%; min-width: 0; }
   .tray .actions [data-act="clear"] { order: 2; }
   .tray .actions [data-act="stand-up"] { order: 3; }
   .tray .actions .peek-btn { order: 4; }
@@ -1305,7 +1281,6 @@ body.room3d .felt .spot-amt { pointer-events: none; }
 .felt.in3d .seat .who, .felt.in3d .hand .meta, .felt.in3d .hands.totals-only .hand, .felt.in3d .mini-bet, .felt.in3d .dealer-name, .felt.in3d .dealer-total { transform: rotate(calc(-1 * var(--r, 0deg))) var(--bb, none); transform-origin: 50% 100%; }
 .felt.in3d .spot-amt { transform: translateX(-50%) rotate(calc(-1 * var(--r, 0deg))) var(--bb, none); transform-origin: 50% 100%; }
 /* A PvP bet tag floats above the name it belongs to. */
-.felt.in3d .seat .pvp-tags { transform: translateX(-50%) rotate(calc(-1 * var(--r, 0deg))) var(--bb, none) translateY(-52px); transform-origin: 50% 100%; }
 .felt.in3d { overflow: visible !important; backface-visibility: visible; -webkit-backface-visibility: visible; }
 /* A blended layer on the felt would press everything on it flat again, so the 3D felt goes without the grain. */
 .felt.in3d::after { display: none; }

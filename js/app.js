@@ -1,17 +1,17 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { outerLink } from './shell.js?v=20261122zu';
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe } from './game.js?v=20261122zu';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122zu';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122zu';
-import { tickSound, winSound } from './fx.js?v=20261122zu';
-import * as HX from './history.js?v=20261122zu';
-import { webglOK, initRoom } from './room3d.js?v=20261122zu';
-import { COPY_BTN, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261122zu';
-import { makeVault, makeOpener, cleanBox, cleanPiece } from './vault.js?v=20261122zu';
-import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122zu';
-import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122zu';
+import { outerLink } from './shell.js?v=20261122zv';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe } from './game.js?v=20261122zv';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122zv';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122zv';
+import { tickSound, winSound } from './fx.js?v=20261122zv';
+import * as HX from './history.js?v=20261122zv';
+import { webglOK, initRoom } from './room3d.js?v=20261122zv';
+import { COPY_BTN, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261122zv';
+import { makeVault, makeOpener, cleanBox, cleanPiece } from './vault.js?v=20261122zv';
+import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122zv';
+import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122zv';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -34,7 +34,6 @@ const S = {
   chip: null,
   sideChips: {},
   seen: new Set(),
-  train: { right: 0, total: 0 },
   open: new Set(),   // menu folders that are open
   undo: [],          // my bet before each chip, for Undo
   mainChips: [],     // chips I put on my main bet, in order
@@ -321,7 +320,7 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) saveH
 // that copy with a new shuffle, so nobody ever learns the order of the old shoe.
 function sendSnap() {
   const t = S.table;
-  const { shoe, shoeSize, fair, hist, evts, created, runCount, dealer, turn, pendingSettings, ...lite } = t.toJSON();
+  const { shoe, shoeSize, fair, hist, evts, created, dealer, turn, pendingSettings, ...lite } = t.toJSON();
   // What everyone can see of the dealer's hand goes along (never the face down card), so a round in play can carry on after a host move.
   lite.dealerSeen = { revealed: !!dealer?.revealed, cards: dealer?.revealed ? dealer.cards : (dealer?.cards || []).slice(0, 1) };
   lite.shoeLeft = shoe.length;
@@ -332,7 +331,7 @@ function sendSnap() {
   // While a move is being settled (S.hold) this browser does not have the hidden part yet, so nothing is locked.
   const holders = S.hold ? [] : order.filter((id) => t.seats.some((x) => x && x.playerId === id) && S.conns[id]?.open && !S.conns[id].relay);
   S.vault ||= makeVault();
-  const pack = S.hold ? { box: null, piece: () => null, changed: false } : S.vault.pack(holders, JSON.stringify({ shoe, shoeSize, fair, runCount, dealer, turn, pendingSettings, pendingCard: t.pendingCard || null }));
+  const pack = S.hold ? { box: null, piece: () => null, changed: false } : S.vault.pack(holders, JSON.stringify({ shoe, shoeSize, fair, dealer, turn, pendingSettings, pendingCard: t.pendingCard || null }));
   if (body === S.snapSent && !pack.changed) return;
   S.snapSent = body;
   S.snapPack = pack;
@@ -457,8 +456,8 @@ function maybeTakeOver(force = false) {
       let carried;
       if (hidden && typeof hidden.shoe === 'string') hidden.shoe = unpackShoe(hidden.shoe);
       if (hidden && Array.isArray(hidden.shoe)) {
-        const { shoe, shoeSize, fair, runCount, dealer, turn, pendingSettings, pendingCard } = hidden;
-        Object.assign(table, { shoe, shoeSize, fair, runCount, dealer, turn, pendingSettings });
+        const { shoe, shoeSize, fair, dealer, turn, pendingSettings, pendingCard } = hidden;
+        Object.assign(table, { shoe, shoeSize, fair, dealer, turn, pendingSettings });
         table.pendingCard = pendingCard || null;
         carried = table.inRound();
         table.addLog(`The host left. ${S.name} is the host now. The same shoe goes on, card for card.${carried ? ' The round in play goes on.' : ''}${stillDealer}`);
@@ -1269,7 +1268,6 @@ function placeBet(bet, ready = false) {
   const st = S.state;
   const b = { main: bet.main, sides: { ...bet.sides } };
   if (!b.main) b.sides = {};
-  if (b.sides.friendBust && bet.target != null) b.target = bet.target;
   const { me } = myInfo(st);
   const at = me.seat;
   const prev = st.seats[at]?.bet.main || 0; // what this seat held before this tap
@@ -1287,7 +1285,7 @@ function placeBet(bet, ready = false) {
       const add = b.main - prev;
       if (add > left) continue;
       left -= add;
-      copy.push({ t: 'bet', main: b.main, sides: { ...o.bet.sides }, target: o.bet.target, ready: false, seq: ++S.betSeq, seat: i, auto: !!S.auto?.on });
+      copy.push({ t: 'bet', main: b.main, sides: { ...o.bet.sides }, ready: false, seq: ++S.betSeq, seat: i, auto: !!S.auto?.on });
       if (S.role !== 'host') { o.bet = { ...o.bet, main: b.main }; (S.pendMore ||= {})[i] = { main: b.main, round: st.round, at: Date.now() }; } // shown at once; the table's answer follows
       // The copied chip flies to its own circle too, a little after the one that was tapped.
       const rack = $(`.chip-rack [data-v="${S.chip}"]`), to = $(`#spot-${i}`);
@@ -1296,7 +1294,7 @@ function placeBet(bet, ready = false) {
   }
   S.hold = true;
   try {
-    send({ t: 'bet', main: b.main, sides: b.sides, target: b.target, ready, seq: S.pend.seq, seat: at, auto: !!S.auto?.on, big: b.main > st.settings.maxBet });
+    send({ t: 'bet', main: b.main, sides: b.sides, ready, seq: S.pend.seq, seat: at, auto: !!S.auto?.on, big: b.main > st.settings.maxBet });
     for (const m of copy) send(m);
   } finally {
     // The host's own moves run one after another in a queue: draw once, after the last of them.
@@ -1349,7 +1347,7 @@ function doRebet() {
       const o = st.seats[i];
       if (o.out || o.ready || betTotal(o.bet)) continue;
       const r = st.rebets[i];
-      send({ t: 'bet', main: r.main, sides: { ...r.sides }, target: r.target, ready: false, seq: ++S.betSeq, seat: i, auto: !!S.auto?.on });
+      send({ t: 'bet', main: r.main, sides: { ...r.sides }, ready: false, seq: ++S.betSeq, seat: i, auto: !!S.auto?.on });
       if (S.role !== 'host') o.bet = { ...o.bet, main: r.main, sides: { ...r.sides } };
       flyChip($('.rebet-btn') || $('#float-balance'), $(`#spot-${i}`), r.main);
       n++;
@@ -1817,7 +1815,7 @@ function render(note) {
     S.room.setPeople(...roomPeople(st));
     S.room.setOthers(S.others, S.views);
     S.room.setChips(st.seats.map((seat, i) => { const pl = seat && st.players.find((x) => x.seat === i); return seat ? { seat: i, main: seat.bet?.main || 0, balance: pl ? Math.max(0, pl.chips - betTotal(seat.bet)) : 0, mine: seat.playerId === S.myId,
-        sides: Object.entries(seat.bet?.sides || {}).filter(([, v]) => v > 0).map(([k, v]) => [k === 'friendBust' ? `#seat-${i} .pvp-tag.mine` : `#sb-${i}-${k}`, v]) } : null; }).filter(Boolean));
+        sides: Object.entries(seat.bet?.sides || {}).filter(([, v]) => v > 0).map(([k, v]) => [`#sb-${i}-${k}`, v]) } : null; }).filter(Boolean));
   }
   const tray = $('#tray');
   // During a hand the move buttons appear in the middle of the table, only when you have to act,
@@ -2286,7 +2284,6 @@ ${isBanker && st.settings.decks !== 'csm' ? `<button class="btn small gold" data
   const dealerH = box.phone ? (box.H < 500 ? 96 : 112) : 152;
   const zoomSeat = S.zoomSeat != null && (spots[order.indexOf(S.zoomSeat)]?.mode === 'mini' || (spots[order.indexOf(S.zoomSeat)]?.mode === 'seat' && st.seats[S.zoomSeat]?.hands.length > 2)) && st.seats[S.zoomSeat] ? S.zoomSeat : null;
   return `
-    ${countBadgeHTML(st)}
     <div class="shoe-box"><div class="shoe" id="shoe"><div class="shoe-cards"></div><div class="shoe-fill" style="--fill:${Math.round(100 * st.shoe.left / (st.shoe.size || 1))}%"></div></div><div class="shoe-info">${shoeTxt}</div></div>
     <div class="dealer" id="dealer-zone" style="--cw:${dcw}px">
       ${dealerSeat}
@@ -2529,7 +2526,7 @@ function handResultHTML(h) {
   if (!h.result) return h.blackjack ? '<span class="result blackjack">Blackjack</span>' : '';
   return `<span class="result ${h.result.toLowerCase()}">${handResultText(h)}</span>`;
 }
-// What a side bet won or lost. A bet that came back (the friend was not dealt in) shows as returned.
+// What a side bet won or lost. A bet that came back shows as returned.
 function sideAmount(r) { return r.win ? '+' + money(r.pay - r.stake) : r.push ? 'Back ' + money(r.pay) : '-' + money(r.stake); }
 
 // Side bets this table offers (the host picks them in the settings).
@@ -2540,7 +2537,7 @@ function spotAreaHTML(st, s, i, isMe, mainAmt) {
   const canBet = isMe && st.phase === 'betting';
   // Once the round is over the label on the circle says what this seat won or lost, side bets included.
   const settledNet = st.phase === 'settled' && s?.hands?.length && !S.dealing && typeof s.net === 'number' ? s.net : null;
-  const keys = sideKeys(st).filter((k) => !SIDE_BETS[k].pvp); // bets on your own cards only; the PvP bet has its own button
+  const keys = sideKeys(st);
   const n = Math.max(1, keys.length);
   // Side bets are slices of one ring around the main bet.
   const R1 = 47, R2 = 79, GAP = 1.6;
@@ -2554,7 +2551,6 @@ function spotAreaHTML(st, s, i, isMe, mainAmt) {
     const [lx, ly] = pt((R1 + R2) / 2, mid).split(' ');
     const sb = SIDE_BETS[k];
     if (res?.win) floats.push(`<span class="side-float" style="left:${(((Number(lx) + 82) / 164) * 100).toFixed(1)}%;top:${(((Number(ly) + 82) / 164) * 100).toFixed(1)}%">${sb.icon || ''} +${money(res.pay - res.stake)}</span>`);
-    const friend = k === 'friendBust' && amt && s?.bet.target != null ? st.seats[s.bet.target]?.name : null;
     const big = n <= 5;
     const label = amt || res
       ? `<text x="${lx}" y="${Number(ly) - 4}" class="ring-amt ${res ? (res.win ? 'up' : 'down') : ''}">${res ? (res.win ? '+' + money(res.pay - res.stake) : '-' + money(res.stake)) : money(amt)}</text><text x="${lx}" y="${Number(ly) + 8}" class="ring-name small">${sb.icon || ''} ${esc(friend ? '→ ' + friend.slice(0, 7) : sb.short)}</text>`
@@ -2567,7 +2563,6 @@ function spotAreaHTML(st, s, i, isMe, mainAmt) {
     ${sides}${floats.join('')}
     <div class="spot" id="spot-${i}" ${canBet ? `data-act="main-spot" title="${S.chip ? `Tap to add a ${money(S.chip)} chip` : 'Tap to take your last chip off. Pick a chip below to add instead.'}"` : ''}>${stackHTML(mainAmt)}${settledNet !== null ? `<span class="spot-amt spot-net ${settledNet > 0 ? 'up' : settledNet < 0 ? 'down' : ''}" title="This seat's result for the round, side bets included">${settledNet > 0 ? 'Won +' + money(settledNet) : settledNet < 0 ? 'Lost ' + money(-settledNet) : 'Even'}</span>` : `<span class="spot-amt">${mainAmt ? money(mainAmt) : ''}</span>`}</div>
     ${ins}
-    ${pvpTagsHTML(st, i)}
   </div>`;
 }
 // How much of a chip can still be bet: never more than the chips left, the table maximum for the main
@@ -2604,52 +2599,10 @@ function fitBet(v, where) {
   else if (put < v) toast(`Bet ${money(put)}: that is all that fits.`);
   return put;
 }
-// PvP bets shown on the seat they are about, so everyone sees who bet on whom.
-function pvpTagsHTML(st, i) {
-  const tags = st.seats.map((o, j) => (o && j !== i && o.bet?.sides?.friendBust && o.bet.target === i ? `<span class="pvp-tag" title="A bet between players. It pays ${5} to 1 if this hand busts.">⚔️ ${esc(o.name)}: ${money(o.bet.sides.friendBust)} on a bust</span>` : '')).join('');
-  const res = st.seats[i]?.sideResults?.find((r) => r.key === 'friendBust');
-  const own = st.seats[i]?.bet?.sides?.friendBust && !res ? `<span class="pvp-tag mine">⚔️ ${money(st.seats[i].bet.sides.friendBust)} on ${esc(st.seats[st.seats[i].bet.target]?.name || 'a friend')} busting</span>` : '';
-  return tags || own ? `<div class="pvp-tags">${own}${tags}</div>` : '';
-}
-function pvpBtnHTML(st, seat) {
-  if (!sideKeys(st).includes('friendBust')) return '';
-  const amt = seat.bet.sides.friendBust || 0, who = amt ? st.seats[seat.bet.target]?.name : null;
-  return `<span class="pvp-ctl"><button class="btn pvp-btn" data-act="pvp" title="A bet between players, not on your cards. Pays 5 to 1 if the friend you pick busts.">⚔️ ${amt ? `PvP: ${money(amt)} on ${esc(who || 'a friend')} busting (tap to add)` : 'PvP bet: a friend busts'}</button>${amt ? '<button class="btn pvp-x" data-act="pvp-clear" title="Take the PvP bet off">✕</button>' : ''}</span>`;
-}
 
 // The tray in the middle under the table: chips while betting, play buttons on your turn.
 // Off unless the player turns it on. The key is new (it was 'bj-hints'), so an older saved 'on' starts off once too.
 function hintsOn() { return safeGet('bj-hints2') === '1'; }
-// Count training is off unless the host switches it on for the whole table in the settings.
-function trainingOn() { return !!S.state?.settings?.countTraining; }
-
-// Count training: running count, true count and how often your moves match basic strategy.
-function countBadgeHTML(st) {
-  if (!trainingOn() || !st.count) return '';
-  const rc = st.count.running;
-  const decks = Math.max(0.25, st.count.decksLeft);
-  const tc = rc / decks;
-  const csm = st.settings.decks === 'csm';
-  const tr = S.train;
-  const pct = tr.total ? Math.round((100 * tr.right) / tr.total) : null;
-  const sign = (n) => (n > 0 ? '+' : '') + n;
-  return `<div class="count-badge">
-    <div><small>Running</small><b>${sign(rc)}</b></div>
-    <div><small>True</small><b>${sign(Math.round(tc * 10) / 10)}</b></div>
-    <div><small>Decks left</small><b>${decks.toFixed(1)}</b></div>
-    <div><small>Strategy</small><b>${tr.total ? `${tr.right}/${tr.total}` : '-'}</b>${pct !== null ? `<small>${pct}%</small>` : ''}</div>
-    ${csm ? '<div class="hint">Randomized shoe: the count resets every round.</div>' : ''}
-  </div>`;
-}
-
-function coach(text, good) {
-  let el = $('#coach');
-  if (!el) { el = document.createElement('div'); el.id = 'coach'; document.body.appendChild(el); }
-  el.className = 'coach ' + (good ? 'good' : 'bad');
-  el.innerHTML = text;
-  el.getAnimations().forEach((a) => a.cancel());
-  el.animate([{ opacity: 0, transform: 'translate(-50%, -8px)' }, { opacity: 1, transform: 'translate(-50%, 0)', offset: 0.08 }, { opacity: 1, offset: 0.85 }, { opacity: 0 }], { duration: 4200, fill: 'forwards' });
-}
 
 // The basic strategy chart, drawn from the same rules the hints use.
 function openChart() {
@@ -2988,7 +2941,6 @@ function trayInner(st) {
         <div class="balance"><small>Total bet</small><b>${money(betTotal(b))}</b></div>
       </div>
       <div class="actions">
-        ${pvpBtnHTML(st, seat)}
         
         ${sideKeys(st).length ? '<button class="btn" data-act="sides-plus" title="Adds 1 to every side bet on all your hands">+1 all side bets</button>' : ''}
         ${autoRebetBtn()}<button class="btn" data-act="clear" ${(myInfo(st).me?.seats || []).some((i) => betTotal(st.seats[i]?.bet)) || betTotal(b) ? '' : 'disabled'}>Clear all</button>
@@ -3017,7 +2969,7 @@ function trayInner(st) {
       stand: ['−', 'Stand', 'S'], split: ['⇆', 'Split', 'P'],
     };
     const hand = seat.hands[st.turn.hand];
-    const best = hintsOn() && !trainingOn() ? bestMove(hand.cards, st.dealer.cards[0], st.actions, st.settings) : null;
+    const best = hintsOn() ? bestMove(hand.cards, st.dealer.cards[0], st.actions, st.settings) : null;
     const { total, soft } = hand;
     return `<div class="decide">
       <div class="decide-title">Make your decision <span class="decide-hand">${soft && total < 21 ? 'soft ' : ''}${total}${seat.hands.length > 1 ? ` · hand ${st.turn.hand + 1} of ${seat.hands.length}` : ''}</span></div>
@@ -3146,7 +3098,6 @@ const SETTING_NAMES = {
   penetration: ['Reshuffle at', (v) => v + '% used'],
   startChips: ['Starting chips', money], minBet: ['Min bet', money], // the max bets are the dealer's alone, set in the dealer row
   dealerHitsSoft17: ['Dealer', (v) => (v ? 'hits soft 17' : 'stands on all 17s')],
-  countTraining: ['Count training', (v) => (v ? 'on for everyone' : 'off')],
   allowSurrender: ['Surrender', (v) => (v ? 'allowed' : 'not allowed')],
   autoDeal: ['Deal when all ready', (v) => (v ? 'on' : 'off')],
   betTimer: ['Betting time', (v) => (v ? v + 's' : 'off')], turnTimer: ['Time per move', (v) => (v ? v + 's' : 'off')],
@@ -3164,7 +3115,6 @@ function hostPropose(by, patch) {
   const t = S.table, clean = {};
   for (const k of Object.keys(patch || {})) if (SETTING_NAMES[k]) clean[k] = patch[k];
   if (clean.sideBets !== undefined) clean.sideBets = (Array.isArray(clean.sideBets) ? clean.sideBets : []).filter((k) => SIDE_BETS[k]).slice(0, 20);
-  clean.countTraining = false;
   const changes = settingChanges(t.settings, clean);
   if (!changes.length) return 'none';
   // The number of seats is the host's alone, with no vote. It still waits for the round to end.
@@ -3298,8 +3248,8 @@ function rulesHTML() {
 // release never gets its click, so waiting for the click loses taps at a busy table. The click that
 // follows a press is then ignored. A click with no press before it (Enter or Space on a focused
 // button, or a screen reader) still works as before.
-const FAST_ACTS = new Set(['chip', 'main-spot', 'side-spot', 'take-chip', 'undo', 'double-bet', 'clear', 'sides-plus', 'rebet', 'ready', 'ins', 'play', 'pvp-clear']);
-const BET_ACTS = new Set(['chip', 'main-spot', 'side-spot', 'take-chip', 'undo', 'double-bet', 'clear', 'sides-plus', 'ready', 'side-clear', 'pvp', 'pvp-clear']);
+const FAST_ACTS = new Set(['chip', 'main-spot', 'side-spot', 'take-chip', 'undo', 'double-bet', 'clear', 'sides-plus', 'rebet', 'ready', 'ins', 'play']);
+const BET_ACTS = new Set(['chip', 'main-spot', 'side-spot', 'take-chip', 'undo', 'double-bet', 'clear', 'sides-plus', 'ready', 'side-clear']);
 let pressHandled = false;
 // The middle mouse button puts last hand's bet back while betting is open.
 document.addEventListener('auxclick', (e) => {
@@ -3407,18 +3357,6 @@ function runAct(el) {
         sendBet();
         break;
       }
-      if (k === 'friendBust' && (bet.target == null || !st.seats[bet.target] || bet.target === me.seat)) {
-        pickFriend(st, me.seat, (target) => {
-          const b2 = structuredClone(S.state.seats[me.seat].bet);
-          S.undo.push(structuredClone(b2));
-          b2.sides.friendBust = (b2.sides.friendBust || 0) + S.chip;
-          b2.target = target;
-          (S.sideChips.friendBust = S.sideChips.friendBust || []).push(S.chip);
-          flyChip($(`.chip-rack [data-v="${S.chip}"]`) || el, el, S.chip);
-          placeBet(b2);
-        });
-        break;
-      }
       if (!bet.main) { toast('Put chips on your circle first. A side bet needs a main bet.'); break; }
       const put = fitBet(S.chip, k);
       if (!put) break;
@@ -3491,7 +3429,6 @@ function runAct(el) {
       sendBet();
       break;
     }
-    case 'train': safeSet('bj-train', trainingOn() ? '0' : '1'); el.textContent = trainingOn() ? '🧮 Count training: on' : '🧮 Count training: off'; S.train = { right: 0, total: 0 }; render(); break;
     case 'chat': toggleChat(); break;
     case 'voice': toggleVoicePanel(); break;
     case 'voice-close': toggleVoicePanel(false); break;
@@ -3556,7 +3493,7 @@ function runAct(el) {
     }
     case 'sides-plus': {
       // One more chip on every side bet the table offers, on each of my seats that holds a main bet.
-      const mine = myInfo(st).me, keys = sideKeys(st).filter((k) => k !== 'friendBust'), cap = st.settings.maxSideBet ?? Infinity;
+      const mine = myInfo(st).me, keys = sideKeys(st), cap = st.settings.maxSideBet ?? Infinity;
       const own = (mine?.seats?.length ? mine.seats : [mine.seat]).filter((i) => { const o = st.seats[i]; return o && !o.out && !o.ready && !o.hands?.length && o.bet.main > 0; });
       if (!own.length) { toast('Place a main bet first. Side bets go with a main bet.'); break; }
       let left = mine.chips - (mine?.seats?.length ? mine.seats : [mine.seat]).reduce((x, i) => x + betTotal(st.seats[i]?.bet), 0), added = 0;
@@ -3567,34 +3504,17 @@ function runAct(el) {
         if (!n) continue;
         added += n;
         if (i === mine.seat) { S.undo.push(structuredClone(seat.bet)); bet.sides = sides; sendBet(); }
-        else { send({ t: 'bet', main: o.bet.main, sides, target: o.bet.target, ready: false, seq: ++S.betSeq, seat: i, auto: !!S.auto?.on }); if (S.role !== 'host') o.bet = { ...o.bet, sides }; }
+        else { send({ t: 'bet', main: o.bet.main, sides, ready: false, seq: ++S.betSeq, seat: i, auto: !!S.auto?.on }); if (S.role !== 'host') o.bet = { ...o.bet, sides }; }
       }
       if (added) chipSound(); else toast(left < 1 ? 'All your chips are already bet.' : 'The side bets are at the table maximum.');
       break;
     }
-    case 'pvp': {
-      if (!bet.main) { toast('Place your own bet first.'); break; }
-      const amount = fitBet(S.chip || CHIPS[1], 'friendBust');
-      if (!amount) break;
-      const add = (target) => {
-        const b2 = structuredClone(S.state.seats[me.seat].bet);
-        S.undo.push(structuredClone(b2));
-        b2.sides.friendBust = (b2.sides.friendBust || 0) + amount;
-        b2.target = target;
-        chipSound(1);
-        placeBet(b2);
-      };
-      if (bet.sides.friendBust && bet.target != null && st.seats[bet.target] && bet.target !== me.seat) add(bet.target);
-      else pickFriend(st, me.seat, add);
-      break;
-    }
-    case 'pvp-clear': S.undo.push(structuredClone(seat.bet)); delete bet.sides.friendBust; sendBet(); chipSound(1); break;
     case 'ready': {
       // Deal me in counts for all my seats with a bet down, not only the seat in hand.
       if (!seat.ready) for (const i of me.seats || []) {
         const o = st.seats[i];
         if (i === me.seat || !o || o.out || o.ready || o.bet.main < st.settings.minBet) continue;
-        send({ t: 'bet', main: o.bet.main, sides: { ...o.bet.sides }, target: o.bet.target, ready: true, seq: ++S.betSeq, seat: i, auto: !!S.auto?.on });
+        send({ t: 'bet', main: o.bet.main, sides: { ...o.bet.sides }, ready: true, seq: ++S.betSeq, seat: i, auto: !!S.auto?.on });
         if (S.role !== 'host') o.ready = true; // shown at once; the table's answer follows
       }
       sendBet(!seat.ready);
@@ -3643,7 +3563,7 @@ function runAct(el) {
       proposeSettings({
         seats, decks, shuffleMode: 'penetration', penetration: Number(v('set-pen')),
         startChips: Number(v('set-start')), minBet: Number(v('set-min')),
-        dealerHitsSoft17: $('#set-h17').checked, countTraining: false, allowSurrender: $('#set-sur').checked, autoDeal: $('#set-auto').checked,
+        dealerHitsSoft17: $('#set-h17').checked, allowSurrender: $('#set-sur').checked, autoDeal: $('#set-auto').checked,
         betTimer: Number(v('set-bettimer')), turnTimer: Number(v('set-turntimer')),
         sideBets: [...document.querySelectorAll('[data-sidebet]')].filter((x) => x.checked).map((x) => x.dataset.sidebet),
       });
@@ -3673,18 +3593,6 @@ function playMove(a) {
         return;
       }
       S.hitSure = null;
-    }
-  }
-  if (trainingOn() && st?.turn) {
-    const hand = st.seats[st.turn.seat].hands[st.turn.hand];
-    const up = st.dealer.cards[0];
-    const best = bestMove(hand.cards, up, st.actions, st.settings);
-    if (best) {
-      const upName = { A: 'an ace', J: 'a jack', Q: 'a queen', K: 'a king', 8: 'an 8' }[up.r] || 'a ' + up.r;
-      const vs = `${describeHand(hand.cards)} against ${upName}`;
-      S.train.total++;
-      if (best === a) { S.train.right++; coach(`Correct: ${MOVE_NAMES[a]} on ${vs}.`, true); }
-      else coach(`Basic strategy: ${MOVE_NAMES[best]} on ${vs}. You chose ${MOVE_NAMES[a]}.`, false);
     }
   }
   if (st?.turn) {
@@ -3764,7 +3672,7 @@ function openRaise() {
     S.undo.push(structuredClone(cur));
     S.mainChips = [];
     chipSound(2);
-    placeBet({ main: amt, sides: amt ? cur.sides : {}, target: cur.target });
+    placeBet({ main: amt, sides: amt ? cur.sides : {} });
     close();
   });
 }
@@ -4002,25 +3910,6 @@ addEventListener('resize', () => { applyZoom(); placeSeats(); placePanels(); });
 })();
 
 
-// Friend Bust: choose which friend you are betting will bust.
-function pickFriend(st, mySeat, done) {
-  const others = st.seats.map((x, i) => (x && i !== mySeat ? { i, name: x.name } : null)).filter(Boolean);
-  if (!others.length) { toast('Nobody else is sitting at the table yet.'); return; }
-  const box = document.createElement('div');
-  box.className = 'throw-pop friend-pop';
-  box.innerHTML = `<div class="throw-title">⚔️ PvP bet: who will bust?</div><div class="friend-list">${others.map((o) => `<button class="btn" data-friend="${o.i}">${esc(o.name)}</button>`).join('')}</div>`;
-  document.body.appendChild(box);
-  box.style.left = Math.max(8, innerWidth / 2 - 110) + 'px';
-  box.style.top = Math.max(70, innerHeight * 0.35) + 'px';
-  box.id = 'throw-pop';
-  box.addEventListener('click', (e) => {
-    const b = e.target.closest('[data-friend]');
-    if (!b) return;
-    box.remove();
-    done(Number(b.dataset.friend));
-  });
-}
-
 
 // Top-left guide to the side bets this table offers.
 function renderGuide(st) {
@@ -4031,7 +3920,7 @@ function renderGuide(st) {
   body.dataset.key = key;
   body.innerHTML = sideKeys(st).map((k) => {
     const sb = SIDE_BETS[k];
-    return `<div class="g-item ${sb.pvp ? 'pvp' : ''}"><div class="g-head">${sb.icon || ''} <b>${sb.name}</b>${sb.pvp ? ' <span class="pvp-chip">Player against player</span>' : ''}</div><p>${esc(sb.about)}</p>
+    return `<div class="g-item"><div class="g-head">${sb.icon || ''} <b>${sb.name}</b></div><p>${esc(sb.about)}</p>
       <table>${sb.table.map(([l, m]) => `<tr><td>${esc(l)}</td><td>${m} to 1</td></tr>`).join('')}</table></div>`;
   }).join('') || '<p>No side bets at this table.</p>';
 }
