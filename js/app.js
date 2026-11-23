@@ -1,17 +1,17 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { outerLink } from './shell.js?v=20261122zo';
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe } from './game.js?v=20261122zo';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122zo';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122zo';
-import { tickSound, winSound } from './fx.js?v=20261122zo';
-import * as HX from './history.js?v=20261122zo';
-import { webglOK, initRoom } from './room3d.js?v=20261122zo';
-import { COPY_BTN, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261122zo';
-import { makeVault, makeOpener, cleanBox, cleanPiece } from './vault.js?v=20261122zo';
-import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122zo';
-import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122zo';
+import { outerLink } from './shell.js?v=20261122zp';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe } from './game.js?v=20261122zp';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122zp';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122zp';
+import { tickSound, winSound } from './fx.js?v=20261122zp';
+import * as HX from './history.js?v=20261122zp';
+import { webglOK, initRoom } from './room3d.js?v=20261122zp';
+import { COPY_BTN, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261122zp';
+import { makeVault, makeOpener, cleanBox, cleanPiece } from './vault.js?v=20261122zp';
+import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122zp';
+import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122zp';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -2962,7 +2962,9 @@ function trayInner(st) {
   const ph = st.phase;
   if (isBanker) {
     if (!(ph === 'betting' || ph === 'settled')) return '';
-    return `<div class="tray-msg">${st.banker.chips < 0 ? `You are the dealer and you owe ${money(-st.banker.chips)} chips. Tap your balance to buy in.` : 'You are the dealer. Your chips pay winners and collect losing bets.'}</div>
+    // On a phone the dealer's settings fold away behind one small button, so the table stays in view.
+    if (innerWidth < 700 && !S.dealerOpen) return `<div class="tray-msg dealer-mini">${st.banker.chips < 0 ? `You owe ${money(-st.banker.chips)}. Tap your balance to buy in.` : 'You are the dealer'}<button class="btn small" data-act="dealer-open">⚙ Settings</button></div>`;
+    return `<div class="tray-msg">${st.banker.chips < 0 ? `You are the dealer and you owe ${money(-st.banker.chips)} chips. Tap your balance to buy in.` : 'You are the dealer. Your chips pay winners and collect losing bets.'}${innerWidth < 700 ? '<button class="btn small" data-act="dealer-open">Close</button>' : ''}</div>
       <div class="actions dealer-max"><label for="dealer-max">Max bet</label><input id="dealer-max" type="number" inputmode="numeric" min="${st.settings.minBet}" step="1" value="${st.settings.maxBet}" /><label for="dealer-max-side">Max side bet</label><input id="dealer-max-side" type="number" inputmode="numeric" min="0" step="1" value="${st.settings.maxSideBet}" /><button class="btn small" data-act="dealer-max">Set</button><button class="btn small ${st.settings.shuffle8 !== false ? 'gold' : ''}" data-act="dealer-shuf" title="A fresh shuffle every 8 rounds. Tap to turn it ${st.settings.shuffle8 !== false ? 'off' : 'on'}.">Shuffle every 8: ${st.settings.shuffle8 !== false ? 'On' : 'Off'}</button><button class="btn" data-act="leave-dealer">Leave dealer seat</button></div>
       <div class="actions dealer-max dealer-big"><span class="dealer-big-title" title="Each player may bet above the maximum a few times. Unused ones expire after the hands, then they come back.">Big Bets Sometimes</span><label for="big-limit">Big bet up to</label><input id="big-limit" type="number" inputmode="numeric" min="${st.settings.maxBet + 1}" step="1" value="${st.big?.limit ?? st.settings.maxBet * 4}" /><label for="big-per">Big bets each</label><input id="big-per" type="number" inputmode="numeric" min="1" step="1" value="${st.big?.per ?? 2}" /><label for="big-hands">Every</label><input id="big-hands" type="number" inputmode="numeric" min="1" step="1" value="${st.big?.hands ?? 10}" /><label>hands</label><button class="btn small ${st.big ? '' : 'gold'}" data-act="dealer-big">${st.big ? 'Update' : 'Turn on'}</button>${st.big ? '<button class="btn small" data-act="dealer-big-off">Turn off</button>' : ''}</div>`;
   }
@@ -3552,6 +3554,7 @@ function runAct(el) {
     case 'menu': $('#menu-wrap').classList.toggle('open'); break;
     case 'mute': setMuted(!isMuted()); el.textContent = isMuted() ? '🔇 Sound: off' : '🔊 Sound: on'; if (!isMuted()) chipSound(); break;
     case 'sit-dealer': send({ t: 'sit-dealer' }); break;
+    case 'dealer-open': S.dealerOpen = !S.dealerOpen; render(); break;
     case 'leave-dealer': send({ t: 'leave-dealer' }); break;
     case 'leave-later': send({ t: 'leave-later', on: el.dataset.on !== '1' }); break;
     case 'd-shuffle': send({ t: 'dealer-shuffle' }); toast(st.phase === 'betting' || st.phase === 'settled' ? 'The shoe was shuffled.' : 'The shoe will be shuffled before the next hand.'); break;

@@ -1710,3 +1710,4 @@ body.in-room #conn-pill { max-width: 104px; overflow: hidden; white-space: nowra
 .breach-box { max-width: min(420px, 100%); padding: 16px 20px; border-radius: 14px; background: rgba(40,12,12,.97); border: 2px solid #ff6b6b; color: #fff; text-align: center; box-shadow: 0 10px 40px rgba(0,0,0,.6); display: grid; gap: 8px; justify-items: center; }
 .breach-box b { font-size: 20px; letter-spacing: .5px; color: #ff8f8f; }
 .breach-box span { font-size: 14px; }
+.tray .tray-msg.dealer-mini { display: flex; align-items: center; justify-content: center; gap: 10px; }
