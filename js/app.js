@@ -1,17 +1,17 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { outerLink } from './shell.js?v=20261122zq';
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe } from './game.js?v=20261122zq';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122zq';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122zq';
-import { tickSound, winSound } from './fx.js?v=20261122zq';
-import * as HX from './history.js?v=20261122zq';
-import { webglOK, initRoom } from './room3d.js?v=20261122zq';
-import { COPY_BTN, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261122zq';
-import { makeVault, makeOpener, cleanBox, cleanPiece } from './vault.js?v=20261122zq';
-import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122zq';
-import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122zq';
+import { outerLink } from './shell.js?v=20261122zr';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe } from './game.js?v=20261122zr';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122zr';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122zr';
+import { tickSound, winSound } from './fx.js?v=20261122zr';
+import * as HX from './history.js?v=20261122zr';
+import { webglOK, initRoom } from './room3d.js?v=20261122zr';
+import { COPY_BTN, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261122zr';
+import { makeVault, makeOpener, cleanBox, cleanPiece } from './vault.js?v=20261122zr';
+import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122zr';
+import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122zr';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -2255,7 +2255,7 @@ function feltBox() {
   const flip = !!el?.classList.contains('flip');
   const in3d = !!el?.classList.contains('in3d');
   if (S.felt && !in3d) return { W: S.felt.W, H: S.felt.H, phone: S.felt.phone, flip, round: flip, in3d };
-  const phone = matchMedia('(max-width: 700px)').matches;
+  const phone = matchMedia("(max-width: 700px)").matches;
   return { W: el?.clientWidth || (phone ? innerWidth - 16 : FELT.W), H: el?.clientHeight || (phone ? 560 : FELT.H), phone, flip, round: flip || in3d, in3d };
 }
 
@@ -2757,7 +2757,7 @@ function toggleChat(on = !S.chatOpen) {
   S.chatUnread = 0; $('#chat-peek')?.classList.remove('show');
   drawChat();
   if (S.state) drawSitOut(S.state);
-  if (!matchMedia('(max-width: 700px)').matches) $('#chat-input')?.focus();
+  if (!matchMedia("(max-width: 700px)").matches) $('#chat-input')?.focus();
 }
 
 // ---------- Voice chat ----------

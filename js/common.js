@@ -1,8 +1,8 @@
 // Shared by the poker and baccarat pages: small helpers, the playing card picture, the game switch at the
 // top left, and the link between the host's browser and the players' browsers.
-import { office, openTable } from './shell.js?v=20261122zq';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122zq';
-import { cleanBox, cleanPiece } from './vault.js?v=20261122zq';
+import { office, openTable } from './shell.js?v=20261122zr';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122zr';
+import { cleanBox, cleanPiece } from './vault.js?v=20261122zr';
 export const params = new URLSearchParams(location.search);
 export const $ = (sel, el = document) => el.querySelector(sel);
 export function safeGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
@@ -139,6 +139,14 @@ export function autoUpdate(game, idle) {
   };
   setInterval(check, 120000);
 }
+// Turn the phone upright: a hint that fills short landscape screens (styled in style.css). Added once per page.
+try {
+  if (!document.getElementById('rotate-hint')) {
+    const r = document.createElement('div'); r.id = 'rotate-hint';
+    r.innerHTML = '<div class="rh-emoji">\uD83D\uDCF1</div><div>Turn your phone upright to play.</div>';
+    (document.body || document.documentElement).appendChild(r);
+  }
+} catch { /* fine */ }
 export function onOfficeBack(game, getCode, isHost, hostCarry, guestSend) {
   window.__officeBack = () => {
     walking = false; walkCover(null);
