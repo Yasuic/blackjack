@@ -16,12 +16,12 @@ const play = (t, bet, a = 'stand') => {
   ok(st && st.on && st.amount === 3000 && st.auto && st.lost === 0, 'on by default at 30 x max bet (3000): ' + JSON.stringify(st));
   ok(t.publicState('a').lossCap, 'everyone sees the dealer has a stop at loss');
   t.setDealerMax('d', 125); ok(t.publicState('d').lossCap.amount === 3750, 'follows the max bet until the dealer types one (125 -> 3750)');
-  t.setLossCap('d', true, 200); ok(t.publicState('d').lossCap.amount === 200 && !t.publicState('d').lossCap.auto, 'dealer types an amount');
+  t.setLossCap('d', true, 50); ok(t.publicState('d').lossCap.amount === 50 && !t.publicState('d').lossCap.auto, 'dealer types an amount');
   let thr = 0; try { t.setLossCap('a', true, 50); } catch { thr++; } ok(thr === 1, 'only the dealer sets it');
-  // Rig: the player wins every hand until the dealer has lost 200 or more.
+  // Play until the dealer has lost 50 or more (one lost hand of 100 does it).
   let rounds = 0, stoppedMid = false;
   while (t.banker === 'd' && rounds < 400) {
-    const before = t.dealerLoss();
+    if (t.dealerLoss() === 0) { t.setLossCap('d', false); t.setLossCap('d', true); } // count from here, so the next lost hand counts
     play(t, 100, 'stand'); rounds++;
     if (t.inRound()) stoppedMid = true;
   }
