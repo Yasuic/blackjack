@@ -1,17 +1,17 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { outerLink } from './shell.js?v=20261122zg';
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe } from './game.js?v=20261122zg';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122zg';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122zg';
-import { tickSound, winSound } from './fx.js?v=20261122zg';
-import * as HX from './history.js?v=20261122zg';
-import { webglOK, initRoom } from './room3d.js?v=20261122zg';
-import { showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261122zg';
-import { makeVault, makeOpener, cleanBox, cleanPiece } from './vault.js?v=20261122zg';
-import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122zg';
-import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122zg';
+import { outerLink } from './shell.js?v=20261122zh';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe } from './game.js?v=20261122zh';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122zh';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122zh';
+import { tickSound, winSound } from './fx.js?v=20261122zh';
+import * as HX from './history.js?v=20261122zh';
+import { webglOK, initRoom } from './room3d.js?v=20261122zh';
+import { showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261122zh';
+import { makeVault, makeOpener, cleanBox, cleanPiece } from './vault.js?v=20261122zh';
+import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122zh';
+import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122zh';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -1386,13 +1386,13 @@ function buildLayout() {
             <button class="menu-item" data-act="keys">⌨️ Keyboard keys</button>`)}
           ${host ? `
           ${fold('m-round', '🃏 Round', '<div id="host-round"></div>')}
-          ${fold('m-players', '👥 Players', `
+          ${fold('m-players', '👥 Players', `<button class="menu-item" data-act="afk-screen" title="A black screen with plain white text while you are away: who deals, the round, the ledger. The table keeps running.">🌙 AFK screen</button>
             <div class="hint" style="margin-bottom:8px">Chips for Give / Take: <input id="give-amt" type="number" value="500" min="1" style="width:90px" /></div>
             <div id="host-players" class="player-list"></div>`)}
           ${fold('m-settings', '⚙️ Game settings', '<div id="host-settings"></div>')}
           ${fold('m-log', '📝 Table log', `<div id="host-log" class="log"></div>
             ${fold('m-logs', 'Logs', `<button class="menu-item" data-act="hist-panel" title="A small list of the hands at the left of the screen.">🕘 Hand history: ${histOn() ? 'on' : 'off'}</button>`, true)}`)}` : `
-          ${fold('m-players', '👥 Players', '<button class="menu-item" data-act="become-host" title="The table moves to your browser. No vote: the host\'s browser hands it over.">👑 Become host</button><button class="menu-item" data-act="force-host" title="For a host who is away and whose browser does not answer. The table opens in your browser and everyone moves there.">⚡ Force take over (AFK HOST)</button><div id="guest-players" class="player-list"></div>')}
+          ${fold('m-players', '👥 Players', '<button class="menu-item" data-act="afk-screen" title="A black screen with plain white text while you are away: who deals, the round, the ledger. The table keeps running.">🌙 AFK screen</button><button class="menu-item" data-act="become-host" title="The table moves to your browser. No vote: the host\'s browser hands it over.">👑 Become host</button><button class="menu-item" data-act="force-host" title="For a host who is away and whose browser does not answer. The table opens in your browser and everyone moves there.">⚡ Force take over (AFK HOST)</button><div id="guest-players" class="player-list"></div>')}
           ${fold('m-settings', '⚙️ Game settings', '<div class="hint" style="margin-bottom:8px">Any seated player can change the settings. Everyone else has to vote yes.</div><div id="host-settings"></div>')}
           ${fold('m-log', '📝 Table log', `<div id="host-log" class="log"></div>
             ${fold('m-logs', 'Logs', `<button class="menu-item" data-act="hist-panel" title="A small list of the hands at the left of the screen.">🕘 Hand history: ${histOn() ? 'on' : 'off'}</button>`, true)}`)}`}
@@ -3521,6 +3521,7 @@ function runAct(el) {
     case 'hints': safeSet('bj-hints2', hintsOn() ? '0' : '1'); el.textContent = hintsOn() ? '💡 Strategy hints: on' : '💡 Strategy hints: off'; render(); break;
     case 'buyin-open': openBuyIn(); break;
     case 'office': showOffice(S.code, S.myId); break;
+    case 'afk-screen': afkScreen(true); break;
     case 'become-host': askBecomeHost(); break;
     case 'force-host': if (S.role === 'player' && !S.taking) { toast('Taking the table over…'); maybeTakeOver(true); } break;
     case 'ledger-toggle': { const l = $('#ledger'); l.classList.toggle('closed'); safeSet('bj-ledger', l.classList.contains('closed') ? '0' : '1'); renderLedger(S.state); break; }
@@ -4174,6 +4175,57 @@ document.addEventListener('change', (e) => {
   goGame(e.target.value);
 });
 // This table's ledger lines for the office ledger (common.js officeLedgerHTML).
+// ---------- AFK screen ----------
+// A black screen with plain white text, for a host or dealer who steps away: it says who deals, what the table is
+// doing and the ledger, updated every second. The 3D room stops drawing and the sounds stop while it is on, and the
+// screen is kept awake where the browser allows it. A tap or a key brings the table back.
+let afk = null;
+function afkScreen(on) {
+  if (!on) { if (!afk) return; clearInterval(afk.timer); afk.el.remove(); try { afk.lock?.release(); } catch { /* fine */ } afk = null; window.__afkScreen = false; S.room?.home?.(); return; }
+  if (afk) return;
+  const el = document.createElement('div');
+  el.id = 'afk-screen';
+  el.style.cssText = 'position:fixed;inset:0;z-index:100000;background:#000;color:#fff;font:16px/1.6 system-ui,-apple-system,Segoe UI,sans-serif;padding:32px;overflow:auto;cursor:default';
+  document.body.appendChild(el);
+  afk = { el, timer: 0, lock: null, key: '', changed: Date.now() };
+  window.__afkScreen = true;
+  try { navigator.wakeLock?.request('screen').then((l) => { if (afk) afk.lock = l; else l.release(); }).catch(() => {}); } catch { /* fine */ }
+  const off = (e) => { if (e.type === 'keydown' || e.target === el || el.contains(e.target)) { el.removeEventListener('click', off); removeEventListener('keydown', off); afkScreen(false); } };
+  setTimeout(() => { el.addEventListener('click', off); addEventListener('keydown', off); }, 400);
+  const draw = () => {
+    const st = S.state;
+    if (!st) { el.textContent = 'Waiting for the table…'; return; }
+    const key = `${st.round}|${st.phase}|${JSON.stringify(st.dealer?.cards || [])}|${st.seats.map((x) => x ? x.hands.map((h) => h.cards.length).join('.') : '').join(',')}`;
+    if (key !== afk.key) { afk.key = key; afk.changed = Date.now(); }
+    const dealer = st.banker ? st.banker.name : st.frozen ? 'the house (frozen ledger)' : 'nobody yet';
+    const meDeal = st.banker?.id === S.myId, meHost = S.role === 'host';
+    const phase = { betting: 'Taking bets', insurance: 'Insurance', playing: 'Players are playing', dealer: 'Dealer is playing', settled: 'Round over, paying out' }[st.phase] || st.phase;
+    const ago = Math.round((Date.now() - afk.changed) / 1000);
+    const online = (st.players || []).filter((p) => p.connected).length;
+    const rows = officeRows(st).sort((a, b) => b.net - a.net);
+    const sign = (v) => (v > 0 ? '+' : '') + money(Math.round(v * 100) / 100);
+    const lines = [
+      'AFK screen. Tap anywhere or press a key to come back.',
+      '',
+      `You are the host: ${meHost ? 'yes' : 'no'}`,
+      `You are the dealer: ${meDeal ? 'yes' : 'no'} (dealer: ${dealer})`,
+      `Table ${S.code || ''}, round ${st.round || 0}: ${phase}`,
+      `Dealer cards: ${(st.dealer?.cards || []).map((c) => (c.hidden ? '?' : c.r + c.s)).join(' ') || 'none yet'}`,
+      `Last change at the table: ${ago < 2 ? 'just now' : ago + ' s ago'}`,
+      `Players online: ${online}`,
+      `Shoe: ${st.shoe ? st.shoe.left.toLocaleString() + ' cards left' : ''}`,
+      st.halted ? 'The game is paused (security check). Come back and press Resume game.' : '',
+      '',
+      'Ledger (+/- and chips now):',
+      ...rows.map((r) => `${r.name}: ${sign(r.net)}, chips ${money(r.chips)}`),
+      '',
+      `Updated ${new Date().toLocaleTimeString()}`,
+    ];
+    el.innerHTML = lines.map((l) => `<div>${esc(l) || '&nbsp;'}</div>`).join('');
+  };
+  draw();
+  afk.timer = setInterval(draw, 1000);
+}
 function officeRows(st) {
   return (st?.ledger || []).filter((r) => !r.kicked || r.chips !== r.totalIn).map((r) => ({ id: r.id, name: r.name, chips: r.chips, net: r.chips - r.totalIn - (r.houseNet || 0) }));
 }

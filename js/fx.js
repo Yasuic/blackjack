@@ -11,7 +11,7 @@ export function setMuted(v) {
 }
 
 function audio() {
-  if (window.__officeAway) return null; // this table is open out of sight in the office: it stays quiet
+  if (window.__officeAway || window.__afkScreen) return null; // this table is open out of sight in the office: it stays quiet
   if (!ctx) {
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) return null;
