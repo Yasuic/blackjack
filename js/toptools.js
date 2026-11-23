@@ -14,10 +14,10 @@ try { if (isMuted()) { setVolume('main', 0); setMuted(false); } } catch { /* fin
 const SLIDERS = [['main', 'All sounds'], ['game', 'Cards and chips'], ['fx', 'Effects'], ['horn', 'Horns and shouts']];
 export function topToolsHTML() {
   const v = getVolume();
-  return `<button class="pill tt-profit" id="tt-profit" title="Your net result this session, as in the ledger" hidden></button>
+  return `<button class="pill tt-profit" id="tt-profit" title="Your net result this session. Tap for the ledger." hidden></button>
     <label class="tt-size" title="Card size"><span class="tt-ico">🂠</span><input type="range" data-tt="size" min="${MIN}" max="${MAX}" step="5" value="${size}" aria-label="Card size" /></label>
     <div class="tt-wrap">
-      <button class="btn small tt-btn" id="tt-btn" title="Sound and card size" aria-haspopup="true">${isMuted() || !v.main ? '🔇' : '🔊'}</button>
+      <button class="btn small tt-btn" id="tt-btn" title="Sound and card size" aria-label="Sound and card size" aria-haspopup="true">${isMuted() || !v.main ? '🔇' : '🔊'}</button>
       <div class="tt-pop" id="tt-pop" hidden>
         <div class="tt-sp" id="tt-sp" hidden></div>
         <label class="tt-row"><span>Card size</span><input type="range" data-tt="size" min="${MIN}" max="${MAX}" step="5" value="${size}" /><b data-tt-val="size">${size}%</b></label>
@@ -72,7 +72,9 @@ export function initTopTools({ css = false, onChange = null } = {}) {
   document.addEventListener('click', (e) => {
     const pop = document.getElementById('tt-pop');
     if (!pop) return;
-    if (e.target.closest?.('#tt-btn, #tt-profit')) { pop.hidden = !pop.hidden; return; }
+    if (e.target.closest?.('#tt-btn')) { pop.hidden = !pop.hidden; return; }
+    // Session profit opens the game's ledger (sound has its own speaker button).
+    if (e.target.closest?.('#tt-profit')) { pop.hidden = true; document.querySelector('[data-act=ledger-toggle], [data-act=ledger], [data-act=show-ledger], [data-act=pk-ledger]')?.click(); return; }
     if (e.target.closest?.('[data-tt="reset"]')) {
       size = 100; try { localStorage.setItem(SIZE_KEY, '100'); } catch { /* not saved */ }
       for (const k of ['main', 'game', 'fx', 'horn']) setVolume(k, 100);

@@ -690,7 +690,6 @@ button.tt-profit { cursor: pointer; font-family: inherit; color: inherit; backgr
 @media (max-width: 1040px) { .tt-profit .tt-rl { display: none; } .tt-profit .tt-risk { margin-left: 5px; padding-left: 5px; } .tt-profit .tt-risk::before { content: 'Risk '; opacity: .7; } }
 @media (max-width: 700px) {
   body.in-room .topbar .tt-profit { flex: none; overflow: visible; padding: 3px 7px; font-size: 11px; }
-  .tt-profit:not([hidden]) ~ .tt-wrap .tt-btn { display: none; }
   .tt-wrap { position: static; }
   .tt-btn { min-width: 32px; padding-left: 6px; padding-right: 6px; }
   .tt-pop { position: fixed; left: 8px; right: 8px; top: calc(var(--topbar-h, 52px) + 4px); width: auto; max-width: none; }
@@ -797,3 +796,5 @@ body:not(.room3d) .ro-result, .pfelt.tall .ro-result { display: none; }
 .ro-grid.tallg .ro-cell.zero .ro-mine, .ro-grid.tallg .ro-cell.zero .ro-all { right: calc(6px * var(--k)); bottom: auto; top: 50%; transform: translateY(-50%); }
 .ro-last i { font-style: normal; display: flex; align-items: center; justify-content: center; color: #fff; font-family: "Space Grotesk", sans-serif; font-weight: 800; }
 .ro-last i.red, .ro-n.red { background: #c62f2f; } .ro-last i.black, .ro-n.black { background: #17191f; } .ro-last i.green, .ro-n.green { background: #1f9a4d; }
+/* Very narrow phones (iPhone SE): the speaker button needs a little room in the top bar. */
+@media (max-width: 380px) { .topbar { gap: 3px !important; } .topbar .btn.small, .topbar .pill, .topbar .tt-btn { padding-left: 5px !important; padding-right: 5px !important; } .tt-btn { min-width: 28px; } }
