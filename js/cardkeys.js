@@ -4,7 +4,7 @@
 // from a secret that never leaves them. So the host holds the shoe but cannot tell which card comes next, and a guest
 // holds a key but cannot read a card without the host's seed. The same way of picking as blackjack (js/game.js).
 // Nothing here touches the page or the network, so the checks in test/ can run it.
-import { sha256 } from './game.js?v=20261123g';
+import { sha256 } from './game.js?v=20261123h';
 
 // Card number k (counted from 1 in the shoe) with key nonce: its place among the cards still in the shoe.
 export const pickIndex = (serverSeed, nonce, k, left) => parseInt(sha256(serverSeed + '|' + nonce + '|' + k).slice(0, 12), 16) % left;

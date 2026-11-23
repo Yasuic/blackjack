@@ -1499,11 +1499,11 @@ body.room3d:has(.room.walking) .hud3d .tray:has(.chip-rack), body.room3d:has(.ro
 @media (prefers-reduced-motion: reduce) { .hand.active.lift, .hand.drop { animation: none !important; } }
 
 /* Sit out: a small plain arrow tag beside your own name plate, at the seat, outside the table's curve. */
-.seat .who .seat-out-tag { position: absolute; left: calc(100% + 3px); top: 50%; transform: translateY(-50%); font: inherit; font-size: 10px; font-weight: 700; line-height: 1; padding: 5px 7px 5px 12px; border: 0; background: rgba(10,13,18,.82); color: #cfd6e0; white-space: nowrap; cursor: pointer; clip-path: polygon(8px 0, 100% 0, 100% 100%, 8px 100%, 0 50%); z-index: 3; pointer-events: auto; }
-.seat .who .seat-out-tag:hover { color: #fff; }
+.seat .who .seat-out-tag { position: absolute; left: 50%; top: calc(100% + 5px); transform: translateX(-50%); font: inherit; font-size: 13px; font-weight: 700; line-height: 1; padding: 7px 16px; border: 1px solid rgba(242,213,138,.55); border-radius: 999px; background: rgba(10,13,18,.88); color: #e6ebf2; white-space: nowrap; cursor: pointer; z-index: 6; pointer-events: auto; }
+.seat .who .seat-out-tag:hover { color: #fff; border-color: var(--gold); }
 .seat .who .seat-out-tag.on { color: #f2d58a; }
-@media (max-width: 700px) { .seat .who .seat-out-tag { font-size: 9px; padding: 4px 5px 4px 10px; } }
-.felt.in3d .seat .who .seat-out-tag { transform: translateY(-50%) translateZ(4px); }
+@media (max-width: 700px) { .seat .who .seat-out-tag { font-size: 11px; padding: 5px 11px; } }
+.felt.in3d .seat .who .seat-out-tag { transform: translateX(-50%) translateZ(4px); }
 /* Phones: Chat and Voice go under the row of view buttons, not on top of it. */
 @media (max-width: 700px) { body.room3d #sitout-bar, body.room3d.in-room #sitout-bar { top: 136px; } }
 
@@ -1675,7 +1675,6 @@ body.in-room #conn-pill { max-width: 104px; overflow: hidden; white-space: nowra
 /* Seat numbers: seat 1 is the first seat dealt (the dealer's left, the players' right), then 2, 3 and on round the table. */
 .sn { display: inline-block; min-width: 1.45em; height: 1.45em; line-height: 1.45em; padding: 0 .2em; margin-right: .4em; border-radius: 999px; background: rgba(232,196,106,.92); color: #14110a; font-size: .82em; font-weight: 800; text-align: center; vertical-align: .08em; font-style: normal; }
 /* A seat on the right side of the table: its Sit out tab goes on the left of the name plate, inside the table. */
-.seat .who .seat-out-tag.tl { left: auto; right: calc(100% + 3px); padding: 5px 12px 5px 7px; clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 50%, calc(100% - 8px) 100%, 0 100%); }
 .fair-how { margin: 6px 0 10px; border: 1px solid rgba(232,196,106,.3); border-radius: 10px; padding: 6px 10px; }
 .fair-how > summary { cursor: pointer; font-weight: 700; color: var(--gold); }
 .fair-how .fair-p { margin: 6px 0 0; }
@@ -1751,7 +1750,8 @@ input[type=range].at-zero::-moz-range-thumb { background: #6b7280; }
 .dp-foot { display: flex; justify-content: center; gap: 10px; padding: 8px 12px 10px; border-top: 1px solid rgba(255,255,255,.08); }
 .dp-save { min-width: 120px; opacity: .55; }
 .dp-save.dirty { opacity: 1; background: #1f9d55; border-color: #49d17d; color: #fff; box-shadow: 0 0 0 2px rgba(73,209,125,.35), 0 0 16px rgba(73,209,125,.6); }
-.dp-bar { width: min(760px, 100%); margin: 8px auto 0; padding: 10px 14px; border-radius: 12px; background: #f2c14e; color: #1b1300; font: 800 17px Inter, system-ui, sans-serif; text-align: center; letter-spacing: .3px; }
+.dp-bar:hover { filter: brightness(1.08); }
+.dp-bar { display: block; border: 0; cursor: pointer; width: min(760px, 100%); margin: 8px auto 0; padding: 10px 14px; border-radius: 12px; background: #f2c14e; color: #1b1300; font: 800 17px Inter, system-ui, sans-serif; text-align: center; letter-spacing: .3px; }
 @media (max-width: 700px) {
   .dp-secs { grid-template-columns: 1fr; }
   .dp-sec + .dp-sec { border-left: 0; border-top: 1px solid rgba(255,255,255,.1); }

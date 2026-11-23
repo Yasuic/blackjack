@@ -1,7 +1,7 @@
 // Player stats in every game's ledger: hands, wins, win rate, real and practice +/-, best and worst round, and a
 // running total chart with one line per player. Blackjack builds the numbers from its recorded hands
 // (Table.playerStats); poker, baccarat and roulette add each settled round with pstatAdd.
-import { esc, money } from './common.js?v=20261123g';
+import { esc, money } from './common.js?v=20261123h';
 
 // Player stats: hands, wins, win rate, real +/- and practice, best and worst round, and the running total chart.
 export const STAT_COLORS = ['#f2c14e', '#4fc3f7', '#81c784', '#e57373', '#ba68c8', '#ffb74d', '#4db6ac', '#f06292', '#aed581', '#90a4ae'];

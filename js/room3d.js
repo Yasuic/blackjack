@@ -192,9 +192,9 @@ const OFFICE_SIGN_LINES = ['Hours: 8AM to infinity AM', 'Compensation: negative 
 // Three people the office asked for by place: the woman at the yellow desk by the wooden slats who
 // faces the small meeting room, the person across from her, and the man at the desk behind her.
 const SPECIAL = {
-  9: { name: 'Charlene', skin: '#f0c9a4', hair: '#3a2416', top: '#111214', legs: '#111214', longHair: true, dress: true, lush: true, lines: ['yooo look at my new keyboard'], rare: 0.1 },
+  9: { name: 'Charlene', skin: '#f0c9a4', hair: '#3a2416', top: '#111214', legs: '#111214', longHair: true, dress: true, lush: true, belt: '#d4a83a', lines: ['yooo look at my new keyboard'], rare: 0.1 },
   10: { name: 'Felix', skin: '#e2ad82', hair: '#1d1712', top: '#e9e6df', legs: '#2b2f38', vest: '#131416', zip: true, lines: ['im going to the gym'] },
-  8: { name: 'Tony', skin: '#e8b98f', hair: '#2a1d14', top: '#4a6fa0', legs: '#2b2f38', wide: 0.8, spiky: true, recede: true, cup: 'DETOUR COFFEE', lines: ['WHY IS SERGIO CALLING ME AGAIN'] },
+  8: { name: 'Tony', skin: '#e8b98f', hair: '#2a1d14', top: '#4a6fa0', legs: '#2b2f38', wide: 1.4, spiky: true, recede: true, cup: 'DETOUR COFFEE', lines: ['WHY IS SERGIO CALLING ME AGAIN'] },
   27: { name: 'Nigel', skin: '#e8b98f', hair: '#1d1712', top: '#f6f5f1', legs: '#3a3f47', tattoo: true, golf: true, buttons: true, nespresso: true },
   // The middle block, seen from above with the sign cupboard at the top. Bottom row, left to right: 31, 30, 29, 28. Top row: 35, 34, 33, 32.
   31: { name: 'Henry', skin: '#e2ad82', hair: '#0f0d0c', top: '#5b6470', legs: '#2b2f38', postits: true, pinkKeys: true },
@@ -207,7 +207,7 @@ const SPECIAL = {
   11: { name: 'Thibaud', skin: '#f6dccb', hair: '#f2f2ee', top: '#a9cdea', legs: '#f1efea', shoes: '#f7f6f2', spiky: true, polo: true, cards: true },
   7: { name: 'Yuya', skin: '#f0c9a4', hair: '#0f0d0c', top: '#d9cfbd', legs: '#3a3f47', bowl: true, word: 'MUJI', wordMany: true, mint: true, lines: ['Arigatoooo'] },
 };// The office people who can be borrowed as the house dealer at a practice table: name, colours and voice lines.
-export const COLLEAGUES = Object.values(SPECIAL).map((L) => ({ name: L.name, skin: L.skin, hair: L.hair, top: L.top, lines: L.lines || [] }));
+export const COLLEAGUES = Object.values(SPECIAL).map((L) => ({ name: L.name, skin: L.skin, hair: L.hair, top: L.top, wide: L.wide || 1, belt: L.belt || null, lines: L.lines || [] }));
 function buildOffice(signText, midShift = 0, midScale = 1, skipRoom = null, live = 'blackjack') {
   // The middle desks and their chairs move along x by midShift. Where the room is too short for them (a deep phone table), the block is squeezed along x so that all eight desks stay.
   const D0 = OFFICE, mx = (x) => 4.276 + midShift + (x - 4.276) * midScale;
@@ -237,7 +237,7 @@ function buildOffice(signText, midShift = 0, midScale = 1, skipRoom = null, live
     chrome: mk({ color: '#b9bec4', roughness: 0.25, metalness: 0.9 }),
     screen: mk({ color: '#0d0f12', roughness: 0.25, metalness: 0.2 }),
     // What the office screens show: the ARC Group logo, from the photo of it, lit like a screen that is on.
-    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261123g'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
+    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261123h'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
     dark: mk({ color: '#30353c', roughness: 0.6 }),
   };
   const group = new THREE.Group();
@@ -552,6 +552,7 @@ function buildOffice(signText, midShift = 0, midScale = 1, skipRoom = null, live
       // Body, neck and head.
       box(0.36 * w, 0.5, 0.2 * (w > 1 ? 1.55 : 1), top, 0, 0.86 + up2, w > 1 ? 0.01 : 0.06);
       if (w > 1) box(0.4 * w, 0.26, 0.36, top, 0, 0.76 + up2, -0.04); // belly
+      if (L.belt) box(0.37 * w, 0.03, 0.21 * (w > 1 ? 1.55 : 1), col(L.belt, 0.3), 0, 0.69 + up2, w > 1 ? 0.01 : 0.06); // thin belt
       if (L.vest) { [-1, 1].forEach((k) => box(0.125, 0.44, 0.215, col(L.vest), k * 0.118, 0.87 + up2, 0.06)); box(0.36, 0.44, 0.03, col(L.vest), 0, 0.87 + up2, 0.155); }
       box(0.1, 0.07, 0.1, skin, 0, 1.14 + up2, 0.05);
       if (L.collar) { box(0.17, 0.1, 0.03, top, 0, 1.16 + up2, 0.125); [-1, 1].forEach((k) => box(0.03, 0.1, 0.13, top, k * 0.075, 1.16 + up2, 0.06)); box(0.012, 0.3, 0.012, col('#3a3d44', 0.5), 0, 0.96 + up2, -0.042); } // collar turned up, and a zip
@@ -1024,7 +1025,7 @@ function buildStorefront() {
     lamp: lam('#c8161d', 0.6), bulb: lit('#ffe9a8'), red: lit('#c8161d'), gold: lit('#f4c542'), wood: lam('#7a5234', 0.35),
     glass: new THREE.MeshBasicMaterial({ color: '#dff3f7', transparent: true, opacity: 0.13, depthWrite: false }),
     awning: new THREE.MeshBasicMaterial({ map: canvasTexture(512, 64, (g, w, h) => { for (let i = 0; i < 16; i++) { g.fillStyle = i % 2 ? '#fff6e6' : '#f08a1c'; g.fillRect((i * w) / 16, 0, w / 16 + 1, h); } }), side: THREE.DoubleSide }),
-    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261123g') }),
+    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261123h') }),
     menu: new THREE.MeshBasicMaterial({ map: canvasTexture(256, 384, (g, w, h) => {
       g.fillStyle = '#c8161d'; g.fillRect(0, 0, w, h); g.fillStyle = '#f4c542'; g.fillRect(14, 14, w - 28, 44);
       const r = rng(11); g.fillStyle = '#fff3d6';
@@ -1368,6 +1369,9 @@ export function initRoom(container, feltEl, { phone, hud = null, size = null, ga
     const g = new THREE.Group();
     const up = standing ? 34 : 0; // a standing person is a little taller than a seated one
     const torso = new THREE.Mesh(torsoGeo, shirt); torso.scale.z = 0.58; torso.position.y = -22 + up; torso.castShadow = true;
+    const bulk = own?.wide > 1 ? 1 + (own.wide - 1) * 0.6 : 1; // a heavier colleague is a little wider at the table too
+    torso.scale.x = bulk; torso.scale.z *= bulk;
+    if (own?.belt) { const b = new THREE.Mesh(torsoGeo, lam({ color: own.belt, flatShading: true })); b.scale.set(bulk * 1.02, 0.05, 0.58 * bulk * 1.04); b.position.y = -95 + up; g.add(b); }
     const neck = limb([0, 88 + up, 0], [0, 124 + up, 0], 24, 26, skin);
     // The head turns on the neck (see idleFigs: players look round at each other now and then).
     const headG = new THREE.Group(); headG.position.set(0, 124 + up, 0); headG.rotation.order = 'YXZ';

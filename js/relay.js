@@ -4,7 +4,7 @@
 // messages through the table owner's own online database service instead (its live message channel).
 // Everything sent this way is locked with a key that only the host and that one player hold, so
 // other people on the channel cannot read cards, bets or shuffle keys.
-import { BACKUP_URL, BACKUP_KEY } from './history.js?v=20261123g';
+import { BACKUP_URL, BACKUP_KEY } from './history.js?v=20261123h';
 
 const enc = new TextEncoder(), dec = new TextDecoder();
 const b64 = (buf) => { const a = new Uint8Array(buf); let s = ''; for (let i = 0; i < a.length; i += 0x8000) s += String.fromCharCode.apply(null, a.subarray(i, i + 0x8000)); return btoa(s); };

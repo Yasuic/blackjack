@@ -1,18 +1,18 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { startPresence } from './presence.js?v=20261123g';
-import { outerLink } from './shell.js?v=20261123g';
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe, destName } from './game.js?v=20261123g';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261123g';
-import { bestMove, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261123g';
-import { tickSound, winSound } from './fx.js?v=20261123g';
-import * as HX from './history.js?v=20261123g';
-import { webglOK, initRoom, COLLEAGUES } from './room3d.js?v=20261123g';
-import { COPY_BTN, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261123g';
-import { topToolsHTML, initTopTools, setProfit, setPractice, setRisk, cardScale, profitLineHTML } from './toptools.js?v=20261123g';
-import { statsHTML } from './pstats.js?v=20261123g';
-import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261123g';
+import { startPresence } from './presence.js?v=20261123h';
+import { outerLink } from './shell.js?v=20261123h';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe, destName } from './game.js?v=20261123h';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261123h';
+import { bestMove, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261123h';
+import { tickSound, winSound } from './fx.js?v=20261123h';
+import * as HX from './history.js?v=20261123h';
+import { webglOK, initRoom, COLLEAGUES } from './room3d.js?v=20261123h';
+import { COPY_BTN, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261123h';
+import { topToolsHTML, initTopTools, setProfit, setPractice, setRisk, cardScale, profitLineHTML } from './toptools.js?v=20261123h';
+import { statsHTML } from './pstats.js?v=20261123h';
+import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261123h';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -1463,7 +1463,7 @@ function roomPeople(st) {
   });
   // The house dealer stands behind the table too, so someone is seen dealing the cards.
   // Practice: a colleague from the office deals, in their own colours (room3d COLLEAGUES).
-  if (!st.banker && st.frozen) { const c = COLLEAGUES.find((x) => x.name === st.houseDealer); list.push({ id: 'house-dealer', name: c?.name || 'Dealer', colleague: c?.name || null, look: c ? { colors: { skin: c.skin, hair: c.hair, top: c.top } } : { skin: 2, hair: 0 }, seat: null, seats: st.seats.length, isMe: false, isDealer: true, bet: 0 }); }
+  if (!st.banker && st.frozen) { const c = COLLEAGUES.find((x) => x.name === st.houseDealer); list.push({ id: 'house-dealer', name: c?.name || 'Dealer', colleague: c?.name || null, look: c ? { colors: { skin: c.skin, hair: c.hair, top: c.top, wide: c.wide, belt: c.belt } } : { skin: 2, hair: 0 }, seat: null, seats: st.seats.length, isMe: false, isDealer: true, bet: 0 }); }
   return [list, order.map((i, pos) => ({ seat: i, x: spots[pos].x, y: spots[pos].y }))];
 }
 function getZoom() { const z = Number(safeGet('bj-zoom')); return z >= 0.6 && z <= 1.6 ? z : 1; }
@@ -2532,7 +2532,7 @@ function seatHTML(st, s, i, focus, spot) {
   return `<div class="seat ${cls} ${many ? 'many' : ''} ${hot} ${isMe ? 'me' : ''} ${turn ? 'turn' : ''} ${inHand ? 'inhand' : ''} ${s.out ? 'out' : ''} ${s.connected ? '' : 'away'}" id="seat-${i}" ${place} ${mini || many ? 'title="Tap to see this seat large"' : ''}>
     ${hands}
     ${bets}
-    <div class="who" ${isMe ? '' : `data-throw-at="${s.playerId}" title="Tap to throw something at ${esc(s.name)}"`}><span class="name"><b class="sn" title="Seat ${i + 1}">${i + 1}</b>${s.streak >= 3 ? `<span class="fire">🔥</span>${s.streak} ` : ''}${s.playerId === st.hostId ? '♛ ' : ''}${esc(s.name)}${isMe ? ' (you)' : ''}${s.connected ? '' : ' (away)'}</span><span class="chips">${money(s.chips)}${net}</span>${ready}${isMe && st.banker?.id !== S.myId ? `<button class="seat-out-tag ${s.leaving ? 'on' : ''} ${Number(spot.x) > 60 && !spot.phone ? 'tl' : ''}" data-act="leave-seat" data-seat="${i}" title="${s.leaving ? 'Tap to stay in this seat' : 'Leave this seat. A hand in play is still finished first.'}">${s.leaving ? 'Leaving' : 'Sit out'}</button>` : ''}${!isMe && s.playerId !== st.banker?.id && (st.banker ? st.banker.id === S.myId : st.hostId === S.myId) ? `<button class="seat-out-tag ${s.leaving ? 'on' : ''} ${Number(spot.x) > 60 && !spot.phone ? 'tl' : ''}" data-act="dealer-unseat" data-seat="${i}" title="${s.leaving ? 'Tap to let them stay' : 'Take this player out of the seat. A hand in play is finished first.'}">${s.leaving ? 'Unseating' : 'Unseat'}</button>` : ''}</div>
+    <div class="who" ${isMe ? '' : `data-throw-at="${s.playerId}" title="Tap to throw something at ${esc(s.name)}"`}><span class="name"><b class="sn" title="Seat ${i + 1}">${i + 1}</b>${s.streak >= 3 ? `<span class="fire">🔥</span>${s.streak} ` : ''}${s.playerId === st.hostId ? '♛ ' : ''}${esc(s.name)}${isMe ? ' (you)' : ''}${s.connected ? '' : ' (away)'}</span><span class="chips">${money(s.chips)}${net}</span>${ready}${isMe && st.banker?.id !== S.myId ? `<button class="seat-out-tag ${s.leaving ? 'on' : ''}" data-act="leave-seat" data-seat="${i}" title="${s.leaving ? 'Tap to stay in this seat' : 'Leave this seat. A hand in play is still finished first.'}">${s.leaving ? 'Leaving' : 'Sit out'}</button>` : ''}${!isMe && s.playerId !== st.banker?.id && (st.banker ? st.banker.id === S.myId : st.hostId === S.myId) ? `<button class="seat-out-tag ${s.leaving ? 'on' : ''}" data-act="dealer-unseat" data-seat="${i}" title="${s.leaving ? 'Tap to let them stay' : 'Take this player out of the seat. A hand in play is finished first.'}">${s.leaving ? 'Unseating' : 'Unseat'}</button>` : ''}</div>
   </div>`;
 }
 
@@ -4033,8 +4033,8 @@ function dealerPanelHTML(st) {
       <section class="dp-sec"><h4>Big bets sometimes</h4>${tick('bigOn', 'On')}${num('bigLimit', 'Up to', 1)}${num('bigPer', 'Times', 1)}${num('bigHands', 'Every (hands)', 1)}</section>
       <section class="dp-sec"><h4>Stop at loss</h4>${tick('capOn', 'On')}${num('capAmt', 'Loss', 1)}<span class="cap-lost">Lost ${money(st.lossCap?.lost || 0)}</span></section>
     </div>
-    <div class="dp-foot"><button class="btn dp-save${dealerDirty(st) ? ' dirty' : ''}" data-act="dealer-save">Save</button>${st.settings.decks !== 'csm' ? '<button class="btn" data-act="d-shuffle">🔀 Shuffle now</button>' : ''}<button class="btn" data-act="leave-dealer">Leave dealer seat</button></div>` : ''}
-  </div>${dealerBar(st) ? '<div class="dp-bar">Players, place your bets</div>' : ''}`;
+    <div class="dp-foot"><button class="btn dp-save${dealerDirty(st) ? ' dirty' : ''}" data-act="dealer-save">Save</button>${st.settings.decks !== 'csm' ? '<button class="btn" data-act="d-shuffle">🔀 Shuffle now</button>' : ''}</div>` : ''}
+  </div><button class="dp-bar" data-act="leave-dealer">Leave dealer seat</button>`;
 }
 function dealerSaveNow(st) {
   if (!dealerDirty(st)) return;
