@@ -996,6 +996,10 @@ body.aiming .seat.me[id^="seat-"] { outline: none; cursor: default; }
   .felt > .dealer { top: 6px; max-width: calc(100% - 128px); gap: 3px; }
   .dealer-name { font-size: 12.5px; height: 20px; letter-spacing: .5px; gap: 5px; display: block; text-overflow: ellipsis; text-align: center; line-height: 20px; }
   .dealer-name .btn.small { padding: 1px 6px; font-size: 11px; }
+  /* Keep the dealer line clear of the shoe in the top right corner; a long line wraps to two rows instead of being cut. */
+  /* The dealer area's empty edges must not catch taps meant for the Sit buttons under them. */
+  .felt:not(.in3d) > .dealer { pointer-events: none; } .felt:not(.in3d) > .dealer * { pointer-events: auto; }
+  .felt:not(.flip):not(.in3d) .dealer-name { height: auto; min-height: 20px; white-space: normal; padding-inline: 58px; }
   .dealer-total { left: calc(100% + 6px); }
   .dealer-total .total { font-size: 17px; padding: 1px 7px; }
   .dealer-total .fav-tag { font-size: 9px; }
@@ -1045,6 +1049,11 @@ body.aiming .seat.me[id^="seat-"] { outline: none; cursor: default; }
   .tray .tray-msg { font-size: 13px; line-height: 1.3; }
   body.in-room .float-balance { position: absolute; left: 8px; bottom: 6px; z-index: 21; height: 38px; max-width: 58%; display: flex; flex-wrap: wrap; align-items: baseline; align-content: center; column-gap: 6px; padding: 0 10px; border-radius: 12px; box-shadow: none; }
   .float-balance .lbl { font-size: 9px; letter-spacing: 1px; }
+  /* Dealer settings open on a phone: the panel gets the whole tray (it scrolls), the balance pill steps aside until the X closes it. */
+  body.in-room:not(.room3d) .tray:has(.tray-msg.has-x) { padding-bottom: 8px; overflow-y: auto; }
+  /* Dealer's own view on a phone: the shoe stands above the dealer line, not on it. */
+  .felt.flip > .shoe-box { bottom: 52px; left: 12px; }
+  body.in-room .tray-wrap:has(.tray-msg.has-x) .float-balance, body.in-room .tray:has(.tray-msg.has-x) .tray-row > .balance { display: none; }
   .float-balance b { font-size: 17px; line-height: 1; }
   .float-balance small { font-size: 9px; flex-basis: 100%; line-height: 1; }
   .tray .decide { gap: 3px; }
@@ -1715,3 +1724,5 @@ input[type=range].at-zero::-moz-range-thumb { background: #6b7280; }
 #modal-body h2, #modal-body h3, .office-body h3 { display: flow-root; } /* titles sit beside the X, never under it */
 /* A ledger inside a pop-up stays inside it (the phone rule above is for the blackjack ledger strip). */
 @media (max-width: 700px) { #modal .ledger-body { position: static; max-height: none; overflow: visible; padding: 0; background: none; border: 0; box-shadow: none; } }
+/* Narrow phones: the "Waiting for a dealer" card already says the cards wait, so the status line under it steps aside instead of running into the seat ring. */
+@media (max-width: 380px) { .mid-band:has(.frozen-banner.wait) > .status { display: none; } }

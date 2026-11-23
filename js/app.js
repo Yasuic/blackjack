@@ -1,17 +1,17 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { startPresence } from './presence.js?v=20261123a';
-import { outerLink } from './shell.js?v=20261123a';
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe } from './game.js?v=20261123a';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261123a';
-import { bestMove, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261123a';
-import { tickSound, winSound } from './fx.js?v=20261123a';
-import * as HX from './history.js?v=20261123a';
-import { webglOK, initRoom } from './room3d.js?v=20261123a';
-import { COPY_BTN, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261123a';
-import { topToolsHTML, initTopTools, setProfit, setRisk, cardScale } from './toptools.js?v=20261123a';
-import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261123a';
+import { startPresence } from './presence.js?v=20261123b';
+import { outerLink } from './shell.js?v=20261123b';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe } from './game.js?v=20261123b';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261123b';
+import { bestMove, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261123b';
+import { tickSound, winSound } from './fx.js?v=20261123b';
+import * as HX from './history.js?v=20261123b';
+import { webglOK, initRoom } from './room3d.js?v=20261123b';
+import { COPY_BTN, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261123b';
+import { topToolsHTML, initTopTools, setProfit, setRisk, cardScale } from './toptools.js?v=20261123b';
+import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261123b';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
