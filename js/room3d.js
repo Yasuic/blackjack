@@ -189,6 +189,25 @@ const OFFICE_SIGN_LINES = ['Hours: 8AM to infinity AM', 'Compensation: negative 
 
 // Builds the whole office as a handful of merged meshes (one per material). Units are metres with the
 // floor at y = 0; the caller scales and places the group. Scene X = -plan x, Z = -plan y.
+// Three people the office asked for by place: the woman at the yellow desk by the wooden slats who
+// faces the small meeting room, the person across from her, and the man at the desk behind her.
+const SPECIAL = {
+  9: { name: 'Charlene', skin: '#f0c9a4', hair: '#3a2416', top: '#111214', legs: '#111214', longHair: true, dress: true, lush: true, lines: ['yooo look at my new keyboard'], rare: 0.1 },
+  10: { name: 'Felix', skin: '#e2ad82', hair: '#1d1712', top: '#e9e6df', legs: '#2b2f38', vest: '#131416', zip: true, lines: ['im going to the gym'] },
+  8: { name: 'Tony', skin: '#e8b98f', hair: '#2a1d14', top: '#4a6fa0', legs: '#2b2f38', wide: 0.8, spiky: true, recede: true, cup: 'DETOUR COFFEE', lines: ['WHY IS SERGIO CALLING ME AGAIN'] },
+  27: { name: 'Nigel', skin: '#e8b98f', hair: '#1d1712', top: '#f6f5f1', legs: '#3a3f47', tattoo: true, golf: true, buttons: true, nespresso: true },
+  // The middle block, seen from above with the sign cupboard at the top. Bottom row, left to right: 31, 30, 29, 28. Top row: 35, 34, 33, 32.
+  31: { name: 'Henry', skin: '#e2ad82', hair: '#0f0d0c', top: '#5b6470', legs: '#2b2f38', postits: true, pinkKeys: true },
+  34: { name: 'David', skin: '#e8b98f', hair: '#2a1d14', top: '#2f3640', legs: '#22262d', glowKeys: true, goose: true, sideHair: true, lines: ['BRUCE DA GOOSE'] },
+  32: { name: 'Jeff', skin: '#e2ad82', hair: '#15110e', top: '#141518', legs: '#e9dfc8', shoes: '#f7f6f2', collar: true, glasses: true, nap: true, whiteKeys: true, cars: true, flask: true, burns: true, tea: true, lines: ['*sigh* fuck this shit', 'fuck im so tired', 'fuckkkkkkkkkk', 'MANIKAAAAAAA'] },
+  30: { name: 'Victor', skin: '#e8b98f', hair: '#1d1712', top: '#dfe8f2', legs: '#30343c', buttons: true, lines: ['ALL IN', "Let's get 龙邦?"] },
+  29: { name: 'Allie', skin: '#f0c9a4', hair: '#2a1d14', top: '#c0262d', legs: '#c0262d', longHair: true, dress: true, wide: 1.5, mess: true, cans: true, cough: true, lines: ['TRANSAKCIONNN'] },
+  22: { name: 'Gordon', skin: '#e2ad82', hair: '#e3b23c', top: '#5c6b7a', legs: '#2b2f38', wide: 1.95, eat: true, noTag: true },
+  12: { name: 'Alan', skin: '#e8b98f', hair: '#1d1712', top: '#f6f5f1', legs: '#3a3f47', wide: 0.82, buttons: true, truck: true },
+  11: { name: 'Thibaud', skin: '#f6dccb', hair: '#f2f2ee', top: '#a9cdea', legs: '#f1efea', shoes: '#f7f6f2', spiky: true, polo: true, cards: true },
+  7: { name: 'Yuya', skin: '#f0c9a4', hair: '#0f0d0c', top: '#d9cfbd', legs: '#3a3f47', bowl: true, word: 'MUJI', wordMany: true, mint: true, lines: ['Arigatoooo'] },
+};// The office people who can be borrowed as the house dealer at a practice table: name, colours and voice lines.
+export const COLLEAGUES = Object.values(SPECIAL).map((L) => ({ name: L.name, skin: L.skin, hair: L.hair, top: L.top, lines: L.lines || [] }));
 function buildOffice(signText, midShift = 0, midScale = 1, skipRoom = null, live = 'blackjack') {
   // The middle desks and their chairs move along x by midShift. Where the room is too short for them (a deep phone table), the block is squeezed along x so that all eight desks stay.
   const D0 = OFFICE, mx = (x) => 4.276 + midShift + (x - 4.276) * midScale;
@@ -218,7 +237,7 @@ function buildOffice(signText, midShift = 0, midScale = 1, skipRoom = null, live
     chrome: mk({ color: '#b9bec4', roughness: 0.25, metalness: 0.9 }),
     screen: mk({ color: '#0d0f12', roughness: 0.25, metalness: 0.2 }),
     // What the office screens show: the ARC Group logo, from the photo of it, lit like a screen that is on.
-    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261123f'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
+    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261123g'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
     dark: mk({ color: '#30353c', roughness: 0.6 }),
   };
   const group = new THREE.Group();
@@ -462,24 +481,7 @@ function buildOffice(signText, midShift = 0, midScale = 1, skipRoom = null, live
     { skin: '#a8703f', hair: '#0f0d0c', top: '#8a4b4b', legs: '#2f3340' },
     { skin: '#e2ad82', hair: '#3a2a1c', top: '#c9a23b', legs: '#262a30' },
   ];
-  // Three people the office asked for by place: the woman at the yellow desk by the wooden slats who
-  // faces the small meeting room, the person across from her, and the man at the desk behind her.
-  const SPECIAL = {
-    9: { name: 'Charlene', skin: '#f0c9a4', hair: '#3a2416', top: '#111214', legs: '#111214', longHair: true, dress: true, lush: true, lines: ['yooo look at my new keyboard'], rare: 0.1 },
-    10: { name: 'Felix', skin: '#e2ad82', hair: '#1d1712', top: '#e9e6df', legs: '#2b2f38', vest: '#131416', zip: true, lines: ['im going to the gym'] },
-    8: { name: 'Tony', skin: '#e8b98f', hair: '#2a1d14', top: '#4a6fa0', legs: '#2b2f38', wide: 0.8, spiky: true, recede: true, cup: 'DETOUR COFFEE', lines: ['WHY IS SERGIO CALLING ME AGAIN'] },
-    27: { name: 'Nigel', skin: '#e8b98f', hair: '#1d1712', top: '#f6f5f1', legs: '#3a3f47', tattoo: true, golf: true, buttons: true, nespresso: true },
-    // The middle block, seen from above with the sign cupboard at the top. Bottom row, left to right: 31, 30, 29, 28. Top row: 35, 34, 33, 32.
-    31: { name: 'Henry', skin: '#e2ad82', hair: '#0f0d0c', top: '#5b6470', legs: '#2b2f38', postits: true, pinkKeys: true },
-    34: { name: 'David', skin: '#e8b98f', hair: '#2a1d14', top: '#2f3640', legs: '#22262d', glowKeys: true, goose: true, sideHair: true, lines: ['BRUCE DA GOOSE'] },
-    32: { name: 'Jeff', skin: '#e2ad82', hair: '#15110e', top: '#141518', legs: '#e9dfc8', shoes: '#f7f6f2', collar: true, glasses: true, nap: true, whiteKeys: true, cars: true, flask: true, burns: true, tea: true, lines: ['*sigh* fuck this shit', 'fuck im so tired', 'fuckkkkkkkkkk', 'MANIKAAAAAAA'] },
-    30: { name: 'Victor', skin: '#e8b98f', hair: '#1d1712', top: '#dfe8f2', legs: '#30343c', buttons: true, lines: ['ALL IN', "Let's get 龙邦?"] },
-    29: { name: 'Allie', skin: '#f0c9a4', hair: '#2a1d14', top: '#c0262d', legs: '#c0262d', longHair: true, dress: true, wide: 1.5, mess: true, cans: true, cough: true, lines: ['TRANSAKCIONNN'] },
-    22: { name: 'Gordon', skin: '#e2ad82', hair: '#e3b23c', top: '#5c6b7a', legs: '#2b2f38', wide: 1.95, eat: true, noTag: true },
-    12: { name: 'Alan', skin: '#e8b98f', hair: '#1d1712', top: '#f6f5f1', legs: '#3a3f47', wide: 0.82, buttons: true, truck: true },
-    11: { name: 'Thibaud', skin: '#f6dccb', hair: '#f2f2ee', top: '#a9cdea', legs: '#f1efea', shoes: '#f7f6f2', spiky: true, polo: true, cards: true },
-    7: { name: 'Yuya', skin: '#f0c9a4', hair: '#0f0d0c', top: '#d9cfbd', legs: '#3a3f47', bowl: true, word: 'MUJI', wordMany: true, mint: true, lines: ['Arigatoooo'] },
-  };
+
   const bodyMat = mk({ vertexColors: true, roughness: 0.85 });
   // Joins captured pieces into one geometry; each piece keeps the colour of the material it was drawn with.
   const joinColored = (items) => {
@@ -755,6 +757,30 @@ function buildOffice(signText, midShift = 0, midScale = 1, skipRoom = null, live
   });
   let nextTrip = 0, dbgTrip = null, nextTalk = 0, snowAt = 0;
   group.userData.trip = (who, kind) => { dbgTrip = [who, kind]; };
+  // A practice table borrows one colleague as its dealer: they get up and walk out of the office part (their coffee
+  // route) and stay away while they deal; their voice lines are said over the dealer at the table (holder). null gives
+  // them back: they walk back to their desk.
+  let borrowed = null;
+  group.userData.borrow = (name, holder) => {
+    if (borrowed?.name === (name || null) && borrowed?.holder === holder) return;
+    if (borrowed) {
+      const b = borrowed; borrowed = null;
+      const q = walkers.find((w) => w.name === b.name);
+      if (q) { q.toTable = false; if (q.state === 'away') q.until = 0; }
+      else if (DESK_OF[b.name]) DESK_OF[b.name].visible = true;
+      const t = talkers.find((x) => x.name === b.name);
+      if (t) { if (t.on) t.on.visible = false; t.on = null; t.holder = b.oldHolder; t.cache = {}; }
+    }
+    if (!name || !DESK_OF[name]) return;
+    const q = walkers.find((w) => w.name === name), t = talkers.find((x) => x.name === name);
+    if (q) {
+      q.toTable = true;
+      if (q.state === 'sit') { q.sleep = false; q.talk = null; if (q.say) q.say.visible = false; q.path = q.route; q.state = 'go'; q.i = 0; q.d = 0; q.last = performance.now(); q.seat.visible = false; q.wg.visible = true; }
+    } else DESK_OF[name].visible = false;
+    let oldHolder = null;
+    if (t) { if (t.on) t.on.visible = false; t.on = null; oldHolder = t.holder; t.holder = holder; t.cache = {}; }
+    borrowed = { name, holder, oldHolder };
+  };
   // Test mode: everybody at a desk says a line at once, the next line of their list on each press.
   group.userData.talk = () => {
     const now = performance.now(); let n = 0;
@@ -814,11 +840,13 @@ function buildOffice(signText, midShift = 0, midScale = 1, skipRoom = null, live
       if (q.state === 'away') { if (now > q.until) { if (q.sleep) { q.nap.lying.visible = false; q.nap.gl.visible = false; } q.state = 'back'; q.i = q.path.length - 1; q.d = 0; q.wg.visible = true; if (q.say) q.say.visible = false; } continue; }
       const dir = q.state === 'go' ? 1 : -1, from = q.path[q.i], to = q.path[q.i + dir];
       if (!to) {
-        if (q.state === 'go' && q.sleep) { q.state = 'away'; q.until = now + 14000 + Math.random() * 10000; q.wg.visible = false; q.nap.lying.visible = true; q.nap.gl.visible = true; }
+        if (q.state === 'go' && q.toTable) { q.state = 'away'; q.until = Infinity; q.wg.visible = false; if (q.sleep) { q.nap.lying.visible = false; q.nap.gl.visible = false; } }
+        else if (q.state === 'go' && q.sleep) { q.state = 'away'; q.until = now + 14000 + Math.random() * 10000; q.wg.visible = false; q.nap.lying.visible = true; q.nap.gl.visible = true; }
         else if (q.state === 'go' && q.talk) { // stands by the desk, turned to the colleague, and talks for a while
           q.state = 'away'; q.until = now + 7000 + Math.random() * 5000; q.wg.position.set(from.x, 0, from.z);
           q.wg.rotation.y = Math.atan2(-(q.talk.at.x - from.x), -(q.talk.at.z - from.z)); q.wa.visible = true; q.wb.visible = false; q.say.visible = true;
         } else if (q.state === 'go') { q.state = 'away'; q.until = now + 5000 + Math.random() * 6000; q.wg.visible = false; }
+        else if (q.toTable) { q.sleep = false; q.talk = null; q.path = q.route; q.state = 'go'; q.i = 0; q.d = 0; } // back at the desk just as they were asked to deal: off again
         else { q.state = 'sit'; q.wg.visible = false; q.seat.visible = true; }
         continue;
       }
@@ -996,7 +1024,7 @@ function buildStorefront() {
     lamp: lam('#c8161d', 0.6), bulb: lit('#ffe9a8'), red: lit('#c8161d'), gold: lit('#f4c542'), wood: lam('#7a5234', 0.35),
     glass: new THREE.MeshBasicMaterial({ color: '#dff3f7', transparent: true, opacity: 0.13, depthWrite: false }),
     awning: new THREE.MeshBasicMaterial({ map: canvasTexture(512, 64, (g, w, h) => { for (let i = 0; i < 16; i++) { g.fillStyle = i % 2 ? '#fff6e6' : '#f08a1c'; g.fillRect((i * w) / 16, 0, w / 16 + 1, h); } }), side: THREE.DoubleSide }),
-    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261123f') }),
+    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261123g') }),
     menu: new THREE.MeshBasicMaterial({ map: canvasTexture(256, 384, (g, w, h) => {
       g.fillStyle = '#c8161d'; g.fillRect(0, 0, w, h); g.fillStyle = '#f4c542'; g.fillRect(14, 14, w - 28, 44);
       const r = rng(11); g.fillStyle = '#fff3d6';
@@ -1332,9 +1360,11 @@ export function initRoom(container, feltEl, { phone, hud = null, size = null, ga
   // The figure's own space: table top at y = 0, the table straight ahead along +z.
   function makeFigure(p, standing, reach = 128) {
     const look = p.look || {};
-    const skin = lam({ color: SKIN[look.skin ?? 2] || SKIN[2], flatShading: true });
-    const hair = lam({ color: HAIR[look.hair ?? 0] || HAIR[0], flatShading: true });
-    const shirt = lam({ color: new THREE.Color().setHSL(hashHue(String(p.id).split('#')[0]) / 360, 0.5, 0.42), flatShading: true });
+    // A colleague from the office who deals at a practice table keeps their own colours (look.colors).
+    const own = look.colors || null;
+    const skin = lam({ color: own?.skin || SKIN[look.skin ?? 2] || SKIN[2], flatShading: true });
+    const hair = lam({ color: own?.hair || HAIR[look.hair ?? 0] || HAIR[0], flatShading: true });
+    const shirt = lam({ color: own?.top || new THREE.Color().setHSL(hashHue(String(p.id).split('#')[0]) / 360, 0.5, 0.42), flatShading: true });
     const g = new THREE.Group();
     const up = standing ? 34 : 0; // a standing person is a little taller than a seated one
     const torso = new THREE.Mesh(torsoGeo, shirt); torso.scale.z = 0.58; torso.position.y = -22 + up; torso.castShadow = true;
@@ -1734,6 +1764,8 @@ export function initRoom(container, feltEl, { phone, hud = null, size = null, ga
   });
 
   let peopleRev = 0, flipped = false; // flipped: the felt is laid out for the dealer and turned to face them
+  // The place over a borrowed colleague's head, in the office's own space (their voice lines hang from it).
+  const lentHolder = new THREE.Object3D(); office.add(lentHolder); let lentFig = null;
   let peopleKey = '', figs = new Map(), stoolGroup = null, myFig = null, myStool = null, sidePts = [], seatEdge = new Map();
   let lastPeople = null, lastChips = null;
   let brawl = null; // { from, to, t0, ms, ... }: see punch()
@@ -1784,6 +1816,9 @@ export function initRoom(container, feltEl, { phone, hud = null, size = null, ga
         f.userData.armY = f.userData.arms[1].position.y;
         if (p.isMe) myFig = f;
       }
+      // A practice table's dealer is a colleague from the office: their desk empties and their lines are said here.
+      const lent = list.find((p) => p.isDealer && p.colleague);
+      if (lent) { lentFig = figs.get(lent.id); office.userData.borrow?.(lent.colleague, lentHolder); } else { lentFig = null; office.userData.borrow?.(null); }
       // Everyone but you. From your own chair the nearest of them fill the bottom corners of the screen,
       // so each one is hidden while it would be drawn down there (see the loop below).
       others = myFig ? [...figs.values()].filter((f) => f !== myFig) : [];
@@ -2414,6 +2449,7 @@ export function initRoom(container, feltEl, { phone, hud = null, size = null, ga
     if (!window.__officeAway && idleFigs(now)) dirty = Math.max(dirty, 1);
     if (liveStep(now, dt)) dirty = Math.max(dirty, 2);
     if (gestStep(now)) dirty = Math.max(dirty, 2);
+    if (lentFig) { lentFig.getWorldPosition(lentHolder.position); office.worldToLocal(lentHolder.position); lentHolder.position.y = 0; }
     if (office.userData.tick?.(now) || now - ambAt > 80) { ambAt = now; dirty = Math.max(dirty, 1); }
     if (now - fpsAt >= 1000) { fps = Math.round((frames * 1000) / (now - fpsAt)); frames = 0; fpsAt = now; }
     if (moveKeys.size) {
@@ -2632,6 +2668,7 @@ export function initRoom(container, feltEl, { phone, hud = null, size = null, ga
     debugSeat(name) { const m = DESK_OF[name]; if (!m) return null; if (!m.parent) return [m.position.x, m.position.y, m.position.z, 0, -1]; const v = new THREE.Vector3(), w = new THREE.Vector3(); m.getWorldPosition(v); m.localToWorld(w.set(0, 0, -1)); office.worldToLocal(v); office.worldToLocal(w); return [v.x, v.y, v.z, w.x - v.x, w.z - v.z]; },
     debugTrip(who, kind) { office.userData.trip?.(who, kind); touch(); },
     debugTalk() { const n = office.userData.talk?.(); touch(); return n; },
+    debugLent() { if (!lentFig) return null; const v = lentHolder.position; return [-v.x, v.y, -v.z]; }, // where the borrowed dealer stands, for debugLook
     debugNear(g) { const T = OTHER_TABLES[g]; if (!T) return; const c = office.localToWorld(new THREE.Vector3(-T.x, 0, -T.y)); goal.t.set(c.x, goal.t.y, c.z); nearAt = 0; nearTable(performance.now() + 5000); },
     debugLook(a, b) { dbgCam = a ? { p: new THREE.Vector3(-a[0], a[1], -a[2]), t: new THREE.Vector3(-b[0], b[1], -b[2]) } : null; touch(); },
     zoomBy(d) { zoom(d > 0 ? 0.86 : 1.16); },

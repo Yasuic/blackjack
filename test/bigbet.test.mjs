@@ -91,6 +91,7 @@ const tryBet = (t, id, main, big) => { try { t.setBet(id, { main, sides: {}, rea
 // Chips still add up with big bets in a long random run.
 { const t = mk();
   t.setBigBet('bank', { limit: 400, per: 3, hands: 4 });
+  t.setLossCap('bank', false); // this run checks chip totals; a losing streak must not end the dealer's turn
   for (let r = 0; r < 300; r++) {
     for (const id of ['a', 'b']) {
       if (t.players[id].chips < 600) t.giveChips(id, 5000);

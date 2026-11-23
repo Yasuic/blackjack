@@ -1,18 +1,18 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { startPresence } from './presence.js?v=20261123f';
-import { outerLink } from './shell.js?v=20261123f';
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe, destName } from './game.js?v=20261123f';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261123f';
-import { bestMove, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261123f';
-import { tickSound, winSound } from './fx.js?v=20261123f';
-import * as HX from './history.js?v=20261123f';
-import { webglOK, initRoom } from './room3d.js?v=20261123f';
-import { COPY_BTN, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261123f';
-import { topToolsHTML, initTopTools, setProfit, setPractice, setRisk, cardScale, profitLineHTML } from './toptools.js?v=20261123f';
-import { statsHTML } from './pstats.js?v=20261123f';
-import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261123f';
+import { startPresence } from './presence.js?v=20261123g';
+import { outerLink } from './shell.js?v=20261123g';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe, destName } from './game.js?v=20261123g';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261123g';
+import { bestMove, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261123g';
+import { tickSound, winSound } from './fx.js?v=20261123g';
+import * as HX from './history.js?v=20261123g';
+import { webglOK, initRoom, COLLEAGUES } from './room3d.js?v=20261123g';
+import { COPY_BTN, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261123g';
+import { topToolsHTML, initTopTools, setProfit, setPractice, setRisk, cardScale, profitLineHTML } from './toptools.js?v=20261123g';
+import { statsHTML } from './pstats.js?v=20261123g';
+import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261123g';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -1462,7 +1462,8 @@ function roomPeople(st) {
     list.push({ id: p.id + '#' + i, name: p.name, look: p.look || { skin: 2, hair: 0 }, seat: i, seats: st.seats.length, isMe: false, isDealer: false, x: at[i].x, y: at[i].y, bet: betTotal(seat.bet) });
   });
   // The house dealer stands behind the table too, so someone is seen dealing the cards.
-  if (!st.banker && st.frozen) list.push({ id: 'house-dealer', name: 'Dealer', look: { skin: 2, hair: 0 }, seat: null, seats: st.seats.length, isMe: false, isDealer: true, bet: 0 });
+  // Practice: a colleague from the office deals, in their own colours (room3d COLLEAGUES).
+  if (!st.banker && st.frozen) { const c = COLLEAGUES.find((x) => x.name === st.houseDealer); list.push({ id: 'house-dealer', name: c?.name || 'Dealer', colleague: c?.name || null, look: c ? { colors: { skin: c.skin, hair: c.hair, top: c.top } } : { skin: 2, hair: 0 }, seat: null, seats: st.seats.length, isMe: false, isDealer: true, bet: 0 }); }
   return [list, order.map((i, pos) => ({ seat: i, x: spots[pos].x, y: spots[pos].y }))];
 }
 function getZoom() { const z = Number(safeGet('bj-zoom')); return z >= 0.6 && z <= 1.6 ? z : 1; }
@@ -2297,7 +2298,7 @@ function feltHTML(st) {
     dealerSeat = `<div class="dealer-name" ${isBanker ? '' : `data-throw-at="${b.id}" title="Tap to throw something at the dealer"`}>${esc(b.name)}${isBanker ? ' (you)' : ''} is the dealer ${isBanker ? '' : `<span class="chips">${money(b.chips)}</span>`} ${net}
 </div>`;
   } else {
-    dealerSeat = `<div class="dealer-name">${st.frozen ? 'Dealer: house (automatic)' : 'No dealer yet'}
+    dealerSeat = `<div class="dealer-name">${st.frozen ? (st.houseDealer ? `${esc(st.houseDealer)} deals (practice)` : 'Dealer: house (automatic)') : 'No dealer yet'}
       ${me && !st.vote ? '<button class="btn small gold" data-act="sit-dealer">Ask to be dealer</button>' : ''}</div>`;
   }
   const { order, spots, box } = seatSpots(st);
@@ -3495,7 +3496,7 @@ function runAct(el) {
     // Host only
     case 'h-frozen': hostDo((t) => {
       if (!(t.phase === 'betting' || t.phase === 'settled')) throw new Error('Change this between rounds.');
-      t.setFrozen(el.dataset.on === '1');
+      t.setFrozen(el.dataset.on === '1', COLLEAGUES[Math.floor(Math.random() * COLLEAGUES.length)]?.name);
       t.addLog(t.frozen ? 'The host froze the ledger: the house deals and those hands are practice.' : 'The ledger freeze is off. Chips and buy-ins are back to where they were before it.');
     }); break;
     case 'h-shuffle':

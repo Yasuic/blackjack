@@ -707,11 +707,13 @@ export class Table {
   // results go back to what they were just before it started. Only the cards carry on: the shoe is
   // not touched. The practice rounds stay in the hand history, marked as practice.
   snapOf(p) { return { chips: p.chips, totalIn: p.totalIn, boughtIn: p.boughtIn || 0, houseNet: p.houseNet || 0, streak: p.streak || 0 }; }
-  setFrozen(on) {
+  // who: the office colleague who deals the practice rounds (picked at random by the host's browser), or none.
+  setFrozen(on, who = null) {
     on = !!on;
     if (on === !!this.frozen) return;
     if (this.inRound()) throw new Error('Wait for the round to end.');
     this.frozen = on;
+    this.houseDealer = on && typeof who === 'string' ? who.slice(0, 30) : null;
     if (on) {
       this.frozenSnap = {};
       for (const p of Object.values(this.players)) this.frozenSnap[p.id] = this.snapOf(p);
@@ -1790,6 +1792,7 @@ export class Table {
         canVote: this.vote.voters.includes(forClientId) && !(forClientId in this.vote.votes),
       } : null,
       frozen: !this.banker && !!this.frozen,
+      houseDealer: !this.banker && this.frozen ? this.houseDealer || null : null,
       noDealer: !this.banker && !this.frozen,
       bankShort: this.bankShort(),
       canPeek: !!this.rabbit && !this.inRound(),
