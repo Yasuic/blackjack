@@ -1,6 +1,7 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
+<<<<<<< Updated upstream
 import { outerLink } from './shell.js?v=20261122zm';
 import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe } from './game.js?v=20261122zm';
 import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122zm';
@@ -12,6 +13,19 @@ import { showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffi
 import { makeVault, makeOpener, cleanBox, cleanPiece } from './vault.js?v=20261122zm';
 import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122zm';
 import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122zm';
+=======
+import { outerLink } from './shell.js?v=20261122zm';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe } from './game.js?v=20261122zm';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122zm';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122zm';
+import { tickSound, winSound } from './fx.js?v=20261122zm';
+import * as HX from './history.js?v=20261122zm';
+import { webglOK, initRoom } from './room3d.js?v=20261122zm';
+import { autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261122zm';
+import { makeVault, makeOpener, cleanBox, cleanPiece } from './vault.js?v=20261122zm';
+import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122zm';
+import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122zm';
+>>>>>>> Stashed changes
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -4196,11 +4210,12 @@ document.addEventListener('change', (e) => {
 // screen is kept awake where the browser allows it. A tap or a key brings the table back.
 let afk = null;
 function afkScreen(on) {
+  try { if (on) sessionStorage.setItem('bj-afk', '1'); else sessionStorage.removeItem('bj-afk'); } catch { /* fine */ }
   if (!on) { if (!afk) return; clearInterval(afk.timer); afk.el.remove(); try { afk.lock?.release(); } catch { /* fine */ } afk = null; window.__afkScreen = false; S.room?.home?.(); return; }
   if (afk) return;
   const el = document.createElement('div');
   el.id = 'afk-screen';
-  el.style.cssText = 'position:fixed;inset:0;z-index:100000;background:#000;color:#fff;font:17px/1.6 Aptos,Calibri,"Segoe UI",Arial,sans-serif;padding:32px;overflow:auto;cursor:default';
+  el.style.cssText = 'position:fixed;inset:0;z-index:100000;background:#000;color:#fff;font:12px/1.4 Aptos,Calibri,"Segoe UI",Arial,sans-serif;padding:32px;overflow:auto;cursor:default';
   document.body.appendChild(el);
   afk = { el, timer: 0, lock: null, key: '', changed: Date.now() };
   window.__afkScreen = true;
@@ -4210,20 +4225,13 @@ function afkScreen(on) {
   const draw = () => {
     const st = S.state;
     if (!st) { el.textContent = 'Waiting for the table…'; return; }
-    const rows = officeRows(st).sort((a, b) => b.net - a.net);
-    const sign = (v) => (v > 0 ? '+' : '') + money(Math.round(v * 100) / 100);
-    // Only the ledger and the shoe (person, 2026-11-23). The shoe line shows cards left and the shuffle rule, never any order.
-    const lines = [
-      `Shoe: ${st.shoe ? st.shoe.left.toLocaleString() + ' cards left' : 'not shuffled yet'}, shuffle every 8 rounds ${st.settings.shuffle8 !== false ? 'on' : 'off'}`,
-      ...(st.halted ? ['The game is paused (security check). Come back and press Resume game.'] : []),
-      '',
-      'Ledger (+/- and chips now):',
-    ];
-    const col = (v) => (v > 0 ? '#3ddc84' : v < 0 ? '#ff5c5c' : '#ffffff');
-    const mine = rows.find((r) => r.id === S.myId);
-    el.innerHTML = (mine ? `<div style="font-size:26px;font-weight:700;margin-bottom:14px">Your balance: <span style="color:${col(mine.net)}">${esc(sign(mine.net))}</span>, chips ${esc(money(mine.chips))}</div>` : '')
-      + lines.map((l) => `<div>${esc(l) || '&nbsp;'}</div>`).join('')
-      + rows.map((r) => `<div>${esc(r.name)}: <span style="color:${col(r.net)};font-weight:700">${esc(sign(r.net))}</span>, chips ${esc(money(r.chips))}</div>`).join('');
+    // Only this player's +/- as a plain number (green, red, white at zero) and the dealer's cards as ranks with
+    // no suits, '?' for the face down card (person, 2026-11-23). The ledger number changes only once a hand is settled.
+    const mine = officeRows(st).find((r) => r.id === S.myId);
+    const net = mine ? Math.round(mine.net * 100) / 100 : 0;
+    const col = net > 0 ? '#3ddc84' : net < 0 ? '#ff5c5c' : '#ffffff';
+    const ranks = (st.dealer?.cards || []).map((c) => (c.hidden || !c.r ? '?' : c.r === '10' ? 'T' : String(c.r))).join('');
+    el.innerHTML = `<span style="color:${col}">${esc((net > 0 ? '+' : '') + money(net))}</span>${ranks ? `<span style="margin-left:18px">${esc(ranks)}</span>` : ''}`;
   };
   draw();
   afk.timer = setInterval(draw, 1000);
@@ -4232,6 +4240,9 @@ function officeRows(st) {
   return (st?.ledger || []).filter((r) => !r.kicked || r.chips !== r.totalIn).map((r) => ({ id: r.id, name: r.name, chips: r.chips, net: r.chips - r.totalIn - (r.houseNet || 0) }));
 }
 // Walking to another table takes this player's chips along (common.js walkTo). A host cashes out at its own table.
+// The AFK screen comes back by itself after an automatic update reload.
+try { if (sessionStorage.getItem('bj-afk') === '1') { const t0 = Date.now(); const back = () => { if (S.state) afkScreen(true); else if (Date.now() - t0 < 30000) setTimeout(back, 500); }; setTimeout(back, 800); } } catch { /* fine */ }
+autoUpdate('blackjack', () => { const st = S.state; return !S.hold && !S.handing && !S.taking && !(st && ['insurance', 'playing', 'dealer'].includes(st.phase)); });
 onOfficeBack('blackjack', () => S.code, () => S.role === 'host', (c) => { S.table?.carryIn(S.myId, c.amount, c.from, c.cid); hostChanged(); }, (m) => { if (S.conn?.open) S.conn.send(m); });
 setSeated(() => !!S.state?.seats?.some((x) => x && x.playerId === S.myId));
 setCashOut(async () => {

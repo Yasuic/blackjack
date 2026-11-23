@@ -1,5 +1,6 @@
 // The roulette page: a European roulette table for up to 9 in Nigel's room. The host's browser runs
 // the table (js/roulette.js); every other browser sends its bets there and is told only what it may see.
+<<<<<<< Updated upstream
 import { outerLink } from './shell.js?v=20261122zm';
 import { RouTable, ROU_SEATS, WHEEL, colorOf, betNumbers, betName, betPays, verifySpin } from './roulette.js?v=20261122zm';
 import { showSpin, drawWheel as paintWheel, wheelState } from './wheel.js?v=20261122zm';
@@ -7,6 +8,15 @@ import { winSound } from './fx.js?v=20261122zm';
 import { webglOK, initRoom } from './room3d.js?v=20261122zm';
 import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122zm';
 import { showDropped, markMyTurn, onOfficeBack, setSeated, officeView, params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML } from './common.js?v=20261122zm';
+=======
+import { outerLink } from './shell.js?v=20261122zm';
+import { RouTable, ROU_SEATS, WHEEL, colorOf, betNumbers, betName, betPays, verifySpin } from './roulette.js?v=20261122zm';
+import { showSpin, drawWheel as paintWheel, wheelState } from './wheel.js?v=20261122zm';
+import { winSound } from './fx.js?v=20261122zm';
+import { webglOK, initRoom } from './room3d.js?v=20261122zm';
+import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122zm';
+import { autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML } from './common.js?v=20261122zm';
+>>>>>>> Stashed changes
 
 import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261122zm';
 const PREFIX = 'bjt-ro-';
@@ -676,6 +686,7 @@ setInterval(() => showDropped((S.role === 'guest' && !!S.st && !!S.conn && S.con
 // This table's ledger lines for the office ledger.
 function officeRows(st) { return (st?.players || []).map((p) => ({ id: p.id, name: p.name, chips: p.chips, net: p.net })); }
 // Walking to another table takes this player's chips along. A host cashes out at its own table.
+autoUpdate(GAME, () => !S.hold && !S.handing && !S.taking && S.st?.phase !== 'closing');
 onOfficeBack(GAME, () => S.code, () => S.role === 'host', (c) => { S.table?.carryIn(S.myId, c.amount, c.from, c.cid); push(); }, (m) => S.net?.send(m));
 setSeated(() => Number.isInteger(S.st?.players?.find((p) => p.id === S.myId)?.seat));
 setCashOut(async () => {

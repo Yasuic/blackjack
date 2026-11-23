@@ -1,11 +1,20 @@
 // The baccarat page: a punto banco table for up to 9 in the small meeting room. The host's browser runs
 // the table (js/baccarat.js); every other browser sends its bets there and is told only what it may see.
+<<<<<<< Updated upstream
 import { outerLink } from './shell.js?v=20261122zm';
 import { BacTable, BAC_SEATS, BAC_SPOTS, BAC_KEYS, verifyShoe, cardText } from './baccarat.js?v=20261122zm';
 import { webglOK, initRoom } from './room3d.js?v=20261122zm';
 import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122zm';
 import { showDropped, markMyTurn, onOfficeBack, setSeated, officeView, params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML, breachCover } from './common.js?v=20261122zm';
 import { KeyGuard, mixKeys, newNonce } from './cardkeys.js?v=20261122zm';
+=======
+import { outerLink } from './shell.js?v=20261122zm';
+import { BacTable, BAC_SEATS, BAC_SPOTS, BAC_KEYS, verifyShoe, cardText } from './baccarat.js?v=20261122zm';
+import { webglOK, initRoom } from './room3d.js?v=20261122zm';
+import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122zm';
+import { autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML, breachCover } from './common.js?v=20261122zm';
+import { KeyGuard, mixKeys, newNonce } from './cardkeys.js?v=20261122zm';
+>>>>>>> Stashed changes
 
 import { shareHidden, startHold } from './vault.js?v=20261122zm';
 import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261122zm';
@@ -863,6 +872,7 @@ setInterval(() => breachCover(!!S.st?.halted, S.role === 'host', () => { if (S.r
 // This table's ledger lines for the office ledger.
 function officeRows(st) { return (st?.players || []).map((p) => ({ id: p.id, name: p.name, chips: p.chips, net: p.net })); }
 // Walking to another table takes this player's chips along. A host cashes out at its own table.
+autoUpdate(GAME, () => !S.hold && !S.handing && !S.taking && S.st?.phase !== 'peel');
 onOfficeBack(GAME, () => S.code, () => S.role === 'host', (c) => { S.table?.carryIn(S.myId, c.amount, c.from, c.cid); push(); }, (m) => S.net?.send(m));
 setSeated(() => Number.isInteger(S.st?.players?.find((p) => p.id === S.myId)?.seat));
 setCashOut(async () => {

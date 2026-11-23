@@ -67,6 +67,7 @@ export function boot(game, start) {
     f.allow = 'autoplay; fullscreen; clipboard-write; microphone; camera';
     f.src = src;
     f.dataset.page = pageOf(src);
+    f.addEventListener('load', () => { if (f !== cur && !f.classList.contains('loading')) away(f, true); });
     document.body.appendChild(f);
     return f;
   };
@@ -116,6 +117,30 @@ export function boot(game, start) {
   };
   next = make(first);
   whenReady(next);
+  // Automatic update (see autoUpdate in js/common.js): every open table reloads itself once it has no hand in
+  // play. The frame itself reloads only when just one table is open, so no table you host is ever dropped.
+  const TAG = new URL(import.meta.url).searchParams.get('v') || '';
+  const frames = () => [...new Set([cur, ...Object.values(kept)].filter(Boolean))];
+  let updating = false;
+  setInterval(async () => {
+    if (updating) return;
+    let live = '';
+    try { const r = await fetch('version.txt?t=' + Date.now(), { cache: 'no-store' }); const m = /v=(\w+)/.exec(await r.text()); live = m ? m[1] : ''; } catch { /* fine */ }
+    if (!live) return;
+    updating = true;
+    const until = Date.now() + 110000;
+    const step = () => {
+      let left = 0;
+      for (const f of frames()) {
+        let w = null; try { w = f.contentWindow; } catch { /* fine */ }
+        if (!w || !w.__officeTag || w.__officeTag === live) continue;
+        if (w.__officeIdle?.()) { try { w.location.reload(); } catch { /* fine */ } } else left++;
+      }
+      if (!left && TAG !== live && frames().length <= 1 && frames().every((f) => { try { return f.contentWindow.__officeIdle?.() !== false; } catch { return true; } })) { location.reload(); return; }
+      if (left && Date.now() < until) setTimeout(step, 3000); else updating = false;
+    };
+    step();
+  }, 120000);
   // The address bar keeps the office link; the frame's own address is kept for this tab, so a reload comes back to the same table.
   history.replaceState(null, '', topLink(first));
   let last = '';

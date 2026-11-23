@@ -118,6 +118,27 @@ export async function walkTo(current, g, url, code) {
 }
 // Inside the office every table you visited stays open. Coming back to one: the walk is over, the room takes you
 // to your chair, and the chips you carry are added here (a host adds them itself, a player asks the host).
+// ---------- Automatic update ----------
+// Every 2 minutes the page asks for version.txt (never from the cache). When a newer version is live, the page
+// reloads on its own, with no message and no button, but only while no hand is in play at this table (idle()).
+// A host reopens the same table from its saved copy and a player rejoins the same seat after the reload.
+// Inside the office frame the frame (js/shell.js) does the checking, so every open table is updated in turn.
+export const TAG = new URL(import.meta.url).searchParams.get('v') || '';
+export async function liveTag() {
+  try { const r = await fetch('version.txt?t=' + Date.now(), { cache: 'no-store' }); const m = /v=(\w+)/.exec(await r.text()); return m ? m[1] : ''; } catch { return ''; }
+}
+export function autoUpdate(game, idle) {
+  window.__officeTag = TAG;
+  window.__officeIdle = () => { try { return !!idle(); } catch { return false; } };
+  if (window.top !== window) return; // the office frame does it
+  const check = async () => {
+    const live = await liveTag();
+    if (!live || !TAG || live === TAG) return;
+    const tryNow = () => { if (window.__officeIdle()) location.reload(); else setTimeout(tryNow, 3000); };
+    tryNow();
+  };
+  setInterval(check, 120000);
+}
 export function onOfficeBack(game, getCode, isHost, hostCarry, guestSend) {
   window.__officeBack = () => {
     walking = false; walkCover(null);
