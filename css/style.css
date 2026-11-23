@@ -1703,3 +1703,15 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px;
 input[type=range]::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: #e8c46a; border: 2px solid #0b0d10; }
 input[type=range].at-zero::-webkit-slider-thumb { background: #6b7280; }
 input[type=range].at-zero::-moz-range-thumb { background: #6b7280; }
+
+/* Every panel and pop-up closes with one X at its top right (never a Close button). Big enough to tap on a phone. */
+.x-btn { width: 36px; height: 36px; display: grid; place-items: center; padding: 0; border-radius: 50%; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); font: 700 17px/1 Inter, sans-serif; cursor: pointer; flex: none; }
+.x-btn:hover { border-color: var(--gold); color: var(--gold); }
+.x-form { float: right; margin: -4px -4px 6px 10px; position: relative; z-index: 2; }
+.x-float { float: right; margin: -6px -6px 6px 10px; position: relative; z-index: 2; }
+.seat-zoom > .x-btn, .tray-msg.has-x > .x-btn { position: absolute; top: 6px; right: 6px; z-index: 3; }
+.tray-msg.has-x { position: relative; padding-right: 48px; }
+.chat-x { width: 32px; height: 32px; font-size: 16px; padding: 0; }
+#modal-body h2, #modal-body h3, .office-body h3 { display: flow-root; } /* titles sit beside the X, never under it */
+/* A ledger inside a pop-up stays inside it (the phone rule above is for the blackjack ledger strip). */
+@media (max-width: 700px) { #modal .ledger-body { position: static; max-height: none; overflow: visible; padding: 0; background: none; border: 0; box-shadow: none; } }

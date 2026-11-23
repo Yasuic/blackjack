@@ -30,6 +30,13 @@ export function toast(msg) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => (t.hidden = true), 2800);
 }
+// A tap outside a pop-up (on the dark backdrop) closes it, like its X and the Esc key.
+document.addEventListener('click', (e) => {
+  const d = e.target;
+  if (!(d instanceof HTMLDialogElement) || !d.open || d.id !== 'modal') return;
+  const r = d.getBoundingClientRect();
+  if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) d.close();
+});
 export function modal(html) { $('#modal-body').innerHTML = html; const d = $('#modal'); if (!d.open) d.showModal(); }
 const suitClass = (s) => ({ '♠': 's-s', '♥': 's-h', '♦': 's-d', '♣': 's-c' }[s] || '');
 // One playing card. c = null draws the back.
@@ -330,7 +337,7 @@ export function showOffice(code, myId) {
     d.addEventListener('click', (e) => { if (e.target === d || e.target.closest('[data-office-close]')) d.close(); });
     document.body.appendChild(d);
   }
-  d.innerHTML = `<div class="office-body">${officeLedgerHTML(code, myId)}${COPY_BTN}<button class="btn" data-office-close>Close</button></div>`;
+  d.innerHTML = `<div class="office-body"><button class="x-btn x-float" data-office-close aria-label="Close" title="Close">✕</button>${officeLedgerHTML(code, myId)}${COPY_BTN}</div>`;
   if (!d.open) d.showModal();
 }
 // Picking a player in the "All tables" view redraws that player's graph.
