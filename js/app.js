@@ -1,17 +1,17 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { outerLink } from './shell.js?v=20261122zh';
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe } from './game.js?v=20261122zh';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122zh';
-import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122zh';
-import { tickSound, winSound } from './fx.js?v=20261122zh';
-import * as HX from './history.js?v=20261122zh';
-import { webglOK, initRoom } from './room3d.js?v=20261122zh';
-import { showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261122zh';
-import { makeVault, makeOpener, cleanBox, cleanPiece } from './vault.js?v=20261122zh';
-import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122zh';
-import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122zh';
+import { outerLink } from './shell.js?v=20261122zi';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe } from './game.js?v=20261122zi';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261122zi';
+import { bestMove, strategyChart, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261122zi';
+import { tickSound, winSound } from './fx.js?v=20261122zi';
+import * as HX from './history.js?v=20261122zi';
+import { webglOK, initRoom } from './room3d.js?v=20261122zi';
+import { showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261122zi';
+import { makeVault, makeOpener, cleanBox, cleanPiece } from './vault.js?v=20261122zi';
+import { topToolsHTML, initTopTools, setProfit, cardScale } from './toptools.js?v=20261122zi';
+import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261122zi';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -733,6 +733,7 @@ function runAction(id, msg, onError) {
       case 'leave-dealer': t.leaveDealer(id); break;
       case 'leave-later': t.leaveLater(id, msg.on !== false); break;
       case 'dealer-max': t.setDealerMax(id, msg.amount, msg.side); break;
+      case 'dealer-shuf': t.setShuffle8(id, !!msg.on); break;
       case 'dealer-big': t.setBigBet(id, msg.off ? { off: true } : { limit: msg.limit, per: msg.per, hands: msg.hands }); break;
       case 'dealer-shuffle': t.dealerShuffle(id); break;
       case 'shuffle': t.playerShuffle(id); break;
@@ -2256,7 +2257,7 @@ function feltHTML(st) {
   const { me, isBanker } = myInfo(st);
   const shoeTxt = st.settings.decks === 'csm' ? 'Randomized: shuffled every round' :
     `${st.settings.decks} deck${st.settings.decks > 1 ? 's' : ''} · ${st.shoe.left}/${st.shoe.size} cards left · ` +
-    (st.settings.shuffleMode === 'rounds' ? `shuffle every ${st.settings.shuffleEvery} rounds` : `shuffle at ${st.settings.penetration}%`);
+    (st.settings.shuffleMode === 'rounds' ? `shuffle every ${st.settings.shuffleEvery} rounds` : `shuffle at ${st.settings.penetration}%`) + (st.settings.shuffle8 !== false ? ' or every 8 rounds' : '');
   const dealerBusy = inFlight(d.cards.map((c, i) => `${r}-d-${i}`));
   const dealerTotal = d.cards.length && !dealerBusy ? `<span class="total">${d.total > 21 ? 'Bust ' + d.total : d.total + (d.soft && d.total < 21 ? ' soft' : '')}</span>` : '';
   const b = st.banker;
@@ -2949,7 +2950,7 @@ function trayInner(st) {
   if (isBanker) {
     if (!(ph === 'betting' || ph === 'settled')) return '';
     return `<div class="tray-msg">${st.banker.chips < 0 ? `You are the dealer and you owe ${money(-st.banker.chips)} chips. Tap your balance to buy in.` : 'You are the dealer. Your chips pay winners and collect losing bets.'}</div>
-      <div class="actions dealer-max"><label for="dealer-max">Max bet</label><input id="dealer-max" type="number" inputmode="numeric" min="${st.settings.minBet}" step="1" value="${st.settings.maxBet}" /><label for="dealer-max-side">Max side bet</label><input id="dealer-max-side" type="number" inputmode="numeric" min="0" step="1" value="${st.settings.maxSideBet}" /><button class="btn small" data-act="dealer-max">Set</button><button class="btn" data-act="leave-dealer">Leave dealer seat</button></div>
+      <div class="actions dealer-max"><label for="dealer-max">Max bet</label><input id="dealer-max" type="number" inputmode="numeric" min="${st.settings.minBet}" step="1" value="${st.settings.maxBet}" /><label for="dealer-max-side">Max side bet</label><input id="dealer-max-side" type="number" inputmode="numeric" min="0" step="1" value="${st.settings.maxSideBet}" /><button class="btn small" data-act="dealer-max">Set</button><button class="btn small ${st.settings.shuffle8 !== false ? 'gold' : ''}" data-act="dealer-shuf" title="A fresh shuffle every 8 rounds. Tap to turn it ${st.settings.shuffle8 !== false ? 'off' : 'on'}.">Shuffle every 8: ${st.settings.shuffle8 !== false ? 'On' : 'Off'}</button><button class="btn" data-act="leave-dealer">Leave dealer seat</button></div>
       <div class="actions dealer-max dealer-big"><span class="dealer-big-title" title="Each player may bet above the maximum a few times. Unused ones expire after the hands, then they come back.">Big Bets Sometimes</span><label for="big-limit">Big bet up to</label><input id="big-limit" type="number" inputmode="numeric" min="${st.settings.maxBet + 1}" step="1" value="${st.big?.limit ?? st.settings.maxBet * 4}" /><label for="big-per">Big bets each</label><input id="big-per" type="number" inputmode="numeric" min="1" step="1" value="${st.big?.per ?? 2}" /><label for="big-hands">Every</label><input id="big-hands" type="number" inputmode="numeric" min="1" step="1" value="${st.big?.hands ?? 10}" /><label>hands</label><button class="btn small ${st.big ? '' : 'gold'}" data-act="dealer-big">${st.big ? 'Update' : 'Turn on'}</button>${st.big ? '<button class="btn small" data-act="dealer-big-off">Turn off</button>' : ''}</div>`;
   }
   if (!seat) {
@@ -3549,6 +3550,7 @@ function runAct(el) {
       toast(`Big Bets Sometimes: ${per} bet${per === 1 ? '' : 's'} of up to ${money(limit)} each, every ${hands} hand${hands === 1 ? '' : 's'}.`);
       break;
     }
+    case 'dealer-shuf': send({ t: 'dealer-shuf', on: S.state?.settings?.shuffle8 === false }); break;
     case 'dealer-big-off': send({ t: 'dealer-big', off: true }); toast('Big Bets Sometimes is off.'); break;
     case 'dealer-max': {
       const v = Math.round(Number($('#dealer-max')?.value)), sv = Math.round(Number($('#dealer-max-side')?.value));
@@ -4185,7 +4187,7 @@ function afkScreen(on) {
   if (afk) return;
   const el = document.createElement('div');
   el.id = 'afk-screen';
-  el.style.cssText = 'position:fixed;inset:0;z-index:100000;background:#000;color:#fff;font:16px/1.6 system-ui,-apple-system,Segoe UI,sans-serif;padding:32px;overflow:auto;cursor:default';
+  el.style.cssText = 'position:fixed;inset:0;z-index:100000;background:#000;color:#fff;font:17px/1.6 Aptos,Calibri,"Segoe UI",Arial,sans-serif;padding:32px;overflow:auto;cursor:default';
   document.body.appendChild(el);
   afk = { el, timer: 0, lock: null, key: '', changed: Date.now() };
   window.__afkScreen = true;
@@ -4214,14 +4216,18 @@ function afkScreen(on) {
       `Last change at the table: ${ago < 2 ? 'just now' : ago + ' s ago'}`,
       `Players online: ${online}`,
       `Shoe: ${st.shoe ? st.shoe.left.toLocaleString() + ' cards left' : ''}`,
-      st.halted ? 'The game is paused (security check). Come back and press Resume game.' : '',
+      ...(st.halted ? ['The game is paused (security check). Come back and press Resume game.'] : []),
+      '',
+      `Shuffle every 8 rounds: ${st.settings.shuffle8 !== false ? 'on' : 'off'}`,
       '',
       'Ledger (+/- and chips now):',
-      ...rows.map((r) => `${r.name}: ${sign(r.net)}, chips ${money(r.chips)}`),
-      '',
-      `Updated ${new Date().toLocaleTimeString()}`,
     ];
-    el.innerHTML = lines.map((l) => `<div>${esc(l) || '&nbsp;'}</div>`).join('');
+    const col = (v) => (v > 0 ? '#3ddc84' : v < 0 ? '#ff5c5c' : '#ffffff');
+    const mine = rows.find((r) => r.id === S.myId);
+    el.innerHTML = (mine ? `<div style="font-size:26px;font-weight:700;margin-bottom:14px">Your balance: <span style="color:${col(mine.net)}">${esc(sign(mine.net))}</span>, chips ${esc(money(mine.chips))}</div>` : '')
+      + lines.map((l) => `<div>${esc(l) || '&nbsp;'}</div>`).join('')
+      + rows.map((r) => `<div>${esc(r.name)}: <span style="color:${col(r.net)};font-weight:700">${esc(sign(r.net))}</span>, chips ${esc(money(r.chips))}</div>`).join('')
+      + `<div>&nbsp;</div><div style="color:#9aa3ad">Updated ${esc(new Date().toLocaleTimeString())}</div>`;
   };
   draw();
   afk.timer = setInterval(draw, 1000);

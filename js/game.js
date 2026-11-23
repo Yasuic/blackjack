@@ -10,6 +10,7 @@ export const DEFAULT_SETTINGS = {
   shuffleMode: 'penetration', // 'penetration' or 'rounds'
   penetration: 65,       // reshuffle once this % of the shoe has been dealt
   shuffleEvery: 5,       // or reshuffle every N rounds
+  shuffle8: true,        // also a fresh shuffle every 8 rounds (the dealer can turn it off)
   startChips: 1000,
   minBet: 10,
   maxBet: 75,
@@ -396,6 +397,7 @@ export class Table {
     // Never start a round the shoe may not finish: keep 10 cards per betting seat plus 12 for the dealer,
     // so the shuffle always happens between rounds and not in the middle of a hand.
     if (this.shoe.length < Math.min(this.shoeSize || Infinity, 12 + 10 * players)) return true;
+    if (s.shuffle8 !== false && this.roundsSinceShuffle >= 8) return true;
     if (s.shuffleMode === 'rounds') return this.roundsSinceShuffle >= Number(s.shuffleEvery);
     const dealt = 1 - this.shoe.length / this.shoeSize;
     return dealt * 100 >= Number(s.penetration);
@@ -444,6 +446,7 @@ export class Table {
     if (![1.5, 1.2, 1].includes(s.blackjackPays)) s.blackjackPays = [1.5, 1.2, 1].includes(Number(s.blackjackPays)) ? Number(s.blackjackPays) : (Number.isFinite(old.blackjackPays) ? old.blackjackPays : 1.5);
     s.sideBets = Array.isArray(s.sideBets) ? [...new Set(s.sideBets)].filter((k) => SIDE_KEYS.includes(k)) : (Array.isArray(old.sideBets) ? old.sideBets : DEFAULT_SETTINGS.sideBets);
     if (s.shuffleMode !== 'rounds') s.shuffleMode = 'penetration';
+    s.shuffle8 = s.shuffle8 !== false;
     for (const k of ['dealerHitsSoft17', 'allowSurrender', 'autoDeal']) s[k] = !!s[k];
     s.countTraining = false; // no card count is ever shown at this table
     s.seats = seatCount(s.seats, this.seats.length);
@@ -498,6 +501,12 @@ export class Table {
     this.ev('big bets on', clientId, `${per} x ${limit} / ${hands}`);
   }
 
+  // The shuffle every 8 rounds, on by default: the dealer turns it on or off (with no dealer, the host does).
+  setShuffle8(clientId, on) {
+    if (this.banker ? this.banker !== clientId : this.hostId && this.hostId !== clientId) throw new Error('Only the dealer turns the shuffle every 8 rounds on or off.');
+    this.settings = { ...this.settings, shuffle8: !!on };
+    this.addLog(`Shuffle every 8 rounds: ${on ? 'on' : 'off'}.`);
+  }
   setDealerMax(clientId, amount, sideAmount) {
     if (this.banker !== clientId) throw new Error('Only the dealer sets the maximum bets.');
     if (this.phase !== 'betting' && this.phase !== 'settled') throw new Error('Change the maximum bets between rounds.');
