@@ -831,6 +831,7 @@ function serveKeys(msg) {
   if (!Array.isArray(to) || to.length !== count || !to.every((d) => typeof d === 'string' && DEST_RE.test(d))) return no('no announced place');
   const opened = Number(st?.fair?.cards), known = Number.isFinite(opened) ? opened : 0;
   if (from !== known + 1) return no(`card ${from} asked while card ${known + 1} is next`);
+  if (st && st.hostId !== S.annHost) { S.annHost = st.hostId; S.announced = {}; }
   const A = (S.announced ||= {});
   for (let i = 0; i < count; i++) if (A[from + i] && A[from + i] !== to[i]) return no(`card ${from + i} was announced for ${A[from + i]}, now ${to[i]}`);
   noteAnnounce(from, to);
@@ -846,6 +847,9 @@ function noteAnnounce(from, to) {
   for (const k of keys.slice(0, Math.max(0, keys.length - 200))) delete A[k];
 }
 function checkDealt(st) {
+  // Card numbers belong to one host's table. A new host (Become host, Force take over) counts from its own
+  // numbers, so the places announced by the old host are forgotten then.
+  if (st && st.hostId !== S.annHost) { S.annHost = st.hostId; S.announced = {}; }
   const A = S.announced, list = st?.fair?.dealt;
   if (!A || !Array.isArray(list)) return;
   const F = (S.fair ||= { mine: {}, cur: {}, checks: {} });
