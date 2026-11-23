@@ -1247,6 +1247,16 @@ export class Table {
         seat.ready = false;
       }
     });
+    // A seat with no bet in this round is freed at once: the player keeps the chips, watches, and can sit again any time.
+    const unseated = [];
+    this.seats.forEach((seat, i) => {
+      if (!seat || seat.hands.length) return;
+      this.ev('unseated: no bet this round', seat.playerId, `seat ${i + 1}`);
+      if (!unseated.includes(seat.playerId)) unseated.push(seat.playerId);
+      this.seats[i] = null;
+    });
+    for (const id of unseated) { const p = this.players[id]; if (!p) continue; this.fixSeat(p); this.addLog(`${p.name} was unseated for not betting.`); }
+    this.unseated = { round: this.round, ids: unseated };
     this.dealer = { cards: [], revealed: false };
     for (let pass = 0; pass < 2; pass++) {
       for (const i of active) this.seats[i].hands[0].cards.push(this.draw());
@@ -1632,6 +1642,7 @@ export class Table {
       settings: this.settings,
       phase: this.phase,
       round: this.round,
+      unseated: this.unseated || null,
       turn: this.turn,
       dealer: {
         cards: hide ? [this.dealer.cards[0], { hidden: true }] : this.dealer.cards,

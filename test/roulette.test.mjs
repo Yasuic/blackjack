@@ -101,7 +101,7 @@ ok(spinNumber('abc', { a: '1' }) === spinNumber('abc', { a: '1' }) && [0, 1, 2, 
   t.next(); t.join('c', 'Cat'); t.bet('a', 'odd', 5); t.pressSpin('a'); t.pressSpin('b'); ok(t.phase === 'betting', 'a player who is back online must press again');
   t.clearBets('a'); t.spinIfAll(); ok(Object.keys(t.ready).length === 0, 'with no bet left on the table the presses are cleared');
   t.bet('a', 'odd', 5); t.pressSpin('a'); t.pressSpin('b'); t.kick('c'); ok(t.phase === 'done' && t.round === 3, 'a removed player is not waited for');
-  { const q = new RouTable(); q.join('a', 'Ann'); q.join('b', 'Bob'); q.bet('a', 'red', 5); q.pressSpin('a'); q.setQuiet('b', true); ok(q.phase === 'done', 'a player whose browser went silent is not waited for'); q.next(); q.setQuiet('b', false); q.bet('a', 'red', 5); q.pressSpin('a'); ok(q.phase === 'betting', 'once heard again, that player must press'); }
+  { const q = new RouTable(); q.join('a', 'Ann'); q.join('b', 'Bob'); q.bet('a', 'red', 5); q.pressSpin('a'); q.setQuiet('b', true); ok(q.phase === 'done', 'a player whose browser went silent is not waited for'); q.next(); q.setQuiet('b', false); q.bet('b', 'black', 5); q.bet('a', 'red', 5); q.pressSpin('a'); ok(q.phase === 'betting', 'once heard again, that player must press'); }
   const u = RouTable.fromPublic((() => { const x = new RouTable(); x.join('a', 'Ann'); x.join('b', 'Bob'); x.bet('a', 'red', 5); x.pressSpin('a'); return x.publicState('b'); })(), 'b');
   ok(u.ready.a === true && u.phase === 'betting', 'presses survive a move of the table to another browser');
 }

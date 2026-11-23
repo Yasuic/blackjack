@@ -179,6 +179,7 @@ export class RouTable {
     if (this.phase !== 'betting') throw new Error('Bets open again after this spin.');
     key = String(key);
     if (!betNumbers(key)) throw new Error('No such bet.');
+    if (p.seat < 0 && id !== this.bankId) { const s = this.freeSeat(); if (s >= 0) p.seat = s; } // a watcher's bet sits them down when a seat is free
     if (p.seat < 0) throw new Error('The table is full. You can watch.');
     if (id === this.bankId) throw new Error('You are the dealer. The dealer does not bet.');
     amount = Math.round(Number(amount));
@@ -215,18 +216,26 @@ export class RouTable {
     if (this.staked(id) > 0) throw new Error('Clear your bets first.');
     for (const [k, v] of Object.entries(last)) this.bet(id, k, v);
   }
+  // A seated player with no bet when the round starts loses the seat: chips stay theirs, they watch, and their
+  // next bet sits them down again. The dealer is never unseated.
+  unseatIdle(round) {
+    const ids = Object.values(this.players).filter((p) => !p.kicked && p.seat >= 0 && p.id !== this.bankId && !(this.staked(p.id) > 0)).map((p) => p.id);
+    for (const id of ids) { this.players[id].seat = -1; this.addLog(`${this.players[id].name} was unseated for not betting.`); }
+    this.unseated = { round, ids };
+  }
   canSpin() { return this.phase === 'betting' && Object.keys(this.bets).some((id) => this.staked(id) > 0); }
   chipsTotal() { return r2(Object.values(this.players).reduce((a, p) => a + p.chips, 0) + Object.keys(this.bets).reduce((a, id) => a + this.staked(id), 0)); }
 
   // Bets close first. Guests then send their seeds, and the wheel turns once they are in (or after a short wait).
   closeBets() {
     if (!this.canSpin()) throw new Error('Place a bet first.');
+    this.unseatIdle(this.round + 1);
     this.phase = 'closing'; this.closeAt = Date.now(); this.fair.seeds = {}; this.ready = {};
   }
   // Players whose seed the host waits for: everyone online except the host itself.
   seedWaiting() { return Object.values(this.players).filter((p) => p.id !== this.hostId && p.connected && !p.quiet && !p.kicked && !this.fair.seeds[p.id]).map((p) => p.id); }
   doSpin() {
-    if (this.phase === 'betting') { if (!this.canSpin()) throw new Error('Place a bet first.'); this.phase = 'closing'; this.ready = {}; }
+    if (this.phase === 'betting') { if (!this.canSpin()) throw new Error('Place a bet first.'); this.unseatIdle(this.round + 1); this.phase = 'closing'; this.ready = {}; }
     if (this.phase !== 'closing') return;
     const f = this.fair, seeds = {};
     // Every player's seed counts except the host's own: the host knows the hidden seed, so its own could be picked to fit.
@@ -278,7 +287,7 @@ export class RouTable {
       bets: this.bets, lastBets: this.lastBets, totals, canSpin: this.canSpin(), ready: Object.keys(this.ready), waiting: this.waitingFor(), history: this.history.slice(-60),
       betLeft: this.betStart !== null && this.settings.betTime ? Math.max(0, this.settings.betTime * 1000 - (Date.now() - this.betStart)) : null,
       players: Object.values(this.players).filter((p) => !p.kicked).map((p) => ({ id: p.id, name: p.name, connected: p.connected, chips: p.chips, totalIn: p.totalIn, look: p.look, seat: p.seat, away: !!p.quiet, net: ledgerNet(this, p), base: this.base?.[p.id] || null })),
-      bankId: this.bankId, bankLeaving: !!this.bankLeaving, frozen: this.frozen, roundFrozen: !!this.roundFrozen, ledgerSum: this.ledgerSum(),
+      bankId: this.bankId, bankLeaving: !!this.bankLeaving, unseated: this.unseated || null, frozen: this.frozen, roundFrozen: !!this.roundFrozen, ledgerSum: this.ledgerSum(),
       fair: { nextCommit: this.fair.next.commit, mySeed: !!this.fair.seeds[forId], seeds: Object.keys(this.fair.seeds).filter((id) => id !== this.hostId).length, spins: this.spins.slice(-25) },
       log: this.log.slice(-50),
     };

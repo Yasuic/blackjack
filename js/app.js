@@ -1853,6 +1853,8 @@ function render(note) {
   updateTimer();
   runDealQueue();
   animateChanges(prev, st);
+  // Freed from a seat for not betting in the round that was just dealt (game.js deal).
+  if (st.unseated && st.unseated.round !== S.unseatSeen) { S.unseatSeen = st.unseated.round; if (st.unseated.ids?.includes(S.myId) && S.prevView) toast('You were unseated for not betting. Sit again any time.'); }
   S.prevView = { phase: st.phase, round: st.round, ins: Object.fromEntries(st.seats.filter(Boolean).map((s) => [s.playerId, s.insurance || 0])), bets: Object.fromEntries(st.seats.filter(Boolean).map((s) => [s.playerId, betTotal(s.bet)])) };
 }
 

@@ -408,7 +408,7 @@ const da = t.players.a.chips, dd = t.players.d.chips;
   t.setBet('a', { main: 10, sides: {}, ready: true });
   assert.equal(t.canDeal(), true); assert.equal(t.dealCount(), 4);
   t.deal();
-  assert.equal(t.seats[1].hands.length, 0); assert.equal(t.seats[0].hands.length, 1);
+  assert.equal(t.seats[1], null); // no bet this round: unseated assert.equal(t.seats[0].hands.length, 1);
   // A kicked player whose turn it is does not hold up the round.
   t = mk(); deal(t, '5♠ 6♠ 9♦ 7♥ 8♥ 7♣');
   t.kick('a');

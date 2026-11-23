@@ -182,6 +182,7 @@ export class BacTable {
     const p = this.mustPlayer(id);
     if (this.phase !== 'betting') throw new Error('Bets open again after this round.');
     if (!BAC_SPOTS[spot]) throw new Error('No such bet.');
+    if (p.seat < 0 && id !== this.bankId) { const s = this.freeSeat(); if (s >= 0) p.seat = s; } // a watcher's bet sits them down when a seat is free
     if (p.seat < 0) throw new Error('The table is full. You can watch.');
     if (id === this.bankId) throw new Error('You are the dealer. The dealer does not bet.');
     amount = Math.round(Number(amount));
@@ -209,6 +210,13 @@ export class BacTable {
     if (!last) throw new Error('No bet from the round before.');
     if (this.staked(id) > 0) throw new Error('Clear your bets first.');
     for (const k of BAC_KEYS) if (last[k]) this.bet(id, k, last[k]);
+  }
+  // A seated player with no bet when the round starts loses the seat: chips stay theirs, they watch, and their
+  // next bet sits them down again. The dealer is never unseated.
+  unseatIdle(round) {
+    const ids = Object.values(this.players).filter((p) => !p.kicked && p.seat >= 0 && p.id !== this.bankId && !(this.staked(p.id) > 0)).map((p) => p.id);
+    for (const id of ids) { this.players[id].seat = -1; this.addLog(`${this.players[id].name} was unseated for not betting.`); }
+    this.unseated = { round, ids };
   }
   canDeal() { return this.phase === 'betting' && Object.keys(this.bets).some((id) => this.staked(id) > 0); }
   chipsTotal() { return r2(Object.values(this.players).reduce((a, p) => a + p.chips, 0) + Object.keys(this.bets).reduce((a, id) => a + this.staked(id), 0)); }
@@ -251,6 +259,7 @@ export class BacTable {
     if (!this.canDeal()) throw new Error('Place a bet first.');
     if (!this.cur || !Array.isArray(this.cur.draws) || this.shoe.length < 16) this.newShoe();
     this.round++;
+    this.unseatIdle(this.round);
     // The cards are dealt face down. Nobody's browser is told a card before it is turned over, except the player
     // who peels that side (the largest bet on Player or on Banker), who is told only the cards of that side.
     const top = (spot) => { let best = null, amt = 0; for (const id of Object.keys(this.bets)) { const b = this.bets[id][spot] || 0; if (b > amt && this.players[id] && !this.players[id].kicked) { amt = b; best = id; } } return best; };
@@ -369,7 +378,7 @@ export class BacTable {
       betLeft: this.betStart !== null && this.settings.betTime ? Math.max(0, this.settings.betTime * 1000 - (Date.now() - this.betStart)) : null,
       cardsLeft: undefined, shoeNo: this.shoeNo,
       players: Object.values(this.players).filter((p) => !p.kicked).map((p) => ({ id: p.id, name: p.name, connected: p.connected, chips: p.chips, totalIn: p.totalIn, look: p.look, seat: p.seat, net: ledgerNet(this, p), base: this.base?.[p.id] || null })),
-      bankId: this.bankId, bankLeaving: !!this.bankLeaving, frozen: this.frozen, roundFrozen: !!this.roundFrozen, ledgerSum: this.ledgerSum(),
+      bankId: this.bankId, bankLeaving: !!this.bankLeaving, unseated: this.unseated || null, frozen: this.frozen, roundFrozen: !!this.roundFrozen, ledgerSum: this.ledgerSum(),
       fair: { nextCommit: this.fair.next.commit, cards: this.kc, // cards opened at this table so far: the guests' browsers check every key they gave was used
  mySeed: !!this.fair.seeds[forId], seeds: Object.keys(this.fair.seeds).filter((id) => id !== this.hostId).length,
         cur: this.cur ? { shoe: this.cur.shoe, commit: this.cur.commit, decks: this.cur.decks, dealt: this.cur.dealt.length - (this.full ? this.full.P.length + this.full.B.length : 0) } : null, // cards of a round still face down are not counted yet: the count would tell if a third card is coming

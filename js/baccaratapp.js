@@ -567,6 +567,8 @@ function render() {
   const body = $('#pk-body');
   if (!body) return;
   const st = S.st;
+  // Freed from a seat for not betting in the round that just started (unseatIdle).
+  if (st?.unseated && st.unseated.round !== S.unseatSeen) { const first = S.unseatSeen === undefined; S.unseatSeen = st.unseated.round; if (!first && st.unseated.ids?.includes(S.myId)) toast('You were unseated for not betting. Place a bet to sit down again.'); }
   if (!st) {
     body.innerHTML = `<div class="pk-wait pk-stand">${S.nohost ? (params.get('open') ? 'Opening the table…' : 'The baccarat table is not open yet. Waiting for the host…') : 'Joining the table…'}</div>`;
     $('#tray').innerHTML = ''; $('#hud-top').innerHTML = '';
@@ -670,7 +672,7 @@ function drawHud(st, me, sg) {
   }
   else if (st.phase === 'done') { const pay = st.pays[S.myId]; status = pay ? (pay.net > 0 ? `${st.roundFrozen ? 'Practice: you' : 'You'} won ${money(pay.net)}` : pay.net < 0 ? `${st.roundFrozen ? 'Practice: you' : 'You'} lost ${money(-pay.net)}` : 'Push: your bet comes back') : 'Round over'; }
   else if (st.betLeft !== null) status = `Place your bets · <b id="bc-left">${Math.max(0, Math.ceil((st.betLeft - (Date.now() - S.at)) / 1000))}</b> s`;
-  else status = st.canDeal ? (isHost ? 'Bets are down. Press Deal.' : 'Waiting for the host to deal.') : me && me.seat < 0 ? 'The table is full. You are watching.' : 'Pick a chip, then tap Player, Banker or Tie.';
+  else status = st.canDeal ? (isHost ? 'Bets are down. Press Deal.' : 'Waiting for the host to deal.') : me && me.seat < 0 ? (st.players.filter((x) => x.seat >= 0).length < BAC_SEATS ? 'You are watching. Place a bet to sit down.' : 'The table is full. You are watching.') : 'Pick a chip, then tap Player, Banker or Tie.';
   if (st.bankId === S.myId && st.phase === 'betting') status = st.betLeft !== null ? `You are the dealer · <b id="bc-left">${Math.max(0, Math.ceil((st.betLeft - (Date.now() - S.at)) / 1000))}</b> s` : 'You are the dealer. You pay the winners and take the losing bets.';
   top.innerHTML = `${bankBarHTML(st, S.myId, isHost)}<div class="status">${status}</div>`;
   let h = roadHTML(st);
