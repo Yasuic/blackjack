@@ -133,7 +133,38 @@ export const TAG = new URL(import.meta.url).searchParams.get('v') || '';
 export async function liveTag() {
   try { const r = await fetch('version.txt?t=' + Date.now(), { cache: 'no-store' }); const m = /v=(\w+)/.exec(await r.text()); return m ? m[1] : ''; } catch { return ''; }
 }
+// The version a player is on, small at the bottom left of every game. VERSION_NAME goes up with each big change
+// the person names (v1 = before the announced dealing, v2 = announced dealing).
+export const VERSION_NAME = 'v2';
+function showVersion() {
+  if (document.getElementById('app-ver')) return;
+  const el = document.createElement('div'); el.id = 'app-ver'; el.setAttribute('aria-hidden', 'true');
+  el.textContent = `${VERSION_NAME} · ${TAG || 'dev'}`;
+  document.body.appendChild(el);
+  // It sits in the bottom left corner. When a box is there (the balance on a phone) it moves just right of that
+  // box, or else just above it: the first spot where it covers nothing.
+  const SEL = '#float-balance, .bc-bal, button, .chat-btn, .pill, input, select';
+  const hit = () => {
+    const a = el.getBoundingClientRect();
+    for (const b of document.querySelectorAll(SEL)) {
+      const r = b.getBoundingClientRect();
+      if (r.width && !(r.right <= a.left || r.left >= a.right || r.bottom <= a.top || r.top >= a.bottom) && getComputedStyle(b).visibility !== 'hidden') return r;
+    }
+    return null;
+  };
+  const place = () => {
+    el.style.left = '4px'; el.style.bottom = '0px';
+    let r = hit();
+    if (!r) return;
+    el.style.left = Math.round(r.right + 4) + 'px';
+    if (!hit() && r.right + 80 < innerWidth) return;
+    el.style.left = '4px';
+    for (let i = 0; i < 6 && r; i++) { el.style.bottom = Math.max(0, Math.round(innerHeight - r.top + 2)) + 'px'; r = hit(); }
+  };
+  setInterval(place, 1500); addEventListener('resize', place); setTimeout(place, 300);
+}
 export function autoUpdate(game, idle) {
+  try { if (document.body) showVersion(); else addEventListener('DOMContentLoaded', showVersion); } catch { /* fine */ }
   window.__officeTag = TAG;
   window.__officeIdle = () => { try { return !!idle(); } catch { return false; } };
   if (window.top !== window) return; // the office frame does it

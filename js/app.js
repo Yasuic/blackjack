@@ -732,6 +732,7 @@ function runAction(id, msg, onError) {
       case 'leave-later': t.leaveLater(id, msg.on !== false); break;
       case 'dealer-max': t.setDealerMax(id, msg.amount, msg.side); break;
       case 'dealer-shuf': t.setShuffle8(id, !!msg.on); break;
+      case 'dealer-cap': t.setLossCap(id, !!msg.on, msg.amount); break;
       case 'dealer-big': t.setBigBet(id, msg.off ? { off: true } : { limit: msg.limit, per: msg.per, hands: msg.hands }); break;
       case 'dealer-shuffle': t.dealerShuffle(id); break;
       case 'shuffle': t.playerShuffle(id); break;
@@ -1739,14 +1740,63 @@ function renderLedger(st) {
   const sumIn = rows.reduce((a, r) => a + r.totalIn, 0);
   const sumChips = rows.reduce((a, r) => a + r.chips, 0);
   const pl = (n) => `<span class="${n > 0 ? 'up' : n < 0 ? 'down' : ''}">${n > 0 ? '+' : ''}${money(n)}</span>`;
-  box.innerHTML = `<button class="ledger-head" data-act="ledger-toggle"><span class="lh-long">Ledger</span><span class="lh-short">Ledger</span> <span>${box.classList.contains('closed') ? '▴' : '▾'}</span></button>
-    <div class="ledger-body"><table>
+  // The Ledger button opens one pop up: the ledger, then every player's stats and a profit chart.
+  box.classList.add('closed');
+  const head = '<button class="ledger-head" data-act="ledger-toggle"><span class="lh-long">Ledger</span><span class="lh-short">Ledger</span> <span>▴</span></button>';
+  if (box.innerHTML !== head) box.innerHTML = head;
+  const d = $('#ledger-dlg');
+  if (!d?.open) return;
+  const body = d.querySelector('.office-body'), top = body.scrollTop;
+  body.innerHTML = `<button class="x-btn x-float" data-ledger-close aria-label="Close" title="Close">✕</button><h3>Ledger</h3>
+    <div class="ld-body"><table>
       <tr><th>Player</th><th>Bought in</th><th>Chips</th><th>+/-</th></tr>
       ${rows.map((r) => `<tr class="${r.id === S.myId ? 'me' : ''}"><td>${r.id === st.hostId ? '♛ ' : ''}${esc(r.name)}${r.kicked ? ' (left)' : r.connected ? '' : ' (away)'}${st.banker?.id === r.id ? ' (dealer)' : ''}</td><td>${money(r.totalIn)}</td><td>${money(r.chips)}</td><td>${pl(net(r))}</td></tr>`).join('')}
       <tr class="tot"><td>Table</td><td>${money(sumIn)}</td><td>${money(sumChips)}</td><td>${pl(rows.reduce((a, r) => a + net(r), 0))}</td></tr>
     </table>
     <button class="btn small office-btn" data-act="office">🏢 All tables</button>${COPY_BTN}
-    <div class="hint">Bought in counts starting chips, buy-ins and chips the host gives or takes. The +/- column counts only hands played with a player as the dealer, so it always adds up to zero. Hands against the house are practice and are left out.</div></div>`;
+    <div class="hint">Bought in counts starting chips, buy-ins and chips the host gives or takes. The +/- column counts only hands played with a player as the dealer, so it always adds up to zero. Hands against the house are practice and are left out.</div></div>
+    ${statsHTML(st)}`;
+  body.scrollTop = top;
+}
+function openLedger() {
+  let d = $('#ledger-dlg');
+  if (!d) {
+    d = document.createElement('dialog'); d.id = 'ledger-dlg'; d.className = 'office-dlg ledger-dlg';
+    d.innerHTML = '<div class="office-body"></div>';
+    d.addEventListener('click', (e) => { if (e.target === d || e.target.closest('[data-ledger-close]')) d.close(); });
+    document.body.appendChild(d);
+  }
+  if (!d.open) d.showModal();
+  if (S.state) renderLedger(S.state);
+}
+// Player stats: hands, wins, win rate, real +/- and practice, best and worst round, and the running total chart.
+const STAT_COLORS = ['#f2c14e', '#4fc3f7', '#81c784', '#e57373', '#ba68c8', '#ffb74d', '#4db6ac', '#f06292', '#aed581', '#90a4ae'];
+function statsHTML(st) {
+  const ps = st.pstats;
+  if (!ps || !ps.players.length) return '<h3>Player stats</h3><div class="hint">No hands played yet.</div>';
+  const pl = (n) => `<span class="${n > 0 ? 'up' : n < 0 ? 'down' : ''}">${n > 0 ? '+' : ''}${money(n)}</span>`;
+  const rows = ps.players.slice().sort((a, b) => b.net - a.net);
+  const color = (name) => STAT_COLORS[ps.names.indexOf(name) % STAT_COLORS.length];
+  const table = `<div class="stats-wrap"><table class="stats-t">
+    <tr><th>Player</th><th>Hands</th><th>Won</th><th>Win rate</th><th>+/- real</th><th>Practice</th><th>Best</th><th>Worst</th></tr>
+    ${rows.map((p) => `<tr><td><i class="st-dot" style="background:${color(p.name)}"></i>${esc(p.name)}${p.dealt ? ` <span class="hint">dealt ${p.dealt}</span>` : ''}</td><td>${p.hands}</td><td>${p.wins}</td><td>${p.hands ? Math.round((p.wins / p.hands) * 100) + '%' : '-'}</td><td>${pl(p.realNet)}</td><td>${pl(p.practiceNet)}</td><td>${pl(p.best)}</td><td>${pl(p.worst)}</td></tr>`).join('')}
+  </table></div>`;
+  return `<h3>Player stats</h3>${table}<div class="hint">Rounds ${ps.first} to ${ps.last}. A split hand counts as its own hand; pushes are not wins. Side bets and insurance are in the +/-.</div>
+    <h3>Profit over time</h3>${statsChart(ps, color)}`;
+}
+function statsChart(ps, color) {
+  const pts = ps.series;
+  if (pts.length < 2) return '<div class="hint">The chart starts after two rounds.</div>';
+  const W = 640, H = 220, L = 52, R = 10, T = 10, B = 24;
+  let lo = 0, hi = 0;
+  for (const p of pts) for (const v of p.v) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
+  if (hi === lo) hi = lo + 1;
+  const x = (i) => L + (i / (pts.length - 1)) * (W - L - R), y = (v) => T + ((hi - v) / (hi - lo)) * (H - T - B);
+  const lines = ps.names.map((n, k) => `<polyline fill="none" stroke="${color(n)}" stroke-width="2" stroke-linejoin="round" points="${pts.map((p, i) => x(i).toFixed(1) + ',' + y(p.v[k]).toFixed(1)).join(' ')}" />`).join('');
+  const ticks = [hi, (hi + lo) / 2, lo].map((v) => `<text x="${L - 6}" y="${(y(v) + 4).toFixed(1)}" text-anchor="end" class="st-ax">${money(Math.round(v))}</text>`).join('');
+  const xt = `<text x="${L}" y="${H - 6}" class="st-ax">Round ${pts[0].round}</text><text x="${W - R}" y="${H - 6}" text-anchor="end" class="st-ax">Round ${pts[pts.length - 1].round}</text>`;
+  const legend = `<div class="og-key">${ps.names.map((n) => `<i style="background:${color(n)}"></i>${esc(n)}`).join('')}</div>`;
+  return `<svg class="st-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Running total of each player"><line x1="${L}" x2="${W - R}" y1="${y(0).toFixed(1)}" y2="${y(0).toFixed(1)}" class="st-zero" />${lines}${ticks}${xt}</svg>${legend}`;
 }
 
 // The host sees a pop-up for each buy-in request.
@@ -2892,6 +2942,7 @@ function trayInner(st) {
     if (innerWidth < 700 && !S.dealerOpen) return `<div class="tray-msg dealer-mini">${st.banker.chips < 0 ? `You owe ${money(-st.banker.chips)}. Tap your balance to buy in.` : 'You are the dealer'}<button class="btn small" data-act="dealer-open">⚙ Settings</button></div>`;
     return `<div class="tray-msg${innerWidth < 700 ? ' has-x' : ''}">${st.banker.chips < 0 ? `You are the dealer and you owe ${money(-st.banker.chips)} chips. Tap your balance to buy in.` : 'You are the dealer. Your chips pay winners and collect losing bets.'}${innerWidth < 700 ? '<button class="x-btn" data-act="dealer-open" aria-label="Close" title="Close">✕</button>' : ''}</div>
       <div class="actions dealer-max"><label for="dealer-max">Max bet</label><input id="dealer-max" type="number" inputmode="numeric" min="${st.settings.minBet}" step="1" value="${st.settings.maxBet}" /><label for="dealer-max-side">Max side bet</label><input id="dealer-max-side" type="number" inputmode="numeric" min="0" step="1" value="${st.settings.maxSideBet}" /><button class="btn small" data-act="dealer-max">Set</button><button class="btn small ${st.settings.shuffle8 !== false ? 'gold' : ''}" data-act="dealer-shuf" title="A fresh shuffle every 8 rounds. Tap to turn it ${st.settings.shuffle8 !== false ? 'off' : 'on'}.">Shuffle every 8: ${st.settings.shuffle8 !== false ? 'On' : 'Off'}</button><button class="btn" data-act="leave-dealer">Leave dealer seat</button></div>
+      ${lossCapHTML(st)}
       <div class="actions dealer-max dealer-big"><span class="dealer-big-title" title="Each player may bet above the maximum a few times. Unused ones expire after the hands, then they come back.">Big Bets Sometimes</span><label for="big-limit">Big bet up to</label><input id="big-limit" type="number" inputmode="numeric" min="${st.settings.maxBet + 1}" step="1" value="${st.big?.limit ?? st.settings.maxBet * 4}" /><label for="big-per">Big bets each</label><input id="big-per" type="number" inputmode="numeric" min="1" step="1" value="${st.big?.per ?? 2}" /><label for="big-hands">Every</label><input id="big-hands" type="number" inputmode="numeric" min="1" step="1" value="${st.big?.hands ?? 10}" /><label>hands</label><button class="btn small ${st.big ? '' : 'gold'}" data-act="dealer-big">${st.big ? 'Update' : 'Turn on'}</button>${st.big ? '<button class="btn small" data-act="dealer-big-off">Turn off</button>' : ''}</div>`;
   }
   if (!seat) {
@@ -3418,7 +3469,7 @@ function runAct(el) {
     case 'afk-screen': afkScreen(true); break;
     case 'become-host': askBecomeHost(); break;
     case 'force-host': if (S.role === 'player' && !S.taking) { toast('Taking the table over…'); maybeTakeOver(true); } break;
-    case 'ledger-toggle': { const l = $('#ledger'); l.classList.toggle('closed'); safeSet('bj-ledger', l.classList.contains('closed') ? '0' : '1'); renderLedger(S.state); break; }
+    case 'ledger-toggle': openLedger(); break;
     case 'buyin-answer': hostDo((t) => t.answerBuyIn(Number(el.dataset.id), el.dataset.yes === '1')); break;
     case 'throw-open': openThrowPanel(el); break;
     case 'hurry': send({ t: 'hurry', say: SHOUTS[el.dataset.say] ? el.dataset.say : 'hurry' }); break;
@@ -3595,7 +3646,7 @@ document.addEventListener('keydown', (e) => {
   if (!st) return;
   const k = e.key.toLowerCase();
   if (e.key === '?') { $('#modal-body').innerHTML = keysHTML(); $('#modal').showModal(); return; }
-  if (k === 'l') { const l = $('#ledger'); if (l) { l.classList.toggle('closed'); safeSet('bj-ledger', l.classList.contains('closed') ? '0' : '1'); renderLedger(st); } return; }
+  if (k === 'l') { const d = $('#ledger-dlg'); if (d?.open) d.close(); else openLedger(); return; }
   const map = { h: 'hit', s: 'stand', d: 'double', p: 'split', u: 'surrender' };
   // While the first cards are still being dealt there is nothing to decide yet.
   const wait = dealingNow() && S.dealMany;
@@ -4023,6 +4074,18 @@ document.addEventListener('change', (e) => {
   goGame(e.target.value);
 });
 // This table's ledger lines for the office ledger (common.js officeLedgerHTML).
+// ---------- Stop at loss (player dealer) ----------
+// A tick box and one chip amount, saved as soon as either changes. Ticked by default at 30 x the max bet.
+function lossCapHTML(st) {
+  const c = st.lossCap; if (!c) return '';
+  return `<div class="actions dealer-max dealer-cap"><label class="cap-tick" title="After the hand that brings your loss as the dealer to this amount, you stop dealing. Untick to keep dealing whatever happens."><input type="checkbox" id="cap-on" ${c.on ? 'checked' : ''} /> Stop at loss</label><input id="cap-amt" type="number" inputmode="numeric" min="1" step="1" value="${c.amount}" ${c.on ? '' : 'disabled'} aria-label="Stop at loss amount" /><span class="cap-lost">Lost ${money(c.lost)}</span></div>`;
+}
+document.addEventListener('change', (e) => {
+  if (e.target.id !== 'cap-on' && e.target.id !== 'cap-amt') return;
+  const on = $('#cap-on')?.checked, v = Number($('#cap-amt')?.value);
+  send({ t: 'dealer-cap', on, amount: e.target.id === 'cap-amt' && v >= 1 ? Math.round(v) : undefined });
+});
+
 // ---------- AFK screen ----------
 // A black screen with plain white text, for a host or dealer who steps away: it says who deals, what the table is
 // doing and the ledger, updated every second. The 3D room stops drawing and the sounds stop while it is on, and the

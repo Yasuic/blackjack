@@ -547,6 +547,46 @@ export class Table {
     this.settings = { ...this.settings, shuffle8: !!on };
     this.addLog(`Shuffle every 8 rounds: ${on ? 'on' : 'off'}.`);
   }
+  // ---- Stop at loss ----
+  // A player dealer can set the most they are willing to lose while dealing (so they can step away). It is on by
+  // default at 30 times the table's max bet, until the dealer types an amount. The loss counts from when they
+  // started dealing (or turned it back on); buy ins do not count as losses. After the hand that reaches it, the
+  // dealer seat is freed, like "Stop dealing after this round". A hand in play always finishes first.
+  capAmount() { const c = this.lossCap; return c?.amount ?? 30 * this.settings.maxBet; }
+  dealerPnl() { const b = this.players[this.banker]; return b ? b.chips - (b.totalIn ?? this.settings.startChips) : 0; }
+  dealerLoss() { return this.banker && this.lossCap ? Math.max(0, Math.round((this.lossCap.base - this.dealerPnl()) * 100) / 100) : 0; }
+  startLossCap() {
+    const keep = this.lossCap && this.lossCap.id === this.banker ? this.lossCap : null;
+    this.lossCap = { id: this.banker, on: keep ? keep.on : true, amount: keep ? keep.amount : null, base: this.dealerPnl() };
+  }
+  setLossCap(clientId, on, amount) {
+    if (this.banker !== clientId) throw new Error('Only the dealer sets the stop at loss.');
+    if (!this.lossCap || this.lossCap.id !== clientId) this.startLossCap();
+    const c = this.lossCap;
+    if (amount !== undefined && amount !== null && amount !== '') {
+      const a = Math.round(Number(amount));
+      if (!(a >= 1) || a > 1e9) throw new Error('Pick a loss of at least 1.');
+      c.amount = a;
+    }
+    on = !!on;
+    if (on && !c.on) c.base = this.dealerPnl(); // turned back on: losses count from now
+    c.on = on;
+    this.addLog(on ? `${this.players[clientId].name} stops dealing at a loss of ${this.capAmount()}.` : `${this.players[clientId].name} turned the stop at loss off.`);
+    if (!this.inRound()) this.checkLossCap();
+  }
+  // Run when a round is settled (and when the cap changes between rounds).
+  checkLossCap() {
+    const c = this.lossCap, b = this.players[this.banker];
+    if (!b || !c || !c.on || c.id !== this.banker || this.pendingBanker) return false;
+    const lost = this.dealerLoss();
+    if (lost < this.capAmount()) return false;
+    if (b.chips < 0) return false;
+    this.banker = null;
+    this.addLog(`${b.name} lost ${lost} (stop at loss ${this.capAmount()}) and stopped dealing.`);
+    this.ev('stopped dealing: loss cap', b.id, `lost ${lost} of ${this.capAmount()}`);
+    return true;
+  }
+
   setDealerMax(clientId, amount, sideAmount) {
     if (this.banker !== clientId) throw new Error('Only the dealer sets the maximum bets.');
     if (this.phase !== 'betting' && this.phase !== 'settled') throw new Error('Change the maximum bets between rounds.');
@@ -707,6 +747,7 @@ export class Table {
     this.clearSeats(p);
     if (this.frozen) this.setFrozen(false); // a player deals now: the practice stretch is over
     this.banker = clientId;
+    this.startLossCap();
     this.addLog(`${p.name} is now the dealer.`);
   }
 
@@ -792,6 +833,7 @@ export class Table {
     this.banker = clientId;
     this.pendingBanker = null;
     this.dealerAutoBuy();
+    this.startLossCap();
     this.addLog(`${p.name} is now the dealer.`);
   }
 
@@ -1623,6 +1665,7 @@ export class Table {
       if (b && b.chips < 0) this.addLog(`${b.name} owes chips and stays the dealer until they are covered.`);
       else if (b && !this.pendingBanker) { this.banker = null; this.addLog(`${b.name} left the dealer seat.`); }
     }
+    this.checkLossCap();
     if (this.pendingBanker) this.applyDealer(this.pendingBanker);
     if (this.pendingSettings) this.applySettings(this.pendingSettings);
     this.turn = null;
@@ -1659,6 +1702,43 @@ export class Table {
     });
     this.shuffledMidRound = false;
     if (this.hist.length > 300) this.hist.splice(0, this.hist.length - 300);
+  }
+
+  // Stats per player from the recorded hands (the last 300 rounds): hands played, hands won, lost and pushed (each
+  // split hand counts), the net of every round (side bets and insurance in), and the running total over time.
+  // Real rounds (a player deals) count in the ledger; practice rounds against the house are counted apart.
+  // The dealer's rounds count too, as the opposite of the table's net. Cached until a new round is recorded.
+  playerStats() {
+    const hist = this.hist || [];
+    const key = hist.length + ':' + (hist[hist.length - 1]?.round || 0);
+    if (this._pstatsKey === key) return this._pstats;
+    const P = {}, rounds = [];
+    const get = (name) => (P[name] ||= { name, hands: 0, wins: 0, losses: 0, pushes: 0, rounds: 0, net: 0, realNet: 0, practiceNet: 0, best: 0, worst: 0, dealt: 0 });
+    for (const h of hist) {
+      const step = {};
+      let tableNet = 0;
+      for (const x of h.seats || []) {
+        const p = get(x.name);
+        for (const hd of x.hands || []) { p.hands++; if (hd.net > 0) p.wins++; else if (hd.net < 0) p.losses++; else p.pushes++; }
+        step[x.name] = (step[x.name] || 0) + (Number(x.net) || 0);
+        tableNet += Number(x.net) || 0;
+      }
+      if (h.counted && h.dealerName) { const d = get(h.dealerName); d.dealt++; step[h.dealerName] = (step[h.dealerName] || 0) - tableNet; }
+      for (const [name, v] of Object.entries(step)) {
+        const p = get(name); p.rounds++; p.net += v; if (h.counted) p.realNet += v; else p.practiceNet += v;
+        p.best = Math.max(p.best, v); p.worst = Math.min(p.worst, v);
+      }
+      rounds.push({ round: h.round, counted: !!h.counted, step });
+    }
+    // The running total of each player, at most 80 points (evenly picked) so the table update stays small.
+    const names = Object.keys(P), run = Object.fromEntries(names.map((n) => [n, 0]));
+    const pts = rounds.map((r) => { for (const n of names) run[n] += r.step[n] || 0; return { round: r.round, v: names.map((n) => Math.round(run[n] * 100) / 100) }; });
+    const every = Math.max(1, Math.ceil(pts.length / 80));
+    const series = pts.filter((_, i) => i % every === 0 || i === pts.length - 1);
+    for (const p of Object.values(P)) for (const k of ['net', 'realNet', 'practiceNet', 'best', 'worst']) p[k] = Math.round(p[k] * 100) / 100;
+    this._pstatsKey = key;
+    this._pstats = { players: Object.values(P), names, series, first: hist[0]?.round || 0, last: hist[hist.length - 1]?.round || 0 };
+    return this._pstats;
   }
 
   settleSide(seat, key, r, amount) {
@@ -1700,6 +1780,7 @@ export class Table {
       bankShort: this.bankShort(),
       canPeek: !!this.rabbit && !this.inRound(),
       histN: (this.hist || []).length,
+      pstats: this.playerStats(),
       banker: this.banker && this.players[this.banker] ? { id: this.banker, name: this.players[this.banker].name, chips: this.players[this.banker].chips, connected: this.players[this.banker].connected, net: this.phase === 'settled' ? this.bankerNet : null } : null,
       seats: this.seats.map((s) => {
         if (!s) return null;
@@ -1726,6 +1807,7 @@ export class Table {
       players: Object.values(this.players).filter((p) => !p.kicked).map((p) => ({ id: p.id, name: p.name, look: p.look, chips: p.chips, seat: p.seat, seats: this.seatsOf(p.id), connected: p.connected, leaving: !!p.leaving, boughtIn: p.boughtIn || 0, totalIn: p.totalIn ?? this.settings.startChips, left: !!p.kicked, bigLeft: this.bigLeft(p.id) })),
       hostId: this.hostId || null,
       bankerLeaving: !!this.bankerLeaving,
+      lossCap: this.banker && this.lossCap?.id === this.banker ? { on: !!this.lossCap.on, amount: this.capAmount(), auto: this.lossCap.amount == null, lost: this.dealerLoss() } : null,
       big: this.settings.bigBet ? { limit: this.settings.bigBet.limit, per: this.settings.bigBet.per, hands: this.settings.bigBet.hands, handsLeft: this.bigHandsLeft(), yourLeft: this.bigLeft(forClientId) } : null,
       ledger: Object.values(this.players).map((p) => { const h = this.inRound() && this.ledgerHold?.[p.id]; return { id: p.id, name: p.name, totalIn: h ? h.totalIn : p.totalIn ?? this.settings.startChips, chips: h ? h.chips : p.chips, houseNet: h ? h.houseNet : p.houseNet || 0, connected: p.connected, kicked: !!p.kicked }; }),
       buyIns: (this.buyIns || []).filter((b) => b.playerId === forClientId).map((b) => ({ id: b.id, amount: b.amount })),
@@ -1747,13 +1829,14 @@ export class Table {
 
   // Save and restore so the host can refresh the page without losing the table.
   toJSON() {
-    const { settings, seats, players, phase, dealer, turn, round, roundsSinceShuffle, log, shoe, shoeSize, banker, bankerNet, pendingBanker, buyIns, hostId, pendingSettings, frozen, fair, hist, evts, created, frozenSnap, shuffleNext, bankerLeaving, ledgerHold } = this;
-    return { settings, seats, players, phase, dealer, turn, round, roundsSinceShuffle, log, shoe: packShoe(shoe), shoeSize, banker, bankerNet, pendingBanker, buyIns, hostId, pendingSettings, frozen, fair, hist, evts, created, frozenSnap, shuffleNext, bankerLeaving, ledgerHold };
+    const { settings, seats, players, phase, dealer, turn, round, roundsSinceShuffle, log, shoe, shoeSize, banker, bankerNet, pendingBanker, buyIns, hostId, pendingSettings, frozen, fair, hist, evts, created, frozenSnap, shuffleNext, bankerLeaving, ledgerHold, lossCap } = this;
+    return { settings, seats, players, phase, dealer, turn, round, roundsSinceShuffle, log, shoe: packShoe(shoe), shoeSize, banker, bankerNet, pendingBanker, buyIns, hostId, pendingSettings, frozen, fair, hist, evts, created, frozenSnap, shuffleNext, bankerLeaving, ledgerHold, lossCap };
   }
   static fromJSON(obj) {
     const t = new Table(obj.settings);
     Object.assign(t, obj);
     delete t.halted; // the old "network security breached" pause is gone: a table saved paused plays on
+    if (t.banker && !t.lossCap) t.startLossCap(); // a dealer from before the stop at loss gets the default
     t.shoe = unpackShoe(obj.shoe) || [];
     if (!obj.fair) t.fair.current = null; // a table saved before fair shuffles: its shoe has no seed to show
     // Tables saved before the seat count was a setting keep the seats they had.
