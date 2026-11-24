@@ -26,11 +26,33 @@ export function pstatsView(t) {
   const S = {};
   const get = (name) => (S[name] ||= { name, hands: 0, wins: 0, losses: 0, pushes: 0, rounds: 0, net: 0, realNet: 0, practiceNet: 0, best: 0, worst: 0, dealt: 0, ...(P.hands[name] || {}) });
   for (const r of P.rounds) for (const [name, v] of Object.entries(r.step)) { const p = get(name); p.rounds++; p.net += v; if (r.counted) p.realNet += v; else p.practiceNet += v; p.best = Math.max(p.best, v); p.worst = Math.min(p.worst, v); }
-  const names = Object.keys(S), run = Object.fromEntries(names.map((n) => [n, 0]));
-  const pts = P.rounds.map((r) => { for (const n of names) run[n] += r.step[n] || 0; return { round: r.round, v: names.map((n) => Math.round(run[n] * 100) / 100) }; });
-  const every = Math.max(1, Math.ceil(pts.length / 80));
-  for (const p of Object.values(S)) for (const k of ['net', 'realNet', 'practiceNet', 'best', 'worst']) p[k] = Math.round(p[k] * 100) / 100;
+  const names = Object.keys(S);
+  const pts = runSeries(S, names, P.rounds);
   t._pstatsKey = key;
-  t._pstats = { players: Object.values(S), names, series: pts.filter((_, i) => i % every === 0 || i === pts.length - 1), first: P.rounds[0].round, last: P.rounds[P.rounds.length - 1].round };
+  t._pstats = { players: Object.values(S), names, series: pts, first: P.rounds[0].round, last: P.rounds[P.rounds.length - 1].round };
   return t._pstats;
+}
+
+// The running total of each player after every round (at most 300 rounds are kept, so every round is a point), and
+// per player: avg (net per round played), up (highest running total) and drawdown (largest fall from a high to a
+// later low). Rounds the player sat out leave their running total unchanged.
+export function runSeries(S, names, rounds) {
+  const run = Object.fromEntries(names.map((n) => [n, 0])), peak = { ...run };
+  const r2 = (v) => Math.round(v * 100) / 100;
+  for (const p of Object.values(S)) { p.up = 0; p.drawdown = 0; }
+  const pts = rounds.map((r) => {
+    for (const n of names) {
+      const p = S[n];
+      run[n] += r.step[n] || 0;
+      peak[n] = Math.max(peak[n], run[n]);
+      p.up = Math.max(p.up, run[n]);
+      p.drawdown = Math.max(p.drawdown, peak[n] - run[n]);
+    }
+    return { round: r.round, v: names.map((n) => r2(run[n])) };
+  });
+  for (const p of Object.values(S)) {
+    p.avg = p.rounds ? p.net / p.rounds : 0;
+    for (const k of ['net', 'realNet', 'practiceNet', 'best', 'worst', 'avg', 'up', 'drawdown']) p[k] = r2(p[k] || 0);
+  }
+  return pts;
 }

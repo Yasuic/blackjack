@@ -1,6 +1,7 @@
 // Blackjack table logic. Runs only in the host's browser (the "dealer").
 // Everything here is plain JavaScript with no browser APIs, so it can be tested in Node.
 
+import { runSeries } from './pstatcore.js?v=20261124j';
 export const SUITS = ['♠', '♥', '♦', '♣'];
 export const RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
 
@@ -1909,12 +1910,9 @@ export class Table {
       }
       rounds.push({ round: h.round, counted: !!h.counted, step });
     }
-    // The running total of each player, at most 80 points (evenly picked) so the table update stays small.
-    const names = Object.keys(P), run = Object.fromEntries(names.map((n) => [n, 0]));
-    const pts = rounds.map((r) => { for (const n of names) run[n] += r.step[n] || 0; return { round: r.round, v: names.map((n) => Math.round(run[n] * 100) / 100) }; });
-    const every = Math.max(1, Math.ceil(pts.length / 80));
-    const series = pts.filter((_, i) => i % every === 0 || i === pts.length - 1);
-    for (const p of Object.values(P)) for (const k of ['net', 'realNet', 'practiceNet', 'best', 'worst']) p[k] = Math.round(p[k] * 100) / 100;
+    // The running total of each player after every round, plus average, highest point and largest drawdown.
+    const names = Object.keys(P);
+    const series = runSeries(P, names, rounds);
     this._pstatsKey = key;
     this._pstats = { players: Object.values(P), names, series, first: hist[0]?.round || 0, last: hist[hist.length - 1]?.round || 0 };
     return this._pstats;

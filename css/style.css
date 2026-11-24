@@ -1717,6 +1717,15 @@ input[type=range].at-zero::-moz-range-thumb { background: #6b7280; }
 .st-chart { width: 100%; height: auto; display: block; background: #0f141b; border: 1px solid #222a36; border-radius: 10px; }
 .st-chart .st-ax { fill: #9aa3ad; font-size: 11px; }
 .st-chart .st-zero { stroke: #3a4454; stroke-dasharray: 4 4; }
+.st-box { position: relative; touch-action: pan-y; }
+.st-chart .st-hover { visibility: hidden; pointer-events: none; }
+.st-box.on .st-chart .st-hover { visibility: visible; }
+.st-chart .st-hl { stroke: #c8d0da; stroke-width: 1; opacity: .6; }
+.st-chart .st-pt { stroke: #0f141b; stroke-width: 1.5; }
+.st-tip { display: none; position: absolute; top: 8px; left: 0; pointer-events: none; background: rgba(12,16,22,.95); border: 1px solid #2c3645; border-radius: 8px; padding: 6px 9px; font-size: 12px; line-height: 1.5; white-space: nowrap; z-index: 2; }
+.st-box.on .st-tip { display: block; }
+.st-tip i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+.st-tip .up { color: #6fd39b; } .st-tip .down { color: #ff8f8f; }
 .ledger-dlg .up { color: #6fd39b; } .ledger-dlg .down { color: #ff8f8f; }
 .ledger-dlg h3:first-of-type { padding-right: 44px; }
 .ledger-dlg .ld-body .office-btn { margin: 10px 6px 0 0; }
