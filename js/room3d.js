@@ -2442,7 +2442,8 @@ export function initRoom(container, feltEl, { phone, hud = null, size = null, ga
     if (walking) pP.copy(cur.t); else camera.getWorldPosition(pP);
     // Watching at the table without a place there: the camera may hang over the felt, but the body stands on the
     // floor behind the padded rail, on the same side.
-    if (!free) { const dx = pP.x - CENTRE.x, dz = pP.z - CENTRE.z, d = Math.hypot(dx, dz) || 1, min = Math.max(W, H) / 2 + RAIL + 0.45 * S; if (d < min) { pP.x = CENTRE.x + (dx / d) * min; pP.z = CENTRE.z + (dz / d) * min; } }
+    // Walking round, the body never stands on the felt either.
+    { const dx = pP.x - CENTRE.x, dz = pP.z - CENTRE.z, d = Math.hypot(dx, dz) || 1, min = Math.max(W, H) / 2 + RAIL + 0.45 * S; if (d < min) { pP.x = CENTRE.x + (dx / d) * min; pP.z = CENTRE.z + (dz / d) * min; } }
     pQ.copy(pP).addScaledVector(pD, S);
     office.worldToLocal(pP); office.worldToLocal(pQ);
     const fx = pQ.x - pP.x, fz = pQ.z - pP.z, l = Math.hypot(fx, fz) || 1;

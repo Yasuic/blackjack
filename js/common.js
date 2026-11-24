@@ -188,8 +188,11 @@ export function updateCover(text = 'Updating game') {
 export function updateReload(text = 'Updating game', win = window) {
   try { sessionStorage.setItem(UPD, JSON.stringify({ at: Date.now(), text })); } catch { /* the cover still shows on this page */ }
   if (win === window) updateCover(text);
-  try { win.location.reload(); } catch { /* fine */ }
+  // A fresh address, so the host's cache (GitHub Pages keeps a page up to 10 minutes) cannot hand back the old page.
+  try { const u = new URL(win.location.href); u.searchParams.set('u', Date.now().toString(36)); win.location.replace(u.href); } catch { try { win.location.reload(); } catch { /* fine */ } }
 }
+// The address of an update reload carries ?u=...: take it out of the address bar again once the page is open.
+try { const u = new URL(location.href); if (u.searchParams.has('u')) { u.searchParams.delete('u'); history.replaceState(history.state, '', u.pathname + (u.search || '') + u.hash); } } catch { /* fine */ }
 window.__updateReload = updateReload;
 // After the reload: keep the cover until the page has drawn, then take it away.
 try {

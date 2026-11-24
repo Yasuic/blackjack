@@ -135,9 +135,11 @@ export function boot(game, start) {
       for (const f of frames()) {
         let w = null; try { w = f.contentWindow; } catch { /* fine */ }
         if (!w || !w.__officeTag || w.__officeTag === live) continue;
-        if (w.__officeIdle?.()) { try { (w.__updateReload || ((t, x) => x.location.reload()))('Updating game', w); } catch { /* fine */ } } else left++;
+        // One reload per table for each new version: a page that still comes back old waits for the next check.
+        if (f.dataset.upd === live && Date.now() - Number(f.dataset.updAt || 0) < 100000) continue;
+        if (w.__officeIdle?.()) { f.dataset.upd = live; f.dataset.updAt = String(Date.now()); try { (w.__updateReload || ((t, x) => x.location.reload()))('Updating game', w); } catch { /* fine */ } } else left++;
       }
-      if (!left && TAG !== live && frames().length <= 1 && frames().every((f) => { try { return f.contentWindow.__officeIdle?.() !== false; } catch { return true; } })) { try { sessionStorage.setItem('bj-upd', JSON.stringify({ at: Date.now(), text: 'Updating game' })); } catch { /* fine */ } location.reload(); return; }
+      if (!left && TAG !== live && frames().length <= 1 && frames().every((f) => { try { return f.contentWindow.__officeIdle?.() !== false; } catch { return true; } })) { try { sessionStorage.setItem('bj-upd', JSON.stringify({ at: Date.now(), text: 'Updating game' })); } catch { /* fine */ } const u = new URL(location.href); u.searchParams.set('u', Date.now().toString(36)); location.replace(u.href); return; }
       if (left && Date.now() < until) setTimeout(step, 3000); else updating = false;
     };
     step();
