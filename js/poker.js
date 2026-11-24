@@ -1,8 +1,8 @@
 // No-limit Texas Hold'em for up to 9 players. Pure rules: the host's browser owns one PokerTable and
 // every action goes through it. Nothing here touches the page or the network.
-import { SUITS, RANKS, sha256, fairSeed, fairShoe, MAX_CHIPS } from './game.js?v=20261124f';
-import { openCard, keyFor } from './mental.js?v=20261124f';
-import { pstatAdd, pstatsView } from './pstatcore.js?v=20261124f';
+import { SUITS, RANKS, sha256, fairSeed, fairShoe, MAX_CHIPS } from './game.js?v=20261124g';
+import { openCard, keyFor } from './mental.js?v=20261124g';
+import { pstatAdd, pstatsView } from './pstatcore.js?v=20261124g';
 
 export const POKER_SEATS = 9;
 export const POKER_DEFAULTS = {

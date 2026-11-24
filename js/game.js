@@ -578,6 +578,14 @@ export class Table {
     this.rulesNote = { ...(this.rulesNote || {}), ...ch }; // every change since the last deal
     this.addLog(`${who} changed the rules: ${Object.keys(ch).map((k) => RULE_TEXT[k](ch[k])).join('; ')}.`);
   }
+  // The dealer makes the round now open for bets a 5 Card Charlie round (before the cards come out only).
+  forceCharlie(clientId) {
+    if (this.banker ? this.banker !== clientId : this.hostId && this.hostId !== clientId) throw new Error('Only the dealer can do that.');
+    if (this.phase !== 'betting') throw new Error('Only while bets are open, before the cards come out.');
+    if (this.charlieRound) return;
+    this.charlieRound = true;
+    this.addLog('The dealer made this round a 5 Card Charlie round.');
+  }
   pickCharlie() { const n = this.settings.charlieEvery || 0; this.charlieRound = n > 0 && Math.random() < 1 / n; if (this.charlieRound) this.addLog('5 Card Charlie is on this round.'); }
   setShuffle8(clientId, on) {
     if (this.banker ? this.banker !== clientId : this.hostId && this.hostId !== clientId) throw new Error('Only the dealer turns the shuffle every 8 rounds on or off.');

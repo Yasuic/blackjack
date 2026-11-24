@@ -63,6 +63,13 @@ for (const on of [true, false]) {
   t.dealerSave('bank', { rules: { charlieEvery: 0 } }); ok(t.settings.charlieEvery === 0, 'dealer turns it off');
   t.pickCharlie(); ok(!t.charlieRound, 'off: never a Charlie round');
   ok(G.Table.fromJSON(JSON.parse(JSON.stringify(t))).settings.charlieEvery === 0, 'kept through a save');
+  // The dealer makes this round a Charlie round, while bets are open only.
+  t.startBetting(); assert.throws(() => t.forceCharlie('a'), /dealer/); n++;
+  t.forceCharlie('bank'); ok(t.charlieRound && t.publicState('a').charlieRound, 'dealer made this round Charlie, and the table sees it');
+  t.setBet('a', { main: 10, sides: {}, ready: true, seat: 0 }); t.setBet('a', { main: 0, sides: {}, ready: false, seat: 1 }); t.deal();
+  if (t.phase === 'insurance') { try { t.insurance('a', false, 0); } catch {} }
+  ok(t.charlieRound, 'stays for the round that was dealt');
+  if (t.phase === 'playing') { assert.throws(() => t.forceCharlie('bank'), /bets are open/); n++; }
 }
 ok(charlies > 20, `Charlies seen: ${charlies}`);
 console.log(`5 card charlie: ${n} checks passed (${charlies} Charlies)`);

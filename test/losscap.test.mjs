@@ -50,5 +50,28 @@ const play = (t, bet, a = 'stand') => {
   const u = mk(); u.setLossCap('d', true, 777); const v = G.Table.fromJSON(JSON.parse(JSON.stringify(u)));
   ok(v.publicState('d').lossCap.amount === 777, 'survives a reload');
 }
+// The person's rule (2026-11-24): a hand in play is never blocked by the cap. Doubles and splits that take the
+// dealer past it still go through, the hand plays out and pays, and the table stops after that hand.
+{
+  let seen = 0;
+  for (let k = 0; k < 400 && seen < 30; k++) {
+    const t = mk(); t.setLossCap('d', true, 10);
+    const q = t.requestBuyIn('a', 5000); t.answerBuyIn(q.id, true);
+    t.setBet('a', { main: 100, sides: {}, seat: 0 }); t.deal();
+    if (t.phase === 'insurance') t.insurance('a', false, 0);
+    let refused = 0, moved = 0;
+    for (let g = 0; t.phase === 'playing' && g < 40; g++) {
+      const al = t.allowedActions('a');
+      const a = al.includes('split') ? 'split' : al.includes('double') ? 'double' : 'stand';
+      try { t.action('a', a); if (a !== 'stand') moved++; } catch { refused++; break; }
+    }
+    while (t.dealerStep()) {}
+    ok(!refused, 'no move refused mid hand because of the cap');
+    ok(t.phase === 'settled', 'the hand played out in full');
+    const net = t.seats[0].net;
+    if (moved && net > 10) { seen++; ok(t.banker === null, 'past the cap after a double or split: the dealer stops after that hand'); ok(t.seats[0].hands.every((h) => h.result), 'every hand paid out'); }
+  }
+  ok(seen > 0, `hands that doubled or split past the cap: ${seen}`);
+}
 console.log(`${n - fails}/${n} loss cap checks passed`);
 process.exit(fails ? 1 : 0);

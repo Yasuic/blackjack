@@ -1,18 +1,18 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { startPresence } from './presence.js?v=20261124f';
-import { outerLink } from './shell.js?v=20261124f';
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe, destName, stepOf, RULE_TEXT } from './game.js?v=20261124f';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261124f';
-import { bestMove, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261124f';
-import { tickSound, winSound } from './fx.js?v=20261124f';
-import * as HX from './history.js?v=20261124f';
-import { webglOK, initRoom, COLLEAGUES } from './room3d.js?v=20261124f';
-import { COPY_BTN, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261124f';
-import { topToolsHTML, initTopTools, setProfit, setPractice, setRisk, cardScale, profitLineHTML, ledgerTitle } from './toptools.js?v=20261124f';
-import { statsHTML } from './pstats.js?v=20261124f';
-import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261124f';
+import { startPresence } from './presence.js?v=20261124g';
+import { outerLink } from './shell.js?v=20261124g';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe, destName, stepOf, RULE_TEXT } from './game.js?v=20261124g';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261124g';
+import { bestMove, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261124g';
+import { tickSound, winSound } from './fx.js?v=20261124g';
+import * as HX from './history.js?v=20261124g';
+import { webglOK, initRoom, COLLEAGUES } from './room3d.js?v=20261124g';
+import { COPY_BTN, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261124g';
+import { topToolsHTML, initTopTools, setProfit, setPractice, setRisk, cardScale, profitLineHTML, ledgerTitle } from './toptools.js?v=20261124g';
+import { statsHTML } from './pstats.js?v=20261124g';
+import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261124g';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -735,6 +735,7 @@ function runAction(id, msg, onError) {
       case 'dealer-save': t.dealerSave(id, msg.cfg); break;
       case 'dealer-shuf': t.setShuffle8(id, !!msg.on); break;
       case 'dealer-rules': t.setRules(id, msg.rules || {}); break;
+      case 'charlie-now': t.forceCharlie(id); break;
       case 'dealer-shuffle': t.dealerShuffle(id); break;
       case 'shuffle': t.playerShuffle(id); break;
       case 'seed': t.setClientSeed(id, msg.seed); return; // nothing on the table changes, so no update is sent
@@ -1856,7 +1857,7 @@ function render(note) {
   if (prev && st.round !== prev.round) { S.undo = []; S.mainChips = []; S.sideChips = {}; }
   // A 5 Card Charlie round is said out loud as its betting opens, so everyone knows before the cards come.
   { const note = (st.rulesNote || []).join(', '); if (note && note !== S.rulesSeen) banner('Rules changed', note, 'ok', 5000); S.rulesSeen = note; }
-  if (st.charlieRound && st.phase === 'betting' && (!prev || prev.phase !== 'betting')) banner('5 Card Charlie round', 'Five cards without busting win 1 to 1 this round. A dealer blackjack still wins.', 'ok', 4000);
+  if (st.charlieRound && st.phase === 'betting' && S.charlieBanner !== st.round && (S.charlieBanner = st.round) !== null) banner('5 Card Charlie round', 'Five cards without busting win 1 to 1 this round. A dealer blackjack still wins.', 'ok', 4000);
   // Once the cards are dealt, the picked chip is put down, so the next round starts with none picked.
   if (prev && prev.phase !== st.phase && !(st.phase === 'betting' || st.phase === 'settled')) { S.chip = null; S.bigOn = false; } // the Big bet switch is for one hand only
   // The dealer sees the table from the dealer's side: dealer at the bottom, players across the top.
@@ -2340,6 +2341,8 @@ function feltHTML(st) {
     dealerSeat = `<div class="dealer-name">${st.frozen ? (st.houseDealer ? `${esc(st.houseDealer)} deals (practice)` : 'Dealer: house (automatic)') : 'No dealer yet'}
       ${me && !st.vote ? '<button class="btn small gold" data-act="sit-dealer">Ask to be dealer</button>' : ''}</div>`;
   }
+  // A 5 Card Charlie round says so under the dealer's name from the bets until the result.
+  if (st.charlieRound && ['betting', 'insurance', 'playing', 'dealer', 'settled'].includes(st.phase)) dealerSeat += '<div class="charlie-badge" title="Five cards without busting win 1 to 1 this round. A dealer blackjack still wins.">5 Card Charlie round</div>';
   const { order, spots, box } = seatSpots(st);
   computeOdds(st);
   // The dealer's cards: side by side while they fit, closer together when the hand grows. The total sits beside them.
@@ -3506,6 +3509,7 @@ function runAct(el) {
     case 'leave-later': send({ t: 'leave-later', on: el.dataset.on !== '1' }); break;
     case 'd-shuffle': send({ t: 'dealer-shuffle' }); toast(st.phase === 'betting' || st.phase === 'settled' ? 'The shoe was shuffled.' : 'The shoe will be shuffled before the next hand.'); break;
     case 'dealer-save': dealerSaveNow(st); break;
+    case 'charlie-now': send({ t: 'charlie-now' }); break;
     case 'dealer-shuf': send({ t: 'dealer-shuf', on: S.state?.settings?.shuffle8 === false }); break;
     case 'side-clear': delete bet.sides[el.dataset.k]; sendBet(); break;
     case 'clear': {
@@ -4052,6 +4056,7 @@ function banner(title, sub, kind, ms = 2700) {
   el.className = 'table-banner ' + (kind || '');
   el.setAttribute('role', 'status');
   el.innerHTML = `<b>${esc(title)}</b>${sub ? `<span>${esc(sub)}</span>` : ''}`;
+  document.querySelectorAll('.table-banner').forEach((b) => b.remove()); // one at a time: a new one replaces the last, never on top of it
   document.body.appendChild(el);
   setTimeout(() => el.classList.add('out'), ms - 500);
   setTimeout(() => el.remove(), ms);
@@ -4146,6 +4151,7 @@ function rulesSecHTML(st, v, attr) {
     ${sel('maxSplits', 'Splits', [[0, 'No limit'], [1, '1'], [2, '2'], [3, '3']])}
     ${tick('das', 'Double after split')}${tick('splitAces', 'Split aces')}${tick('resplitAces', 'Resplit aces')}${tick('allowSurrender', 'Surrender')}
     <label class="dp-tick dp-charlie"><input type="checkbox" data-${attr}="charlieOn" ${v.charlieOn === true || v.charlieOn === 'true' ? 'checked' : ''} /> 5 Card Charlie, 1 round in<input type="number" inputmode="numeric" min="1" max="1000" step="1" data-${attr}="charlieN" value="${esc(String(v.charlieN))}" /><span data-edge="charlieEvery">${edgeTag(parts.charlieEvery)}</span></label>
+    <button class="btn small dp-charlie-now" data-act="charlie-now" ${st.phase !== 'betting' || st.charlieRound ? 'disabled' : ''} title="Makes the round now open for bets a 5 Card Charlie round. Everyone is told at once. A Charlie round costs the dealer about 1.2% of that round's bets.">${st.charlieRound && st.phase === 'betting' ? 'This round is 5 Card Charlie' : 'Make this round 5 Card Charlie'}</button>
     <span class="dp-note">Estimates for players who use basic strategy. + is good for the dealer.</span>
   </section>`;
 }
