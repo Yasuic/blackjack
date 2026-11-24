@@ -55,7 +55,7 @@ for (const [on, tot, yes] of [['9-11', ['5', '4'], true], ['9-11', ['5', '3'], f
   ok(t.publicState('a').settingsNext, 'the table shows a change is waiting for the next hand');
   while (t.phase === 'playing') t.action('a', 'stand'); while (t.dealerStep()) {}
   t.startBetting(); ok(t.settings.das === false && !t.publicState('a').settingsNext, 'applied when the next hand opens');
-  t.updateSettings({ das: true, dealerHitsSoft17: true, blackjackPays: 1, charlieEvery: 2 }); ok(t.settings.das === false && !t.settings.dealerHitsSoft17 && t.settings.blackjackPays === 1.5 && t.settings.charlieEvery === 0, 'a settings change never touches the rules');
+  t.updateSettings({ das: true, dealerHitsSoft17: false, blackjackPays: 1, charlieEvery: 2 }); ok(t.settings.das === false && t.settings.dealerHitsSoft17 === true && t.settings.blackjackPays === 1.5 && t.settings.charlieEvery === 0, 'a settings change never touches the rules');
   assert.throws(() => t.setRules('bank', { maxSplits: 9 })); assert.throws(() => t.setRules('bank', { blackjackPays: 2 })); assert.throws(() => t.setRules('bank', { doubleOn: 'x' })); n += 3;
   ok(t.publicState('a').rulesNote.join() === 'Double after split not allowed', 'the change is shown to the table: ' + t.publicState('a').rulesNote);
   ok(G.Table.fromJSON(JSON.parse(JSON.stringify(t))).settings.das === false, 'kept through a save');

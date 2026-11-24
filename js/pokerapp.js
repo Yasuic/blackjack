@@ -1,18 +1,19 @@
 // The poker page: a Texas Hold'em table for up to 9 in the big meeting room. The host's browser runs
 // the table (js/poker.js); every other browser sends its moves there and is told only what it may see.
-import { startPresence } from './presence.js?v=20261124i';
-import { outerLink } from './shell.js?v=20261124i';
-import { PokerTable, POKER_SEATS, pokerDeck, cardText, mpClientMoves, mpMine, mpCheck, bestHand, bestOmaha } from './poker.js?v=20261124i';
-import { plainDeck, shufflePass, lockPass, checkDeck, keyFor } from './mental.js?v=20261124i';
-import { sha256 } from './game.js?v=20261124i';
-import { botMove, isBot, BOT_NAMES } from './pokerbot.js?v=20261124i';
-import { chipSound, cardSound, hitSound, standSound, potSound, tickSound, turnSound, punchSound } from './fx.js?v=20261124i';
-import { webglOK, initRoom } from './room3d.js?v=20261124i';
-import { statsHTML as ledgerStatsHTML } from './pstats.js?v=20261124i';
-import { topToolsHTML, initTopTools, setProfit, setRisk, cardScale, profitLineHTML, ledgerTitle } from './toptools.js?v=20261124i';
-import { COPY_BTN, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML } from './common.js?v=20261124i';
+import { startPresence } from './presence.js?v=20261124j';
+import { outerLink } from './shell.js?v=20261124j';
+import { PokerTable, POKER_SEATS, pokerDeck, cardText, mpClientMoves, mpMine, mpCheck, bestHand, bestOmaha } from './poker.js?v=20261124j';
+import { plainDeck, shufflePass, lockPass, checkDeck, keyFor } from './mental.js?v=20261124j';
+import { sha256 } from './game.js?v=20261124j';
+import { botMove, isBot, BOT_NAMES } from './pokerbot.js?v=20261124j';
+import { chipSound, cardSound, hitSound, standSound, potSound, tickSound, turnSound, punchSound } from './fx.js?v=20261124j';
+import { webglOK, initRoom } from './room3d.js?v=20261124j';
+import { statsHTML as ledgerStatsHTML } from './pstats.js?v=20261124j';
+import { betLogAdd, betLogHTML, pokerEntry } from './betlog.js?v=20261124j';
+import { topToolsHTML, initTopTools, setProfit, setRisk, cardScale, profitLineHTML, ledgerTitle } from './toptools.js?v=20261124j';
+import { COPY_BTN, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML } from './common.js?v=20261124j';
 
-import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261124i';
+import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261124j';
 const PREFIX = 'bjt-pk-';
 // A settings change by vote (js/vote.js): any player at the table may ask, every other player at the table who is online has to say yes.
 const VOTE = {
@@ -833,6 +834,8 @@ function render() {
   const body = $('#pk-body');
   if (!body) return;
   const st = S.st ? beatView(S.st) : S.st;
+  // Each finished hand goes into this browser's bet log for the table (Ledger > Bet log).
+  { const h = S.st?.lastHand; if (h && S.betLogged !== S.code + '#' + h.hand) { S.betLogged = S.code + '#' + h.hand; betLogAdd('poker', S.code, pokerEntry(h)); } }
   if (!st) {
     body.innerHTML = `<div class="pk-wait pk-stand">${S.nohost ? (params.get('open') ? 'Opening the table…' : 'The poker table is not open yet. Waiting for the host…') : 'Joining the table…'}</div>`;
     $('#tray').innerHTML = ''; $('#hud-top').innerHTML = '';
@@ -1159,7 +1162,7 @@ function drawMenu(st) {
     <button class="menu-item" data-act="leave">↩️ Leave the table</button>`;
 }
 function ledgerHTML(st) {
-  return ledgerTable(st) + ledgerStatsHTML({ ...st.pstats, note: 'Win means the hand ended with more chips.', tail: 'The 7-2 bounty is in the +/-.' }) + '<button class="btn small office-btn" data-act="office">🏢 All tables</button>' + COPY_BTN;
+  return ledgerTable(st) + ledgerStatsHTML({ ...st.pstats, note: 'Win means the hand ended with more chips.', tail: 'The 7-2 bounty is in the +/-.' }) + betLogHTML('poker', S.code, S.myId) + '<button class="btn small office-btn" data-act="office">🏢 All tables</button>' + COPY_BTN;
 }
 function ledgerTable(st) {
   const rows = [...st.ledger].sort((a, b) => b.net - a.net);

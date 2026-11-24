@@ -528,8 +528,8 @@ html, body, button, input, select { font-family: Inter, system-ui, sans-serif; }
 [data-throw-at]:hover .name, .dealer-name[data-throw-at]:hover { text-decoration: underline dotted; }
 .throw-pop { position: fixed; z-index: 90; width: 220px; background: rgba(12,15,20,.96); border: 1px solid rgba(232,196,106,.45); border-radius: 14px; padding: 10px; box-shadow: 0 14px 40px rgba(0,0,0,.6); animation: pop .15s ease-out; }
 .throw-title { font-size: 12px; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; text-align: center; }
-.throw-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
-.throw-grid button { font-size: 26px; height: 44px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel-2); cursor: pointer; transition: transform .08s; }
+.throw-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.throw-grid button { min-width: 0; padding: 0; font-size: 24px; height: 44px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel-2); cursor: pointer; transition: transform .08s; }
 .throw-grid button:hover { transform: scale(1.15); }
 .thrown { position: fixed; z-index: 95; width: 44px; height: 44px; font-size: 38px; line-height: 44px; text-align: center; pointer-events: none; filter: drop-shadow(0 6px 6px rgba(0,0,0,.5)); }
 .splat { position: fixed; z-index: 94; width: 44px; height: 44px; font-size: 56px; line-height: 44px; text-align: center; pointer-events: none; animation: splat 2.6s ease-out forwards; }
@@ -812,8 +812,8 @@ body.in-room .table-stage::after { display: none; }
 .mid-band .frozen-banner.on b { font-size: 14px; }
 .felt.flip .mid-band .frozen-banner.on { top: auto; bottom: calc(16px - var(--lane-y, 146px)); }
 /* Results and table messages sit on the status line (the page script says where it is), so they never cover cards. */
-.result-pop { left: var(--pop-x, 50%); top: var(--pop-y, 30%); padding: 6px 28px; border-radius: 999px; display: flex; flex-wrap: wrap; align-items: baseline; justify-content: center; column-gap: 12px; white-space: nowrap; max-width: 96vw; background: rgba(8,10,14,.97); }
-.result-pop small { font-size: 15px; letter-spacing: 3px; }
+.result-pop { left: var(--pop-x, 50%); top: var(--pop-y, 30%); padding: 6px 28px; border-radius: 999px; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; column-gap: 12px; white-space: nowrap; max-width: 96vw; background: rgba(8,10,14,.97); }
+.result-pop small { font-size: 15px; letter-spacing: 3px; line-height: 1; margin-right: -3px; }
 .result-pop b { font-size: 34px; line-height: 1.15; }
 .result-pop em { flex-basis: 100%; font-size: 12px; margin: -2px 0 2px; }
 .table-banner { left: var(--pop-x, 50%); top: var(--pop-y, 30%); padding: 6px 22px; }
@@ -918,7 +918,7 @@ body.in-room .table-stage::after { display: none; }
 body.in-room .tray-wrap { flex: none; position: relative; z-index: 20; width: min(860px, calc(100vw - 528px)); height: 150px; margin: auto auto 6px; }
 body.in-room:not(.room3d) .tray { width: 100%; max-width: none; height: 100%; min-height: 0; margin: 0; padding: 8px 14px; gap: 8px; }
 body.room3d .tray-wrap { position: static; width: auto; height: 0; margin: 0; }
-body:has(.card.pending) #tray > * { visibility: hidden; }
+body:has(.card.pending) #tray > *:not(.dealer-panel):not(.dp-bar) { visibility: hidden; }
 .zoom-ctl .tilt-ctl input { width: 70px; }
 .tray .decide { position: static; width: 100%; gap: 4px; }
 .tray .decide-title { font-size: 16px; line-height: 22px; letter-spacing: 3px; text-shadow: none; }
@@ -1779,7 +1779,21 @@ body.room3d .room-css-top { z-index: 2; pointer-events: none !important; }
 .felt-top .seat .who, .felt-top .seat .who *, .felt-top .seat .total, .felt-top .seat .result { visibility: visible !important; }
 .felt-top .seat .who, .felt-top .seat .who * { pointer-events: auto !important; }
 .felt.lifted .seat .who, .felt.lifted .seat .total, .felt.lifted .seat .result { visibility: hidden; }
+/* The players' cards again, above the lifted name plates (room3d cardsEl); everything else in this copy is hidden. */
+.felt-cards, .felt-cards * { visibility: hidden !important; animation: none !important; transition: none !important; pointer-events: none !important; }
+.felt-cards .seat .hands .card, .felt-cards .seat .hands .card * { visibility: visible !important; }
 .charlie-badge { display: table; margin: 4px auto 0; padding: 3px 12px; border-radius: 999px; background: #1f7a4d; color: #eafff3; border: 1px solid #6fe0a0; font: 700 12px Inter, system-ui, sans-serif; letter-spacing: .3px; white-space: nowrap; }
 .dp-rules .dp-charlie-now { justify-self: start; }
 .dp-rules .dp-charlie-now:disabled { opacity: .6; }
 .dp-foot .dp-next { align-self: center; font-size: 12px; font-weight: 600; color: #f2d58a; }
+/* Bet log fold in every game's Ledger */
+.bl-fold { border-top: 1px solid rgba(255,255,255,.1); margin-top: 12px; }
+.bl-fold > summary { cursor: pointer; padding: 10px 0 6px; font-weight: 800; font-size: 15px; color: #f2d58a; list-style: none; }
+.bl-fold > summary::-webkit-details-marker { display: none; }
+.bl-fold > summary::after { content: ' ▸'; opacity: .7; }
+.bl-fold[open] > summary::after { content: ' ▾'; }
+.bl-wrap { max-height: 420px; overflow: auto; }
+.bl-t td.bl-did { white-space: normal; text-align: left; min-width: 220px; line-height: 1.35; }
+.bl-t th:nth-child(3) { text-align: left; }
+.bl-t tr.bl-round td { text-align: left; font-weight: 700; font-size: 12px; color: #c9d3e0; background: rgba(255,255,255,.04); padding-top: 7px; }
+.bl-t tr.me td { color: #f2d58a; }

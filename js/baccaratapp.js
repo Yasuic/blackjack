@@ -1,15 +1,16 @@
 // The baccarat page: a punto banco table for up to 9 in the small meeting room. The host's browser runs
 // the table (js/baccarat.js); every other browser sends its bets there and is told only what it may see.
-import { startPresence } from './presence.js?v=20261124i';
-import { outerLink } from './shell.js?v=20261124i';
-import { BacTable, BAC_SEATS, BAC_SPOTS, BAC_KEYS, verifyShoe, cardText } from './baccarat.js?v=20261124i';
-import { webglOK, initRoom } from './room3d.js?v=20261124i';
-import { statsHTML } from './pstats.js?v=20261124i';
-import { topToolsHTML, initTopTools, setProfit, setPractice, setRisk, bankRisk, cardScale, ledgerTitle } from './toptools.js?v=20261124i';
-import { autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML, breachCover } from './common.js?v=20261124i';
-import { KeyGuard, mixKeys, newNonce } from './cardkeys.js?v=20261124i';
+import { startPresence } from './presence.js?v=20261124j';
+import { outerLink } from './shell.js?v=20261124j';
+import { BacTable, BAC_SEATS, BAC_SPOTS, BAC_KEYS, verifyShoe, cardText } from './baccarat.js?v=20261124j';
+import { webglOK, initRoom } from './room3d.js?v=20261124j';
+import { statsHTML } from './pstats.js?v=20261124j';
+import { betLogAdd, betLogHTML, bankEntry } from './betlog.js?v=20261124j';
+import { topToolsHTML, initTopTools, setProfit, setPractice, setRisk, bankRisk, cardScale, ledgerTitle } from './toptools.js?v=20261124j';
+import { autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML, breachCover } from './common.js?v=20261124j';
+import { KeyGuard, mixKeys, newNonce } from './cardkeys.js?v=20261124j';
 
-import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261124i';
+import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261124j';
 const PREFIX = 'bjt-bc-';
 // A settings change by vote (js/vote.js): any player at the table may ask, every other player at the table who is online has to say yes.
 const VOTE = {
@@ -570,6 +571,8 @@ function render() {
   const body = $('#pk-body');
   if (!body) return;
   const st = S.st;
+  // Each settled round goes into this browser's bet log for the table (Ledger > Bet log).
+  if (st?.phase === 'done' && S.betLogged !== S.code + '#' + st.round) { S.betLogged = S.code + '#' + st.round; betLogAdd('baccarat', S.code, bankEntry(st, (k) => BAC_SPOTS[k]?.name || k, st.hand ? `Player ${st.hand.pt}, Banker ${st.hand.bt}: ${st.hand.winner === 'tie' ? 'Tie' : st.hand.winner === 'player' ? 'Player wins' : 'Banker wins'}` : '')); }
   // Freed from a seat for not betting in the round that just started (unseatIdle).
   if (st?.unseated && st.unseated.round !== S.unseatSeen) { const first = S.unseatSeen === undefined; S.unseatSeen = st.unseated.round; if (!first && st.unseated.ids?.includes(S.myId)) toast(st.unseated.dealer ? 'The dealer unseated you. Place a bet to sit down again.' : 'You were unseated for not betting. Place a bet to sit down again.'); }
   if (!st) {
@@ -710,7 +713,7 @@ function drawMenu(st) {
     ${S.room ? '<button class="menu-item" data-act="walk">🚶 Walk around</button>' : ''}
     <button class="menu-item" data-act="leave">↩️ Leave the table</button>`;
 }
-function ledgerHTML(st) { return bankLedgerHTML(st, S.myId) + statsHTML({ ...st.pstats, note: 'A round that ends even is not a win.', tail: 'Bank results count for the dealer.' }); }
+function ledgerHTML(st) { return bankLedgerHTML(st, S.myId) + statsHTML({ ...st.pstats, note: 'A round that ends even is not a win.', tail: 'Bank results count for the dealer.' }) + betLogHTML('baccarat', S.code, S.myId); }
 function rulesHTML(st) {
   const s = st.settings;
   return `<h3>Rules and payouts</h3><div class="pk-rules">

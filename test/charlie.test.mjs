@@ -4,8 +4,8 @@ import assert from 'node:assert/strict';
 import * as G from '../js/game.js';
 const { handTotal } = G;
 let n = 0, charlies = 0; const ok = (c, m) => { assert.ok(c, m); n++; };
-ok(new G.Table({}).settings.charlieEvery === 10, 'about 1 round in 10 by default');
-ok(new G.Table({ charlie: false }).settings.charlieEvery === 0 && new G.Table({ charlie: true }).settings.charlieEvery === 10, 'old on/off switch carries over');
+ok(new G.Table({}).settings.charlieEvery === 6 && new G.Table({}).settings.dealerHitsSoft17 === true, 'about 1 round in 6 by default, dealer hits soft 17');
+ok(new G.Table({ charlie: false }).settings.charlieEvery === 0 && new G.Table({ charlie: true }).settings.charlieEvery === 6, 'old on/off switch carries over');
 ok(!('charlie' in new G.Table({ charlie: true }).settings), 'old switch removed');
 const mk = (on) => {
   const t = new G.Table({ maxBet: 75, minBet: 10, maxSideBet: 10, sideBets: [], charlieEvery: on ? 1 : 0 });

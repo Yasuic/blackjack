@@ -42,7 +42,7 @@ export const DEFAULT_SETTINGS = {
   minBet: 5,
   maxBet: 75,
   maxSideBet: 10,
-  dealerHitsSoft17: false,
+  dealerHitsSoft17: true,
   blackjackPays: 1.5,    // 3:2
   allowSurrender: true,
   // The dealer's rules (setRules; the host's while the house deals). Changed only between rounds.
@@ -51,7 +51,7 @@ export const DEFAULT_SETTINGS = {
   maxSplits: 0,          // splits per seat: 1, 2 or 3, or 0 for no limit
   das: true,             // double after a split
   doubleOn: 'any',       // double on 'any' first two cards, or only on totals '9-11' or '10-11'
-  charlieEvery: 10,      // Five Card Charlie on about 1 random round in this many (0 = off). Each such round is
+  charlieEvery: 6,       // Five Card Charlie on about 1 random round in this many (0 = off). Each such round is
                          // announced while bets are open. Five cards without busting win at once, paid 1 to 1;
                          // a dealer blackjack still beats it. The dealer sets it: on every round it costs the dealer.
   autoDeal: true,        // deal as soon as every seated player is ready
@@ -1607,6 +1607,8 @@ export class Table {
   }
   actionInner(clientId, a, p, seat, h) {
     const at = `s${this.turn.seat}.${this.turn.hand}`, next = `s${this.turn.seat}.${this.turn.hand + 1}`;
+    // What the player did on this hand, for the bet log in the Ledger (all of it is public).
+    if (a === 'hit' || a === 'stand' || a === 'double' || a === 'surrender') (h.acts ||= []).push(a[0].toUpperCase() + a.slice(1));
     if (a === 'hit') {
       h.cards.push(this.draw(at));
       const t = handTotal(h.cards).total;
@@ -1629,6 +1631,7 @@ export class Table {
       const second = newHand(h.bet);
       second.cards.push(h.cards.pop());
       second.fromSplit = h.fromSplit = true;
+      (h.acts ||= []).push('Split'); second.acts = [...h.acts];
       h.cards.push(this.draw(at));
       second.cards.push(this.draw(next));
       if (aces) {
@@ -1652,7 +1655,7 @@ export class Table {
   skipTurn() {
     if (this.phase !== 'playing' || !this.turn) return;
     this.ev('stand (by the table: time ran out or the host skipped)', this.seats[this.turn.seat].playerId, `hand ${this.turn.hand + 1}`);
-    this.seats[this.turn.seat].hands[this.turn.hand].done = true;
+    { const h = this.seats[this.turn.seat].hands[this.turn.hand]; h.done = true; (h.acts ||= []).push('Stand (time)'); }
     this.advance();
   }
 

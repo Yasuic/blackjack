@@ -1,8 +1,8 @@
 // No-limit Texas Hold'em for up to 9 players. Pure rules: the host's browser owns one PokerTable and
 // every action goes through it. Nothing here touches the page or the network.
-import { SUITS, RANKS, sha256, fairSeed, fairShoe, MAX_CHIPS } from './game.js?v=20261124i';
-import { openCard, keyFor } from './mental.js?v=20261124i';
-import { pstatAdd, pstatsView } from './pstatcore.js?v=20261124i';
+import { SUITS, RANKS, sha256, fairSeed, fairShoe, MAX_CHIPS } from './game.js?v=20261124j';
+import { openCard, keyFor } from './mental.js?v=20261124j';
+import { pstatAdd, pstatsView } from './pstatcore.js?v=20261124j';
 
 export const POKER_SEATS = 9;
 export const POKER_DEFAULTS = {
@@ -460,7 +460,7 @@ export class PokerTable {
   // Collects the cards of a finished hand and goes back to waiting. Used when too few players can play the next hand.
   clearHand() {
     if (this.phase !== 'done') return false;
-    for (const x of this.seats) if (x) Object.assign(x, { start: x.stack, bet: 0, total: 0, cards: [], folded: false, allIn: false, acted: false, inHand: false, show: false, mask: null, cc: null, salt: null, won: 0, hand: null, allInAt: 0 });
+    for (const x of this.seats) if (x) Object.assign(x, { start: x.stack, bet: 0, total: 0, cards: [], folded: false, allIn: false, acted: false, inHand: false, show: false, mask: null, cc: null, salt: null, won: 0, hand: null, allInAt: 0, acts: [] });
     this.board = []; this.board2 = []; this.rabbit = null; this.rabbit2 = null; this.pot = 0; this.result = null; this.allInRun = false; this.runAsk = null; this.runout = null; this.runs = 1; this.runBase = null; this.boards = null; this.turn = null; this.bomb = false;
     this.phase = 'waiting';
     return true;
@@ -504,6 +504,7 @@ export class PokerTable {
       const x = this.seats[i], pay = Math.min(x.stack, amount);
       x.stack -= pay; x.bet += pay; x.total += pay;
       if (x.stack === 0) { x.allIn = true; x.allInAt ||= ++this.allInSeq; }
+      if (pay && what) this.actRec(i, `Post ${what.replace(/^the /, '')} ${pay}`);
       if (pay && what) this.addLog(`${this.name(i)} posts ${what} ${pay}${x.allIn ? ' and is all in' : ''}.`);
       return pay;
     };
@@ -593,14 +594,14 @@ export class PokerTable {
     if (type === 'fold') { this.foldSeat(i); return; }
     if (type === 'check') {
       if (!o.canCheck) throw new Error('You cannot check: there is a bet to call.');
-      x.acted = true; this.addLog(`${nm} checks.`);
+      x.acted = true; this.actRec(i, 'Check'); this.addLog(`${nm} checks.`);
     } else if (type === 'call') {
       if (o.canCheck) throw new Error('There is nothing to call.');
       const pay = o.toCall;
       x.stack -= pay; x.bet += pay; x.total += pay; x.acted = true;
       if (x.stack === 0) { x.allIn = true; x.allInAt ||= ++this.allInSeq; }
       if (this.phase === 'preflop' && !this.bomb) x.vp = true;
-      this.addLog(`${nm} calls ${pay}${x.allIn ? ' and is all in' : ''}.`);
+      this.actRec(i, `Call ${pay}${x.allIn ? ' all in' : ''}`); this.addLog(`${nm} calls ${pay}${x.allIn ? ' and is all in' : ''}.`);
     } else if (type === 'raise' || type === 'bet') {
       if (!o.canRaise) throw new Error('You cannot raise now.');
       const to = Math.round(Number(amount));
@@ -616,15 +617,17 @@ export class PokerTable {
       }
       if (this.phase === 'preflop' && !this.bomb) { x.vp = true; x.pf = true; }
       if (this.phase !== 'preflop') x.agg = true;
-      this.addLog(`${nm} ${o.isBet ? 'bets' : 'raises to'} ${to}${x.allIn ? ' and is all in' : ''}.`);
+      this.actRec(i, `${o.isBet ? 'Bet' : 'Raise to'} ${to}${x.allIn ? ' all in' : ''}`); this.addLog(`${nm} ${o.isBet ? 'bets' : 'raises to'} ${to}${x.allIn ? ' and is all in' : ''}.`);
       this.currentBet = to; this.raiser = i;
       if (this.phase === 'river') this.riverAgg = i;
     } else throw new Error('Unknown move.');
     this.seekTurn(i);
   }
+  // What each player did this hand, by street, for the bet log in the Ledger. Every move here is public.
+  actRec(i, what) { const x = this.seats[i]; if (!x) return; const st = { preflop: 'Pre', flop: 'Flop', turn: 'Turn', river: 'River' }[this.phase]; (x.acts ||= []).push((st ? st + ': ' : '') + what); }
   foldSeat(i, leaving = false) {
     const x = this.seats[i];
-    x.folded = true; x.acted = true;
+    x.folded = true; x.acted = true; this.actRec(i, 'Fold');
     this.addLog(`${this.name(i)} folds${leaving ? ' and leaves' : ''}.`);
     if (this.turn === i || this.liveSeats().length <= 1) this.seekTurn(i);
   }
@@ -913,7 +916,7 @@ export class PokerTable {
     this.phase = 'done';
     // The record of the hand, with the seed that anyone can check.
     const rec = { ...this.cur, dealt: [...this.dealt], board: [...this.board], board2: this.dbl ? [...this.board2] : undefined, boards: R > 1 ? boards : undefined, button: this.button, wins, bounty,
-      seats: dealtIn.map((i) => ({ seat: i, id: this.seats[i].id, name: this.name(i), cards: this.shownCards(i), folded: this.seats[i].folded, total: this.seats[i].total, won: this.seats[i].won || 0, end: this.seats[i].stack, start: this.seats[i].start })) };
+      seats: dealtIn.map((i) => ({ seat: i, id: this.seats[i].id, name: this.name(i), cards: this.shownCards(i), folded: this.seats[i].folded, total: this.seats[i].total, won: this.seats[i].won || 0, end: this.seats[i].stack, start: this.seats[i].start, acts: [...(this.seats[i].acts || [])] })) };
     this.fair.last = { hand: rec.hand, commit: rec.commit, serverSeed: rec.serverSeed, clientSeeds: rec.clientSeeds, dealt: rec.dealt }; // host side only
     this.hist.push(rec); if (this.hist.length > 100) this.hist.shift();
     pstatAdd(this, rec.hand, rec.seats.map((x) => ({ name: x.name, net: Number.isFinite(x.start) ? x.end - x.start : (x.won || 0) - (x.total || 0) })), true);

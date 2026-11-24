@@ -217,7 +217,7 @@ function buildOffice(signText, midShift = 0, midScale = 1, skipRoom = null, live
     chrome: mk({ color: '#b9bec4', roughness: 0.25, metalness: 0.9 }),
     screen: mk({ color: '#0d0f12', roughness: 0.25, metalness: 0.2 }),
     // What the office screens show: the ARC Group logo, from the photo of it, lit like a screen that is on.
-    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261124i'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
+    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261124j'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
     dark: mk({ color: '#30353c', roughness: 0.6 }),
   };
   const group = new THREE.Group();
@@ -1005,7 +1005,7 @@ function buildStorefront() {
     lamp: lam('#c8161d', 0.6), bulb: lit('#ffe9a8'), red: lit('#c8161d'), gold: lit('#f4c542'), wood: lam('#7a5234', 0.35),
     glass: new THREE.MeshBasicMaterial({ color: '#dff3f7', transparent: true, opacity: 0.13, depthWrite: false }),
     awning: new THREE.MeshBasicMaterial({ map: canvasTexture(512, 64, (g, w, h) => { for (let i = 0; i < 16; i++) { g.fillStyle = i % 2 ? '#fff6e6' : '#f08a1c'; g.fillRect((i * w) / 16, 0, w / 16 + 1, h); } }), side: THREE.DoubleSide }),
-    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261124i') }),
+    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261124j') }),
     menu: new THREE.MeshBasicMaterial({ map: canvasTexture(256, 384, (g, w, h) => {
       g.fillStyle = '#c8161d'; g.fillRect(0, 0, w, h); g.fillStyle = '#f4c542'; g.fillRect(14, 14, w - 28, 44);
       const r = rng(11); g.fillStyle = '#fff3d6';
@@ -1159,23 +1159,34 @@ export function initRoom(container, feltEl, { phone, hud = null, size = null, ga
   const LIFT = !TOP && game === 'blackjack';
   const cssTop = LIFT ? new CSS3DRenderer() : null, topScene = LIFT ? new THREE.Scene() : null;
   const topEl = LIFT ? document.createElement('div') : null, topObj = LIFT ? new CSS3DObject(topEl) : null;
-  let liftT = 0, liftObs = null;
-  const syncTop = () => {
-    liftT = 0;
+  // A third copy holds only the players' cards, a little above the labels, so a name plate never covers a card.
+  const cardsEl = LIFT ? document.createElement('div') : null, cardsObj = LIFT ? new CSS3DObject(cardsEl) : null;
+  let liftT = 0, liftObs = null, flyT = 0;
+  const copyInto = (el, cls) => {
     const c = feltEl.cloneNode(true);
     c.querySelectorAll('[id]').forEach((e) => e.removeAttribute('id'));
-    topEl.className = feltEl.className + ' felt-top';
+    el.className = feltEl.className + ' ' + cls;
     // The felt's own inline values (size, --bb and the rest), but the copy keeps the 3D placement its renderer gave it.
-    const own = topEl.style.transform;
-    topEl.style.cssText = feltEl.style.cssText;
-    topEl.style.transform = own;
-    topEl.replaceChildren(...c.childNodes);
+    const own = el.style.transform;
+    el.style.cssText = feltEl.style.cssText;
+    el.style.transform = own;
+    return c;
+  };
+  const syncTop = () => {
+    liftT = 0;
+    topEl.replaceChildren(...copyInto(topEl, 'felt-top').childNodes);
+    // A card still flying from the shoe stays hidden in the copy until it lands, then the copy is made again.
+    const c = copyInto(cardsEl, 'felt-cards'), src = feltEl.querySelectorAll('.seat .card'), dst = c.querySelectorAll('.seat .card');
+    let flying = false;
+    src.forEach((e, i) => { if (dst[i] && e.getAnimations?.().length) { dst[i].classList.add('pending'); flying = true; } });
+    cardsEl.replaceChildren(...c.childNodes);
+    clearTimeout(flyT); if (flying) flyT = setTimeout(syncTop, 460);
     touch();
   };
   if (LIFT) {
     cssTop.domElement.className = 'room-css room-css-top';
     container.append(cssTop.domElement);
-    topScene.add(topObj);
+    topScene.add(topObj); topScene.add(cardsObj);
     feltEl.classList.add('lifted');
     liftObs = new MutationObserver(() => { if (!liftT) liftT = setTimeout(syncTop, 120); });
     liftObs.observe(feltEl, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['class', 'style'] });
@@ -2610,7 +2621,7 @@ export function initRoom(container, feltEl, { phone, hud = null, size = null, ga
     const bb = `matrix3d(${f(0)},${f(1, 1)},${f(2)},0,${f(4, 1)},${f(5)},${f(6, 1)},0,${f(8)},${f(9, 1)},${f(10)},0,0,0,0,1)`;
     if (bb !== bbLast) { bbLast = bb; feltEl.style.setProperty('--bb', bb); topEl?.style.setProperty('--bb', bb); }
     css.render(scene, camera);
-    if (LIFT) { topObj.position.copy(feltObj.position); topObj.position.y += 2; topObj.quaternion.copy(feltObj.quaternion); topObj.scale.copy(feltObj.scale); cssTop.render(topScene, camera); }
+    if (LIFT) { topObj.position.copy(feltObj.position); topObj.position.y += 2; topObj.quaternion.copy(feltObj.quaternion); topObj.scale.copy(feltObj.scale); cardsObj.position.copy(topObj.position); cardsObj.position.y += 2; cardsObj.quaternion.copy(feltObj.quaternion); cardsObj.scale.copy(feltObj.scale); cssTop.render(topScene, camera); }
   };
   requestAnimationFrame(loop);
 
@@ -2743,6 +2754,6 @@ export function initRoom(container, feltEl, { phone, hud = null, size = null, ga
     info: () => ({ calls: gl.info.render.calls, triangles: gl.info.render.triangles, fps, seated, side, pos: camera.position.toArray().map(Math.round), yaw: cur.yaw, r: Math.round(cur.r), home: homeFit && Math.round(homeFit.r), phi: homeFit && homeFit.phi, people: figs.size, others: otherGroup.children.length }),
     // Jump straight to where the camera is heading (used by tests, which cannot wait for the glide).
     settle() { for (const key of ['theta', 'phi', 'r', 'yaw', 'pitch']) cur[key] = goal[key]; cur.t.copy(goal.t); touch(); },
-    stop() { running = false; if (LIFT) { liftObs?.disconnect(); clearTimeout(liftT); cssTop.domElement.remove(); feltEl.classList.remove('lifted'); } },
+    stop() { running = false; if (LIFT) { liftObs?.disconnect(); clearTimeout(liftT); clearTimeout(flyT); cssTop.domElement.remove(); feltEl.classList.remove('lifted'); } },
   };
 }
