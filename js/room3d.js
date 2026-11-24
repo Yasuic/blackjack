@@ -217,7 +217,7 @@ function buildOffice(signText, midShift = 0, midScale = 1, skipRoom = null, live
     chrome: mk({ color: '#b9bec4', roughness: 0.25, metalness: 0.9 }),
     screen: mk({ color: '#0d0f12', roughness: 0.25, metalness: 0.2 }),
     // What the office screens show: the ARC Group logo, from the photo of it, lit like a screen that is on.
-    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261124e'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
+    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261124f'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
     dark: mk({ color: '#30353c', roughness: 0.6 }),
   };
   const group = new THREE.Group();
@@ -1005,7 +1005,7 @@ function buildStorefront() {
     lamp: lam('#c8161d', 0.6), bulb: lit('#ffe9a8'), red: lit('#c8161d'), gold: lit('#f4c542'), wood: lam('#7a5234', 0.35),
     glass: new THREE.MeshBasicMaterial({ color: '#dff3f7', transparent: true, opacity: 0.13, depthWrite: false }),
     awning: new THREE.MeshBasicMaterial({ map: canvasTexture(512, 64, (g, w, h) => { for (let i = 0; i < 16; i++) { g.fillStyle = i % 2 ? '#fff6e6' : '#f08a1c'; g.fillRect((i * w) / 16, 0, w / 16 + 1, h); } }), side: THREE.DoubleSide }),
-    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261124e') }),
+    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261124f') }),
     menu: new THREE.MeshBasicMaterial({ map: canvasTexture(256, 384, (g, w, h) => {
       g.fillStyle = '#c8161d'; g.fillRect(0, 0, w, h); g.fillStyle = '#f4c542'; g.fillRect(14, 14, w - 28, 44);
       const r = rng(11); g.fillStyle = '#fff3d6';
@@ -2115,6 +2115,7 @@ export function initRoom(container, feltEl, { phone, hud = null, size = null, ga
       goal.r = Math.min(rMax(), Math.max(rMin(), goal.r));
       // Walking around, your eyes stay at standing height or above: never down at the table top, and clear of people's heads.
       goal.phi = Math.max(0.2, Math.min(PHI_MAX, Math.acos(Math.min(1, EYE / goal.r)), goal.phi));
+      goal.pitch = Math.max(-1.2, Math.min(2.2, goal.pitch)); // the final view is held between straight down and straight up below
     }
   }
   function zoom(f) {
@@ -2229,6 +2230,7 @@ export function initRoom(container, feltEl, { phone, hud = null, size = null, ga
     const k = 2.4 / Math.max(320, container.clientHeight);
     if (drag.pan) { slide(dx, dy); return; }
     if (seated) { goal.yaw += dx * k * 1.5; goal.pitch += dy * k; }
+    else if (walking) { goal.theta -= dx * k * 1.6; goal.pitch += dy * k; } // walking: up and down tilts your head, up to the ceiling and down to your feet
     else { goal.theta -= dx * k * 1.6; goal.phi -= dy * k; }
     clampGoal(); touch();
   });
@@ -2571,7 +2573,7 @@ export function initRoom(container, feltEl, { phone, hud = null, size = null, ga
     // At the table, a wall only stops the camera; the view keeps the direction it would have had, so it never swings round when the camera is held right over the point it looks at.
     if (!tour && !walking && !walkOut && !arrive) { tmp.x = cur.t.x - ix; tmp.z = cur.t.z - iz; }
     const yaw0 = Math.atan2(-tmp.x, -tmp.z), pitch0 = Math.atan2(tmp.y, Math.hypot(tmp.x, tmp.z));
-    camera.rotation.set(Math.max(-1.5, Math.min(0.6, pitch0 + cur.pitch)), yaw0 + cur.yaw, 0, 'YXZ');
+    camera.rotation.set(Math.max(-1.5, Math.min(walking ? 1.5 : 0.6, pitch0 + cur.pitch)), yaw0 + cur.yaw, 0, 'YXZ'); // walking: look up as far as straight up, never past it
     // In your own chair you see your body, arms and stool when you look down, but no head in front of your eyes.
     // Your own head is never drawn while the camera is at it (within a metre across the floor): it would block the table.
     if (myFig) { tmp.setFromMatrixPosition(myFig.matrixWorld); const close = Math.hypot(tmp.x - camera.position.x, tmp.z - camera.position.z) < 1.0 * S; for (const part of myFig.userData.headParts) part.visible = (!seated || !!tour) && !close; }

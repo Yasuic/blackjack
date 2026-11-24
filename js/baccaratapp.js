@@ -1,15 +1,15 @@
 // The baccarat page: a punto banco table for up to 9 in the small meeting room. The host's browser runs
 // the table (js/baccarat.js); every other browser sends its bets there and is told only what it may see.
-import { startPresence } from './presence.js?v=20261124e';
-import { outerLink } from './shell.js?v=20261124e';
-import { BacTable, BAC_SEATS, BAC_SPOTS, BAC_KEYS, verifyShoe, cardText } from './baccarat.js?v=20261124e';
-import { webglOK, initRoom } from './room3d.js?v=20261124e';
-import { statsHTML } from './pstats.js?v=20261124e';
-import { topToolsHTML, initTopTools, setProfit, setPractice, setRisk, bankRisk, cardScale, ledgerTitle } from './toptools.js?v=20261124e';
-import { autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML, breachCover } from './common.js?v=20261124e';
-import { KeyGuard, mixKeys, newNonce } from './cardkeys.js?v=20261124e';
+import { startPresence } from './presence.js?v=20261124f';
+import { outerLink } from './shell.js?v=20261124f';
+import { BacTable, BAC_SEATS, BAC_SPOTS, BAC_KEYS, verifyShoe, cardText } from './baccarat.js?v=20261124f';
+import { webglOK, initRoom } from './room3d.js?v=20261124f';
+import { statsHTML } from './pstats.js?v=20261124f';
+import { topToolsHTML, initTopTools, setProfit, setPractice, setRisk, bankRisk, cardScale, ledgerTitle } from './toptools.js?v=20261124f';
+import { autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML, breachCover } from './common.js?v=20261124f';
+import { KeyGuard, mixKeys, newNonce } from './cardkeys.js?v=20261124f';
 
-import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261124e';
+import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261124f';
 const PREFIX = 'bjt-bc-';
 // A settings change by vote (js/vote.js): any player at the table may ask, every other player at the table who is online has to say yes.
 const VOTE = {

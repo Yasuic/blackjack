@@ -1,18 +1,18 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { startPresence } from './presence.js?v=20261124e';
-import { outerLink } from './shell.js?v=20261124e';
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe, destName, stepOf, RULE_TEXT } from './game.js?v=20261124e';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261124e';
-import { bestMove, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261124e';
-import { tickSound, winSound } from './fx.js?v=20261124e';
-import * as HX from './history.js?v=20261124e';
-import { webglOK, initRoom, COLLEAGUES } from './room3d.js?v=20261124e';
-import { COPY_BTN, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261124e';
-import { topToolsHTML, initTopTools, setProfit, setPractice, setRisk, cardScale, profitLineHTML, ledgerTitle } from './toptools.js?v=20261124e';
-import { statsHTML } from './pstats.js?v=20261124e';
-import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261124e';
+import { startPresence } from './presence.js?v=20261124f';
+import { outerLink } from './shell.js?v=20261124f';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe, destName, stepOf, RULE_TEXT } from './game.js?v=20261124f';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261124f';
+import { bestMove, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261124f';
+import { tickSound, winSound } from './fx.js?v=20261124f';
+import * as HX from './history.js?v=20261124f';
+import { webglOK, initRoom, COLLEAGUES } from './room3d.js?v=20261124f';
+import { COPY_BTN, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261124f';
+import { topToolsHTML, initTopTools, setProfit, setPractice, setRisk, cardScale, profitLineHTML, ledgerTitle } from './toptools.js?v=20261124f';
+import { statsHTML } from './pstats.js?v=20261124f';
+import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261124f';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
