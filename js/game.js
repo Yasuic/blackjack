@@ -832,6 +832,8 @@ export class Table {
     return out;
   }
   // A player whose every seat is sitting out is away: they are not asked to vote.
+  // Inside the office a player can sit at several tables and play at one of them: the others keep the seats.
+  setElsewhere(id, on) { const p = this.players[id]; if (!p || !!p.elsewhere === !!on) return false; p.elsewhere = !!on; return true; }
   allOut(id) { const mine = this.seatsOf(id); return mine.length > 0 && mine.every((i) => this.seats[i].out); }
   fixSeat(p) { const o = this.seatsOf(p.id); p.seat = o.length ? o[0] : null; }
   clearSeats(p) { this.seatsOf(p.id).forEach((i) => { this.seats[i] = null; }); p.seat = null; }
@@ -1500,9 +1502,10 @@ export class Table {
       }
     });
     // A seat with no bet in this round is freed at once: the player keeps the chips, watches, and can sit again any time.
+    // A player at another table of the office keeps the seat and sits this round out.
     const unseated = [];
     this.seats.forEach((seat, i) => {
-      if (!seat || seat.hands.length) return;
+      if (!seat || seat.hands.length || this.players[seat.playerId]?.elsewhere) return;
       this.ev('unseated: no bet this round', seat.playerId, `seat ${i + 1}`);
       if (!unseated.includes(seat.playerId)) unseated.push(seat.playerId);
       this.seats[i] = null;

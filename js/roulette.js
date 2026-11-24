@@ -109,6 +109,8 @@ export class RouTable {
   addLog(line) { this.log.push(line); if (this.log.length > 200) this.log.splice(0, this.log.length - 200); }
   mustPlayer(id) { const p = this.players[id]; if (!p || p.kicked) throw new Error('Join the table first.'); return p; }
 
+  // Inside the office a player can sit at several tables and play at one of them: the others keep the seats.
+  setElsewhere(id, on) { const p = this.players[id]; if (!p || !!p.elsewhere === !!on) return false; p.elsewhere = !!on; if (on) delete this.ready[id]; this.spinIfAll(); return true; }
   join(id, name, look) {
     let p = this.players[id];
     const clean = String(name || 'Player').replace(/[<>]/g, '').trim().slice(0, 16) || 'Player';
@@ -125,7 +127,7 @@ export class RouTable {
   disconnect(id) { const p = this.players[id]; if (p) p.connected = false; delete this.ready[id]; this.spinIfAll(); }
   kick(id) { const p = this.players[id]; if (!p) return; bankGone(this, id); this.clearBets(id, true); p.kicked = true; p.connected = false; p.seat = -1; delete this.ready[id]; this.spinIfAll(); }
   // The wheel turns once every seated player who is online has pressed Spin. A player who is offline is not waited for.
-  voters() { return Object.values(this.players).filter((p) => !p.kicked && p.connected && !p.quiet && p.seat >= 0).map((p) => p.id); }
+  voters() { return Object.values(this.players).filter((p) => !p.kicked && p.connected && !p.quiet && !p.elsewhere && p.seat >= 0).map((p) => p.id); }
   // A player whose browser has gone silent (closed lid, lost network) before the link is seen to drop: not waited for.
   setQuiet(id, q) { const p = this.players[id]; if (!p || !!p.quiet === !!q) return false; p.quiet = !!q; if (q) delete this.ready[id]; this.spinIfAll(); return true; }
   waitingFor() { return this.voters().filter((id) => !this.ready[id]); }
@@ -218,9 +220,9 @@ export class RouTable {
     for (const [k, v] of Object.entries(last)) this.bet(id, k, v);
   }
   // A seated player with no bet when the round starts loses the seat: chips stay theirs, they watch, and their
-  // next bet sits them down again. The dealer is never unseated.
+  // next bet sits them down again. The dealer is never unseated, nor a player who is at another table of the office.
   unseatIdle(round) {
-    const ids = Object.values(this.players).filter((p) => !p.kicked && p.seat >= 0 && p.id !== this.bankId && !(this.staked(p.id) > 0)).map((p) => p.id);
+    const ids = Object.values(this.players).filter((p) => !p.kicked && !p.elsewhere && p.seat >= 0 && p.id !== this.bankId && !(this.staked(p.id) > 0)).map((p) => p.id);
     for (const id of ids) { this.players[id].seat = -1; this.addLog(`${this.players[id].name} was unseated for not betting.`); }
     this.unseated = { round, ids };
   }

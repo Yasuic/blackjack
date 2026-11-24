@@ -9,7 +9,7 @@ import { webglOK, initRoom } from './room3d.js?v=20261124j';
 import { statsHTML } from './pstats.js?v=20261124j';
 import { betLogAdd, betLogHTML, bankEntry } from './betlog.js?v=20261124j';
 import { topToolsHTML, initTopTools, setProfit, setPractice, setRisk, bankRisk, cardScale, ledgerTitle } from './toptools.js?v=20261124j';
-import { autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML } from './common.js?v=20261124j';
+import { onElsewhere, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML } from './common.js?v=20261124j';
 
 import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261124j';
 const PREFIX = 'bjt-ro-';
@@ -102,7 +102,7 @@ function hostMsg(id, m) {
   if (!t) return;
   if (m.t === 'host-ask') { handOver(id); return; }
   try {
-    if (m.t === 'hello') { if (t.players[id]?.kicked) { S.net.send(id, { t: 'kicked' }); return; } t.join(id, m.name, m.look); if (m.carry && typeof m.carry === 'object') { try { t.carryIn(id, m.carry.amount, m.carry.from, m.carry.cid); } catch { /* fine */ } } }
+    if (m.t === 'hello') { if (t.players[id]?.kicked) { S.net.send(id, { t: 'kicked' }); return; } t.join(id, m.name, m.look); t.setElsewhere(id, !!m.elsewhere); if (m.carry && typeof m.carry === 'object') { try { t.carryIn(id, m.carry.amount, m.carry.from, m.carry.cid); } catch { /* fine */ } } }
     else if (!t.players[id] || t.players[id].kicked) return;
     else if (m.t === 'carry') { if (m.carry && typeof m.carry === 'object') t.carryIn(id, m.carry.amount, m.carry.from, m.carry.cid); } // chips brought back to a table that stayed open
     else if (m.t === 'cashout') { let amount = 0, err = null; try { amount = t.cashOut(id); } catch (e) { err = e.message; } S.net.send(id, { t: 'cashed', rid: m.rid, amount, err }); }
@@ -114,6 +114,7 @@ function doMove(id, m) {
   const t = S.table;
   switch (m.t) {
     case 'propose': votePropose(t, VOTE, id, m.patch); break;
+    case 'elsewhere': t.setElsewhere(id, !!m.on); break; // inside the office the player looks at another table: the seat here stays theirs
     case 'vote': voteCast(t, VOTE, id, !!m.yes); break;
     case 'bet': t.bet(id, String(m.spot), m.amount); break;
     case 'unbet': t.unbet(id, String(m.spot)); break;
@@ -193,7 +194,7 @@ function startGuest(code, again) {
   S.role = 'guest'; S.code = code; S.st = null; S.nohost = false;
   history.replaceState(null, '', shareLink());
   if (!again || !$('#pk-body')) showTable(); else render();
-  S.net = createGuest(PREFIX + code, () => ({ t: 'hello', id: S.myId, name: S.name, look: getLook(), carry: carryFor(GAME, code) || undefined }), {
+  S.net = createGuest(PREFIX + code, () => ({ t: 'hello', id: S.myId, name: S.name, look: getLook(), carry: carryFor(GAME, code) || undefined, elsewhere: !!window.__officeAway || undefined }), {
     msg: (m) => {
       if (m.t === 'state') {
         clearTimeout(S.takeT); S.takeT = null;
@@ -696,6 +697,7 @@ function officeRows(st) { return (st?.players || []).map((p) => ({ id: p.id, nam
 autoUpdate(GAME, () => !S.hold && !S.handing && !S.taking && S.st?.phase !== 'closing');
 onOfficeBack(GAME, () => S.code, () => S.role === 'host', (c) => { S.table?.carryIn(S.myId, c.amount, c.from, c.cid); push(); }, (m) => S.net?.send(m));
 setSeated(() => Number.isInteger(S.st?.players?.find((p) => p.id === S.myId)?.seat));
+onElsewhere((on) => { if (S.role === 'host') { if (S.table?.setElsewhere(S.myId, on)) push(); } else S.net?.send({ t: 'elsewhere', on }); });
 setCashOut(async () => {
   if (S.role === 'host' && S.table) { const amount = S.table.cashOut(S.myId); push(); await new Promise((r) => setTimeout(r, 700)); return amount; }
   if (S.role === 'guest' && S.st) return askCashOut((m) => S.net.send(m));

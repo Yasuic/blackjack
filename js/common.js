@@ -65,7 +65,7 @@ export function gameUrl(game, code, isHost, from = null) {
   const q = new URLSearchParams();
   // One office, one code: every table of it, blackjack too, opens under the same code when someone walks over.
   if (code) { q.set('room', code); q.set('go', '1'); if (isHost) q.set('open', '1'); }
-  if (from) q.set('from', from); // the room then walks you over from that table
+  if (from) q.set('from', from); // the table you came from (chips you carry come from there)
   for (const k of ['peerhost', 'peerport', 'peerpath', 'peersecure', '3d', 'flat', 'roomdebug']) if (params.get(k)) q.set(k, params.get(k));
   const qs = q.toString();
   return GAMES[game].page + (qs ? '?' + qs : '');
@@ -98,6 +98,9 @@ export function setCashOut(fn) { cashOutFn = fn; }
 // Inside the office every table stays open, so a player who has a seat keeps it, with its chips, when walking
 // to another table: the hand there plays on (your turn timer runs as usual) and you can walk back to it any time.
 export function setSeated(fn) { seatedFn = fn; }
+// Inside the office each table you joined stays open in its own frame. fn(on) runs when this table goes out of
+// sight (on: you look at another table) or comes back, so the page can tell its table to keep your seat.
+export function onElsewhere(fn) { window.__officeAwayChanged = (on) => { try { fn(!!on); } catch { /* fine */ } }; }
 function walkCover(text) {
   let el = document.getElementById('walk-cover');
   if (!text) { el?.remove(); return; }
@@ -109,15 +112,15 @@ export async function walkTo(current, g, url, code) {
   if (walking) return;
   walking = true;
   const name = GAMES[g]?.name || g;
-  // In the 3D office you see the walk itself, so only a small note shows; elsewhere a cover says where you are going.
-  const walk3d = typeof window.__roomWalk === 'function' && !!document.querySelector('.room3d, body.room3d');
-  if (!walk3d) walkCover(`Walking over to ${name}…`);
+  // Inside the office the other table is shown at once, with no camera move; elsewhere a cover says where you are going.
+  const inOffice = !!office();
+  if (!inOffice) walkCover(`Walking over to ${name}…`);
   let amount = 0;
   const anyway = walkAnyway && walkAnyway.g === g && Date.now() - walkAnyway.t < 8000;
   let keep = false; try { keep = !!office() && !!seatedFn?.(); } catch { keep = false; }
   if (cashOutFn && code && !anyway && !keep) {
     try { amount = Number(await cashOutFn()) || 0; } catch (e) {
-      walking = false; walkCover(null); window.__roomNear = false;
+      walking = false; walkCover(null);
       // A hand, bet or deal of yours still in play: you stay at this table until it is over.
       if (!e.net) { walkAnyway = null; toast(e.message || 'Your hand is still in play. Walk over when it is over.'); return; }
       walkAnyway = { g, t: Date.now() };
@@ -128,7 +131,8 @@ export async function walkTo(current, g, url, code) {
   walkAnyway = null;
   if (amount > 0) safeSet(CARRY_KEY, JSON.stringify({ code, to: g, from: current, amount, cid: randomHex(6), t: Date.now() }));
   // Inside the office frame the new table is loaded behind this one and shown when ready; the link stays the same.
-  if (walk3d) { if (!window.__roomNear) { try { await window.__roomWalk(g); } catch { /* fine */ } } window.__roomNear = false; openTable(url); return; }
+  // The table here hears at once that you are going elsewhere, before the other table loads, so your seat stays yours.
+  if (inOffice) { try { window.__officeAwayChanged?.(true); } catch { /* fine */ } openTable(url); return; }
   setTimeout(() => openTable(url), amount > 0 ? 250 : 120);
 }
 // Inside the office every table you visited stays open. Coming back to one: the walk is over, the room takes you

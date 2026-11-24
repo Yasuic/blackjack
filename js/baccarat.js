@@ -133,6 +133,8 @@ export class BacTable {
   mustPlayer(id) { const p = this.players[id]; if (!p || p.kicked) throw new Error('Join the table first.'); return p; }
 
   // ---- people ----
+  // Inside the office a player can sit at several tables and play at one of them: the others keep the seats.
+  setElsewhere(id, on) { const p = this.players[id]; if (!p || !!p.elsewhere === !!on) return false; p.elsewhere = !!on; return true; }
   join(id, name, look) {
     let p = this.players[id];
     const clean = String(name || 'Player').replace(/[<>]/g, '').trim().slice(0, 16) || 'Player';
@@ -213,9 +215,9 @@ export class BacTable {
     for (const k of BAC_KEYS) if (last[k]) this.bet(id, k, last[k]);
   }
   // A seated player with no bet when the round starts loses the seat: chips stay theirs, they watch, and their
-  // next bet sits them down again. The dealer is never unseated.
+  // next bet sits them down again. The dealer is never unseated, nor a player who is at another table of the office.
   unseatIdle(round) {
-    const ids = Object.values(this.players).filter((p) => !p.kicked && p.seat >= 0 && p.id !== this.bankId && !(this.staked(p.id) > 0)).map((p) => p.id);
+    const ids = Object.values(this.players).filter((p) => !p.kicked && !p.elsewhere && p.seat >= 0 && p.id !== this.bankId && !(this.staked(p.id) > 0)).map((p) => p.id);
     for (const id of ids) { this.players[id].seat = -1; this.addLog(`${this.players[id].name} was unseated for not betting.`); }
     this.unseated = { round, ids };
   }

@@ -9,7 +9,7 @@ import { bestMove, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20
 import { tickSound, winSound } from './fx.js?v=20261124j';
 import * as HX from './history.js?v=20261124j';
 import { webglOK, initRoom, COLLEAGUES } from './room3d.js?v=20261124j';
-import { COPY_BTN, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261124j';
+import { COPY_BTN, onElsewhere, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261124j';
 import { topToolsHTML, initTopTools, setProfit, setPractice, setRisk, cardScale, profitLineHTML, ledgerTitle } from './toptools.js?v=20261124j';
 import { statsHTML } from './pstats.js?v=20261124j';
 import { betLogAdd, betLogHTML, bjEntry } from './betlog.js?v=20261124j';
@@ -619,6 +619,7 @@ function onHostMessage(conn, msg) {
     S.conns[id] = conn;
     clearTimeout(S.goneTimers[id]); delete S.goneTimers[id];
     S.table.join(id, msg.name, msg.buyIn, msg.look);
+    S.table.setElsewhere(id, !!msg.elsewhere);
     if (msg.carry && typeof msg.carry === 'object') { try { S.table.carryIn(id, msg.carry.amount, msg.carry.from, msg.carry.cid); } catch { /* not at this table */ } }
     hostChanged();
     if (S.snapSent) { try { conn.send(snapMsg(conn)); } catch {} }
@@ -633,6 +634,8 @@ function onHostMessage(conn, msg) {
   if (msg.t === 'chat') { relayChat(conn.clientId, msg); return; }
   if (msg.t === 'voice') { voiceSet(conn.clientId, conn.peer, !!msg.on, !!msg.mic); return; }
   if (msg.t === 'keys') { gotNonce(msg, conn.clientId); return; }
+  // Inside the office the player looks at another table now (or is back here): the seat here stays theirs.
+  if (msg.t === 'elsewhere') { if (S.table.setElsewhere(conn.clientId, !!msg.on)) hostChanged(); return; }
   // Any player may take over as host, with no vote: this browser hands the whole table to theirs and joins as a player.
   if (msg.t === 'host-ask') { handHostTo(conn); return; }
   // The player walks to another table of the office and takes their chips along (common.js walkTo).
@@ -923,13 +926,13 @@ function hostChanged() {
       if (S.role === 'host' && S.table?.phase === 'settled') hostDo((tb) => tb.startBetting());
     }, 4500);
   }
-  // Auto deal once every seated, connected player has pressed Ready.
+  // Auto deal once every seated, connected player has pressed Ready (a player at another table of the office is not waited for).
   if (t.settings.autoDeal !== false && t.phase === 'betting' && !S.autoDealTimer) {
-    const seated = t.seats.filter((s) => s && !s.out && t.players[s.playerId].connected);
+    const seated = t.seats.filter((s) => s && !s.out && t.players[s.playerId].connected && !t.players[s.playerId].elsewhere);
     if (seated.length && seated.every((s) => s.ready && s.bet.main > 0)) {
       S.autoDealTimer = setTimeout(() => {
         S.autoDealTimer = null;
-        const still = t.seats.filter((s) => s && !s.out && t.players[s.playerId].connected);
+        const still = t.seats.filter((s) => s && !s.out && t.players[s.playerId].connected && !t.players[s.playerId].elsewhere);
         if (t.phase === 'betting' && still.length && still.every((s) => s.ready) && t.canDeal()) fresh((tb) => tb.dealPlan(), () => hostDo((tb) => { if (tb.phase === 'betting' && tb.canDeal()) tb.deal(); }));
       }, 900);
     }
@@ -1162,7 +1165,7 @@ function wireGuestConn(conn) {
     S.online = true;
     S.why = '';
     S.retry = 0; S.noHostAt = null; S.noReplyAt = 0; S.linkTries = 0; S.viaRelay = !!conn.relay;
-    conn.send({ t: 'join', clientId: S.myId, name: S.name, buyIn: S.buyIn, look: S.look, carry: carryFor('blackjack', S.code) || undefined });
+    conn.send({ t: 'join', clientId: S.myId, name: S.name, buyIn: S.buyIn, look: S.look, carry: carryFor('blackjack', S.code) || undefined, elsewhere: !!window.__officeAway || undefined });
   };
   conn.on('open', opened);
   if (conn.open && !conn.relay) opened(); // a link that opened before it was picked as the table's link
@@ -4294,6 +4297,7 @@ try { if (sessionStorage.getItem('bj-afk') === '1') { const t0 = Date.now(); con
 autoUpdate('blackjack', () => { const st = S.state; return !S.hold && !S.handing && !S.taking && !(st && ['insurance', 'playing', 'dealer'].includes(st.phase)); });
 onOfficeBack('blackjack', () => S.code, () => S.role === 'host', (c) => { S.table?.carryIn(S.myId, c.amount, c.from, c.cid); hostChanged(); }, (m) => { if (S.conn?.open) S.conn.send(m); });
 setSeated(() => !!S.state?.seats?.some((x) => x && x.playerId === S.myId));
+onElsewhere((on) => { if (S.role === 'host') { if (S.table?.setElsewhere(S.myId, on)) hostChanged(); } else if (S.conn?.open) S.conn.send({ t: 'elsewhere', on }); });
 setCashOut(async () => {
   if (S.role === 'host' && S.table) {
     const amount = S.table.cashOut(S.myId);

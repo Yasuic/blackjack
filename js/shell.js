@@ -71,7 +71,8 @@ export function boot(game, start) {
     document.body.appendChild(f);
     return f;
   };
-  const away = (f, on) => { try { f.contentWindow.__officeAway = on; } catch { /* fine */ } };
+  // A table out of sight draws nothing and makes no sound; the page also tells its table that the player is elsewhere.
+  const away = (f, on) => { try { const w = f.contentWindow; if (!!w.__officeAway === !!on) return; w.__officeAway = on; w.__officeAwayChanged?.(on); } catch { /* fine */ } };
   const show = (f) => {
     if (f !== next && cur) return;
     f.classList.remove('loading', 'away'); f.classList.add('on');
@@ -91,7 +92,7 @@ export function boot(game, start) {
       let ok = false, waited = Date.now() - t0;
       try {
         const w = f.contentWindow, d = f.contentDocument;
-        // A 3D table is ready once it stands where the walk stopped (its arrival is set up); a flat page once it has drawn.
+        // A 3D table is ready once its view is in your chair; a flat page once it has drawn.
         if (w.__officeShown) ok = true;
         else if (w.__roomApi) ok = waited > 6000;
         else ok = d && d.readyState === 'complete' && d.querySelector('#app')?.children.length > 0 && waited > (/[?&]from=/.test(w.location.search) && !d.body.classList.contains('room3d') && waited < 4000 ? 99999 : 900);
@@ -105,7 +106,7 @@ export function boot(game, start) {
       if (next && !Object.values(kept).includes(next)) next.remove();
       const k = kept[pageOf(url)];
       if (k && k !== cur) {
-        // Back to a table that is still open: it takes the walk on from where it stopped and picks up the chips you carry.
+        // Back to a table that is still open: it shows at once, in your chair, and picks up the chips you carry.
         next = k; away(k, false);
         try { k.contentWindow.__officeBack?.(); } catch { /* fine */ }
         setTimeout(() => show(k), 60);
