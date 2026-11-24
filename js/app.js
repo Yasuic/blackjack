@@ -1,18 +1,40 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { startPresence } from './presence.js?v=20261124h';
-import { outerLink } from './shell.js?v=20261124h';
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe, destName, stepOf, RULE_TEXT } from './game.js?v=20261124h';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261124h';
-import { bestMove, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261124h';
-import { tickSound, winSound } from './fx.js?v=20261124h';
-import * as HX from './history.js?v=20261124h';
-import { webglOK, initRoom, COLLEAGUES } from './room3d.js?v=20261124h';
-import { COPY_BTN, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261124h';
-import { topToolsHTML, initTopTools, setProfit, setPractice, setRisk, cardScale, profitLineHTML, ledgerTitle } from './toptools.js?v=20261124h';
-import { statsHTML } from './pstats.js?v=20261124h';
-import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261124h';
+import { startPresence } from './presence.js?v=20261124i';
+import { outerLink } from './shell.js?v=20261124i';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe, destName, stepOf, RULE_TEXT } from './game.js?v=20261124i';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261124i';
+import { bestMove, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261124i';
+import { tickSound, winSound } from './fx.js?v=20261124i';
+import * as HX from './history.js?v=20261124i';
+import { webglOK, initRoom, COLLEAGUES } from './room3d.js?v=20261124i';
+import { COPY_BTN, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261124i';
+import { topToolsHTML, initTopTools, setProfit, setPractice, setRisk, cardScale, profitLineHTML, ledgerTitle } from './toptools.js?v=20261124i';
+import { statsHTML } from './pstats.js?v=20261124i';
+import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261124i';
+
+// The dealer's edge for the rules at this table, in % of each bet, for players who use basic strategy. An estimate:
+// 0.30% for the defaults (8 decks, stands on soft 17, 3 to 2, surrender, double any two and after a split, split and
+// resplit aces, no limit on splits) from 5.2 million simulated rounds on this table's own code, and published rule
+// effects (Wizard of Odds, rule variations) for each change. 5 Card Charlie on every round cost the dealer about
+// 1.2% in the same simulation. These are at the top of the file because a table that resumes with a player
+// dealing draws the dealer panel while this file is still loading.
+const EDGE_BASE = 0.30;
+const EDGE = {
+  blackjackPays: (v) => (v === 1.2 ? 1.39 : v === 1 ? 2.27 : 0),
+  dealerHitsSoft17: (v) => (v ? 0.22 : 0),
+  allowSurrender: (v) => (v ? 0 : 0.08),
+  splitAces: (v) => (v ? 0 : 0.18),
+  resplitAces: (v, r) => (v || !r.splitAces ? 0 : 0.08),
+  maxSplits: (v) => ({ 1: 0.1, 2: 0.04, 3: 0.01 })[v] || 0,
+  das: (v) => (v ? 0 : 0.14),
+  doubleOn: (v) => (v === '9-11' ? 0.09 : v === '10-11' ? 0.18 : 0),
+  charlieEvery: (v) => (v ? -1.2 / v : 0),
+};
+const deckEdge = (d) => ({ 1: -0.48, 2: -0.19, 6: -0.02 })[d] ?? (Number(d) > 8 ? 0.02 : 0);
+const fmtEdge = (x) => `${x > 0.004 ? '+' : x < -0.004 ? '−' : '±'}${Math.abs(x).toFixed(2)}%`;
+const edgeTag = (x) => `<i class="dp-edge ${x > 0.004 ? 'up' : x < -0.004 ? 'down' : ''}">${fmtEdge(x)}</i>`;
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -4106,32 +4128,12 @@ function dealerPanelHTML(st) {
 // ---------- Rules of play and the dealer's edge ----------
 // The table's rules in one line, as the Info panel and the host's settings show them.
 function rulesLine(s) { const r = rulesOut(rulesCur(s)); return Object.keys(RULE_TEXT).map((k) => RULE_TEXT[k](r[k])).join('. '); }
-// The dealer's edge for the rules at this table, in % of each bet, for players who use basic strategy. An estimate:
-// 0.30% for the defaults (8 decks, stands on soft 17, 3 to 2, surrender, double any two and after a split, split and
-// resplit aces, no limit on splits) from 5.2 million simulated rounds on this table's own code, and published rule
-// effects (Wizard of Odds, rule variations) for each change. 5 Card Charlie on every round cost the dealer about
-// 1.2% in the same simulation.
-const EDGE_BASE = 0.30;
-const EDGE = {
-  blackjackPays: (v) => (v === 1.2 ? 1.39 : v === 1 ? 2.27 : 0),
-  dealerHitsSoft17: (v) => (v ? 0.22 : 0),
-  allowSurrender: (v) => (v ? 0 : 0.08),
-  splitAces: (v) => (v ? 0 : 0.18),
-  resplitAces: (v, r) => (v || !r.splitAces ? 0 : 0.08),
-  maxSplits: (v) => ({ 1: 0.1, 2: 0.04, 3: 0.01 })[v] || 0,
-  das: (v) => (v ? 0 : 0.14),
-  doubleOn: (v) => (v === '9-11' ? 0.09 : v === '10-11' ? 0.18 : 0),
-  charlieEvery: (v) => (v ? -1.2 / v : 0),
-};
-const deckEdge = (d) => ({ 1: -0.48, 2: -0.19, 6: -0.02 })[d] ?? (Number(d) > 8 ? 0.02 : 0);
 function rulesCur(s) { return { blackjackPays: s.blackjackPays, dealerHitsSoft17: !!s.dealerHitsSoft17, allowSurrender: !!s.allowSurrender, splitAces: s.splitAces !== false, resplitAces: s.resplitAces !== false, maxSplits: s.maxSplits || 0, das: s.das !== false, doubleOn: s.doubleOn || 'any', charlieOn: !!s.charlieEvery, charlieN: s.charlieEvery || 10 }; }
 // The rules as the table stores them, from the form's values (strings from inputs and selects).
 function rulesOut(v) {
   const b = (x) => x === true || x === 'true';
   return { blackjackPays: Number(v.blackjackPays), dealerHitsSoft17: b(v.dealerHitsSoft17), allowSurrender: b(v.allowSurrender), splitAces: b(v.splitAces), resplitAces: b(v.resplitAces), maxSplits: Math.round(Number(v.maxSplits)), das: b(v.das), doubleOn: v.doubleOn, charlieEvery: b(v.charlieOn) ? Math.max(1, Math.round(Number(v.charlieN)) || 10) : 0 };
 }
-const fmtEdge = (x) => `${x > 0.004 ? '+' : x < -0.004 ? '−' : '±'}${Math.abs(x).toFixed(2)}%`;
-const edgeTag = (x) => `<i class="dp-edge ${x > 0.004 ? 'up' : x < -0.004 ? 'down' : ''}">${fmtEdge(x)}</i>`;
 function edgeParts(r, decks) {
   const parts = Object.fromEntries(Object.keys(EDGE).map((k) => [k, EDGE[k](r[k], r)]));
   return { parts, total: EDGE_BASE + deckEdge(decks) + Object.values(parts).reduce((a, x) => a + x, 0) };
