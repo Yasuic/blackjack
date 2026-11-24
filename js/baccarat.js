@@ -1,9 +1,9 @@
 // Baccarat (punto banco) for up to 9 players against the house. Pure rules: the host's browser owns one
 // BacTable and every bet goes through it. Nothing here touches the page or the network.
-import { sha256, fairShoe, MAX_CHIPS } from './game.js?v=20261124j';
-import { pickIndex, newNonce, cleanNonce } from './cardkeys.js?v=20261124j';
-import { pstatAdd, pstatsView } from './pstatcore.js?v=20261124j';
-import { isFrozen, bankJoin, setBank, clearBank, bankGone, bankSettle, ledgerNet, ledgerSum, bankAdopt, bankCashOut, bankCarryIn, dealerUnseat, unseatQueued } from './bank.js?v=20261124j';
+import { sha256, fairShoe, MAX_CHIPS } from './game.js?v=20261124k';
+import { pickIndex, newNonce, cleanNonce } from './cardkeys.js?v=20261124k';
+import { pstatAdd, pstatsView } from './pstatcore.js?v=20261124k';
+import { isFrozen, bankJoin, setBank, clearBank, bankGone, bankSettle, ledgerNet, ledgerSum, bankAdopt, bankCashOut, bankCarryIn, dealerUnseat, unseatQueued } from './bank.js?v=20261124k';
 
 export const BAC_SEATS = 9;
 export const BAC_DEFAULTS = {
