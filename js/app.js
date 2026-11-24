@@ -1,18 +1,18 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { startPresence } from './presence.js?v=20261124a';
-import { outerLink } from './shell.js?v=20261124a';
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe, destName } from './game.js?v=20261124a';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261124a';
-import { bestMove, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261124a';
-import { tickSound, winSound } from './fx.js?v=20261124a';
-import * as HX from './history.js?v=20261124a';
-import { webglOK, initRoom, COLLEAGUES } from './room3d.js?v=20261124a';
-import { COPY_BTN, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261124a';
-import { topToolsHTML, initTopTools, setProfit, setPractice, setRisk, cardScale, profitLineHTML } from './toptools.js?v=20261124a';
-import { statsHTML } from './pstats.js?v=20261124a';
-import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261124a';
+import { startPresence } from './presence.js?v=20261124b';
+import { outerLink } from './shell.js?v=20261124b';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe, destName, stepOf } from './game.js?v=20261124b';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261124b';
+import { bestMove, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261124b';
+import { tickSound, winSound } from './fx.js?v=20261124b';
+import * as HX from './history.js?v=20261124b';
+import { webglOK, initRoom, COLLEAGUES } from './room3d.js?v=20261124b';
+import { COPY_BTN, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261124b';
+import { topToolsHTML, initTopTools, setProfit, setPractice, setRisk, cardScale, profitLineHTML, ledgerTitle } from './toptools.js?v=20261124b';
+import { statsHTML } from './pstats.js?v=20261124b';
+import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261124b';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -705,7 +705,7 @@ function runAction(id, msg, onError) {
       case 'stand-up': t.standUp(id, Number.isInteger(msg.seat) ? msg.seat : undefined); break;
       case 'bet': t.setBet(id, msg); break;
       case 'insurance': t.insurance(id, !!msg.take, Number.isInteger(msg.seat) ? msg.seat : undefined); break;
-      case 'action': t.action(id, String(msg.a), !!msg.auto); break;
+      case 'action': if (!msg.stale) t.action(id, String(msg.a), !!msg.auto); break; // stale: the same press again (stepOf)
       case 'ask-out': askOut(id, String(msg.to)); break;
       case 'ask-out-yes': {
         const left = t.leaveAfter(id), me = t.players[id];
@@ -810,7 +810,7 @@ function fresh(planFn, fn) {
 }
 function gotNonce(msg, from) { S.nonceWait?.[msg.rid]?.(msg.keys, from); }
 // A move the table would refuse asks for no keys, so every key a guest gives out is used for a dealt card.
-const movePlanFor = (msg, id) => (t) => (msg.t === 'action' ? t.movePlan(id, msg.a, !!id) : msg.t === 'buyin' && (msg.then === 'double' || msg.then === 'split') ? t.movePlan(id, msg.then, false) : msg.t === 'peek' ? ['peek'] : []);
+const movePlanFor = (msg, id) => (t) => (msg.t === 'action' && msg.step && msg.step !== stepOf(t) ? ((msg.stale = true), []) : msg.t === 'action' ? t.movePlan(id, msg.a, !!id) : msg.t === 'buyin' && (msg.then === 'double' || msg.then === 'split') ? t.movePlan(id, msg.then, false) : msg.t === 'peek' ? ['peek'] : []);
 // The guest's side: announce first, then reveal. A key is fixed by its card number, so giving it again tells the
 // host nothing new. This browser gives keys only when all of this holds, checked against the last table state,
 // which always arrives before the request on the same link:
@@ -1747,7 +1747,7 @@ function renderLedger(st) {
   const pl = (n) => `<span class="${n > 0 ? 'up' : n < 0 ? 'down' : ''}">${n > 0 ? '+' : ''}${money(n)}</span>`;
   // The Ledger button opens one pop up: the ledger, then every player's stats and a profit chart.
   box.classList.add('closed');
-  const head = '<button class="ledger-head" data-act="ledger-toggle"><span class="lh-long">Ledger</span><span class="lh-short">Ledger</span> <span>▴</span></button>';
+  const head = `<button class="ledger-head" data-act="ledger-toggle"><span data-ld-title="">${ledgerTitle()}</span></button>`;
   if (box.innerHTML !== head) box.innerHTML = head;
   const d = $('#ledger-dlg');
   if (!d?.open) return;
@@ -3580,9 +3580,13 @@ function playMove(a) {
     const best = bestMove(h.cards, st.dealer.cards[0], st.actions, st.settings);
     if (best && best !== a) S.badPlayRound = st.round;
   }
+  // One press, one move: a second press on the same step is dropped here (the table drops it too, see stepOf).
+  const step = stepOf(st);
+  if (step && S.lastStep === step && Date.now() - S.lastStepAt < 2500) return;
+  S.lastStep = step; S.lastStepAt = Date.now();
   if (a === 'hit') hitSound();
   else if (a === 'stand') standSound();
-  send({ t: 'action', a });
+  send({ t: 'action', a, step });
 }
 
 // Keyboard play: H hit, S stand, D double, P split, U surrender, Y and N answer insurance,

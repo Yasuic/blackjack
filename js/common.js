@@ -1,8 +1,8 @@
 // Shared by the poker and baccarat pages: small helpers, the playing card picture, the game switch at the
 // top left, and the link between the host's browser and the players' browsers.
-import { office, openTable } from './shell.js?v=20261124a';
-import { profitLineHTML } from './toptools.js?v=20261124a';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261124a';
+import { office, openTable } from './shell.js?v=20261124b';
+import { profitLineHTML } from './toptools.js?v=20261124b';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261124b';
 export const params = new URLSearchParams(location.search);
 export const $ = (sel, el = document) => el.querySelector(sel);
 export function safeGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
@@ -172,6 +172,37 @@ function showVersion() {
   };
   setInterval(place, 1500); addEventListener('resize', place); setTimeout(place, 300);
 }
+// "Updating game" cover. A reload for an update (or to bring back a lost 3D view) marks the tab first, so the
+// new page shows the cover from its first paint (the small script in each page's head) instead of a black screen.
+const UPD = 'bj-upd';
+export function updateCover(text = 'Updating game') {
+  let c = document.getElementById('upd-cover');
+  if (!c) { c = document.createElement('div'); c.id = 'upd-cover'; (document.body || document.documentElement).appendChild(c); }
+  c.innerHTML = `<div class="upd-spin"></div><div>${text}</div>`;
+  document.documentElement.classList.add('updating');
+}
+export function updateReload(text = 'Updating game', win = window) {
+  try { sessionStorage.setItem(UPD, JSON.stringify({ at: Date.now(), text })); } catch { /* the cover still shows on this page */ }
+  if (win === window) updateCover(text);
+  try { win.location.reload(); } catch { /* fine */ }
+}
+window.__updateReload = updateReload;
+// After the reload: keep the cover until the page has drawn, then take it away.
+try {
+  const u = JSON.parse(sessionStorage.getItem(UPD) || 'null');
+  if (u && Date.now() - u.at < 90000) {
+    const show = () => updateCover(u.text || 'Updating game');
+    if (document.body) show(); else addEventListener('DOMContentLoaded', show);
+    setTimeout(() => { try { sessionStorage.removeItem(UPD); } catch { /* fine */ } document.documentElement.classList.remove('updating'); document.getElementById('upd-cover')?.remove(); }, 2500);
+  }
+} catch { /* fine */ }
+// The 3D view can lose its drawing surface (a sleeping laptop, a busy graphics card): the screen then goes black.
+// If it does not come back by itself within a few seconds, the page reloads as soon as no hand is in play.
+window.__glLost = () => {
+  const tryNow = () => { if (!window.__officeIdle || window.__officeIdle()) updateReload('Restoring the view'); else setTimeout(tryNow, 2000); };
+  if (window.top !== window && window.top.__updateReload) { const go = () => { if (!window.__officeIdle || window.__officeIdle()) window.top.__updateReload('Restoring the view', window); else setTimeout(go, 2000); }; go(); return; }
+  tryNow();
+};
 export function autoUpdate(game, idle) {
   try { if (document.body) showVersion(); else addEventListener('DOMContentLoaded', showVersion); } catch { /* fine */ }
   window.__officeTag = TAG;
@@ -180,7 +211,7 @@ export function autoUpdate(game, idle) {
   const check = async () => {
     const live = await liveTag();
     if (!live || !TAG || live === TAG) return;
-    const tryNow = () => { if (window.__officeIdle()) location.reload(); else setTimeout(tryNow, 3000); };
+    const tryNow = () => { if (window.__officeIdle()) updateReload(); else setTimeout(tryNow, 3000); };
     tryNow();
   };
   setInterval(check, 120000);

@@ -1893,3 +1893,8 @@ function seatCount(v, fallback = DEFAULT_SETTINGS.seats) {
 function clamp(v, lo, hi) {
   return Math.min(hi, Math.max(lo, isNaN(v) ? lo : v));
 }
+
+// The step of the turn a move was pressed on: round, seat, hand and how many cards that hand had. A second Hit
+// for the same step (a double tap, or the same message arriving twice) is dropped before any card is asked for;
+// a Hit pressed after the first card has shown is a new step and goes through at once.
+export const stepOf = (x) => (x?.turn ? [x.round, x.turn.seat, x.turn.hand, x.seats[x.turn.seat]?.hands[x.turn.hand]?.cards.length ?? -1].join('-') : '');

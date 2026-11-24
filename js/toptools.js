@@ -1,6 +1,6 @@
 // Top bar tools shared by every game: the card size slider, the "Session profit" readout and the volume sliders.
 // All of it is each player's own view; the browser remembers the choices.
-import { getVolume, setVolume, isMuted, setMuted, shoutSound, chipSound, throwSound } from './fx.js?v=20261124a';
+import { getVolume, setVolume, isMuted, setMuted, shoutSound, chipSound, throwSound } from './fx.js?v=20261124b';
 
 const SIZE_KEY = 'bj-cardz', MIN = 60, MAX = 160;
 let size = 100, onSize = null, useCss = false, bound = false;
@@ -93,9 +93,10 @@ export function setRisk(n) {
   risk = v;
   setProfit(lastProfit);
 }
-// Session profit lives in the ledger only (profitLineHTML). The top bar shows "At risk" while a hand is in play.
+// Session profit shows on the Ledger button (ledgerTitle) and in the ledger. The top bar shows "At risk" while a hand is in play.
 export function setProfit(n) {
   lastProfit = Number.isFinite(n) ? n : null;
+  showTitle();
   const el = document.getElementById('tt-profit');
   if (!el) return;
   if (!risk) { el.hidden = true; return; }
@@ -103,9 +104,21 @@ export function setProfit(n) {
   if (el.dataset.v !== html) { el.dataset.v = html; el.innerHTML = html; el.className = 'pill tt-profit tt-risk-only'; }
   el.hidden = false;
 }
+// The Ledger button's own title carries the player's session result: "Ledger (Session: +84)", green or red.
+// While the ledger is frozen it shows the practice result in blue instead, since that never counts.
+export function ledgerTitle() {
+  if (lastPractice !== null) return `Ledger <span class="ld-t prac">(<span class="ld-w">Practice: </span>${signed(lastPractice)})</span>`;
+  if (lastProfit === null) return 'Ledger';
+  const r = Math.round(lastProfit * 100) / 100;
+  return `Ledger <span class="ld-t ${r > 0 ? 'up' : r < 0 ? 'down' : ''}">(<span class="ld-w">Session: </span>${signed(r)})</span>`;
+}
+function showTitle() {
+  const h = ledgerTitle();
+  for (const el of document.querySelectorAll('[data-ld-title]')) if (el.innerHTML !== h) el.innerHTML = h;
+}
 // The player's own session profit, at the top of every game's ledger.
 // Practice rounds (frozen ledger, house dealer) are shown live too, in blue and marked, because they never count.
-export function setPractice(n) { lastPractice = Number.isFinite(n) ? Math.round(n * 100) / 100 : null; }
+export function setPractice(n) { lastPractice = Number.isFinite(n) ? Math.round(n * 100) / 100 : null; showTitle(); }
 const signed = (r) => (r > 0 ? '+' : r < 0 ? '-' : '') + Math.abs(r).toLocaleString();
 export function profitLineHTML() {
   if (lastProfit === null) return '';

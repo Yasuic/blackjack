@@ -1,16 +1,16 @@
 // The roulette page: a European roulette table for up to 9 in Nigel's room. The host's browser runs
 // the table (js/roulette.js); every other browser sends its bets there and is told only what it may see.
-import { startPresence } from './presence.js?v=20261124a';
-import { outerLink } from './shell.js?v=20261124a';
-import { RouTable, ROU_SEATS, WHEEL, colorOf, betNumbers, betName, betPays, verifySpin } from './roulette.js?v=20261124a';
-import { showSpin, drawWheel as paintWheel, wheelState } from './wheel.js?v=20261124a';
-import { winSound } from './fx.js?v=20261124a';
-import { webglOK, initRoom } from './room3d.js?v=20261124a';
-import { statsHTML } from './pstats.js?v=20261124a';
-import { topToolsHTML, initTopTools, setProfit, setPractice, setRisk, cardScale } from './toptools.js?v=20261124a';
-import { autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML } from './common.js?v=20261124a';
+import { startPresence } from './presence.js?v=20261124b';
+import { outerLink } from './shell.js?v=20261124b';
+import { RouTable, ROU_SEATS, WHEEL, colorOf, betNumbers, betName, betPays, verifySpin } from './roulette.js?v=20261124b';
+import { showSpin, drawWheel as paintWheel, wheelState } from './wheel.js?v=20261124b';
+import { winSound } from './fx.js?v=20261124b';
+import { webglOK, initRoom } from './room3d.js?v=20261124b';
+import { statsHTML } from './pstats.js?v=20261124b';
+import { topToolsHTML, initTopTools, setProfit, setPractice, setRisk, cardScale, ledgerTitle } from './toptools.js?v=20261124b';
+import { autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML } from './common.js?v=20261124b';
 
-import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261124a';
+import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261124b';
 const PREFIX = 'bjt-ro-';
 // A settings change by vote (js/vote.js): any player at the table may ask, every other player at the table who is online has to say yes.
 const VOTE = {
@@ -311,6 +311,7 @@ function showTable() {
       <span id="conn-pill" class="pill">Connecting</span>
       <span class="spacer"></span>
       ${topToolsHTML()}
+      <button class="pill ld-btn" data-act="ledger" title="The ledger: everyone's chips, stats and profit chart"><span data-ld-title="">${ledgerTitle()}</span></button>
       <button class="pill fair-pill" data-act="fair" title="How the spin is kept fair">🔐<span class="fp-t"> Fair spin</span></button>
       <button class="btn small gold" data-act="copy">🔗 Invite</button>
       <div class="menu-wrap" id="menu-wrap">
@@ -549,7 +550,6 @@ function drawMenu(st) {
   if (!el) return;
   const isHost = S.role === 'host';
   el.innerHTML = `
-    <button class="menu-item" data-act="ledger">📒 Ledger</button>
     ${S.role === 'guest' ? '<button class="menu-item" data-act="become-host" title="The table moves to your browser. No vote.">👑 Become host</button>' : ''}
     <button class="menu-item" data-act="log">📝 Spin log</button>
     <button class="menu-item" data-act="rules">ℹ️ Info</button>

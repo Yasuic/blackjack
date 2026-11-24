@@ -134,9 +134,9 @@ export function boot(game, start) {
       for (const f of frames()) {
         let w = null; try { w = f.contentWindow; } catch { /* fine */ }
         if (!w || !w.__officeTag || w.__officeTag === live) continue;
-        if (w.__officeIdle?.()) { try { w.location.reload(); } catch { /* fine */ } } else left++;
+        if (w.__officeIdle?.()) { try { (w.__updateReload || ((t, x) => x.location.reload()))('Updating game', w); } catch { /* fine */ } } else left++;
       }
-      if (!left && TAG !== live && frames().length <= 1 && frames().every((f) => { try { return f.contentWindow.__officeIdle?.() !== false; } catch { return true; } })) { location.reload(); return; }
+      if (!left && TAG !== live && frames().length <= 1 && frames().every((f) => { try { return f.contentWindow.__officeIdle?.() !== false; } catch { return true; } })) { try { sessionStorage.setItem('bj-upd', JSON.stringify({ at: Date.now(), text: 'Updating game' })); } catch { /* fine */ } location.reload(); return; }
       if (left && Date.now() < until) setTimeout(step, 3000); else updating = false;
     };
     step();

@@ -1,18 +1,18 @@
 // The poker page: a Texas Hold'em table for up to 9 in the big meeting room. The host's browser runs
 // the table (js/poker.js); every other browser sends its moves there and is told only what it may see.
-import { startPresence } from './presence.js?v=20261124a';
-import { outerLink } from './shell.js?v=20261124a';
-import { PokerTable, POKER_SEATS, pokerDeck, cardText, mpClientMoves, mpMine, mpCheck, bestHand, bestOmaha } from './poker.js?v=20261124a';
-import { plainDeck, shufflePass, lockPass, checkDeck, keyFor } from './mental.js?v=20261124a';
-import { sha256 } from './game.js?v=20261124a';
-import { botMove, isBot, BOT_NAMES } from './pokerbot.js?v=20261124a';
-import { chipSound, cardSound, hitSound, standSound, potSound, tickSound, turnSound, punchSound } from './fx.js?v=20261124a';
-import { webglOK, initRoom } from './room3d.js?v=20261124a';
-import { statsHTML as ledgerStatsHTML } from './pstats.js?v=20261124a';
-import { topToolsHTML, initTopTools, setProfit, setRisk, cardScale, profitLineHTML } from './toptools.js?v=20261124a';
-import { COPY_BTN, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML } from './common.js?v=20261124a';
+import { startPresence } from './presence.js?v=20261124b';
+import { outerLink } from './shell.js?v=20261124b';
+import { PokerTable, POKER_SEATS, pokerDeck, cardText, mpClientMoves, mpMine, mpCheck, bestHand, bestOmaha } from './poker.js?v=20261124b';
+import { plainDeck, shufflePass, lockPass, checkDeck, keyFor } from './mental.js?v=20261124b';
+import { sha256 } from './game.js?v=20261124b';
+import { botMove, isBot, BOT_NAMES } from './pokerbot.js?v=20261124b';
+import { chipSound, cardSound, hitSound, standSound, potSound, tickSound, turnSound, punchSound } from './fx.js?v=20261124b';
+import { webglOK, initRoom } from './room3d.js?v=20261124b';
+import { statsHTML as ledgerStatsHTML } from './pstats.js?v=20261124b';
+import { topToolsHTML, initTopTools, setProfit, setRisk, cardScale, profitLineHTML, ledgerTitle } from './toptools.js?v=20261124b';
+import { COPY_BTN, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML } from './common.js?v=20261124b';
 
-import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261124a';
+import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261124b';
 const PREFIX = 'bjt-pk-';
 // A settings change by vote (js/vote.js): any player at the table may ask, every other player at the table who is online has to say yes.
 const VOTE = {
@@ -581,6 +581,7 @@ function showTable() {
       <span class="spacer"></span>
       ${topToolsHTML()}
       <button class="btn small primary" id="host-run" data-act="hostrun" hidden></button>
+      <button class="pill ld-btn" data-act="ledger" title="The ledger: everyone's chips, stats and profit chart"><span data-ld-title="">${ledgerTitle()}</span></button>
       <button class="pill fair-pill" data-act="fair" title="How the deck is kept fair">🔐<span class="fp-t"> Fair deck</span></button>
       <button class="btn small gold" data-act="copy">🔗 Invite</button>
       <div class="menu-wrap" id="menu-wrap">
@@ -1040,7 +1041,7 @@ function drawHud(st, mySeat, showing) {
   top.innerHTML = status || bounty ? `<div class="pk-statrow"><div class="status">${status}${bounty}</div></div>` : '';
   // The host's Start and Stop button at the top right: Start deals, Stop holds the game after the hand in play.
   const hr = $('#host-run');
-  if (hr) { const running = S.started && !S.paused; hr.hidden = !isHost; hr.textContent = running ? '⏸ Stop' : '▶ Start'; hr.title = running ? 'Stop dealing after this hand' : 'Deal the next hand and keep dealing'; hr.classList.toggle('primary', !running); hr.disabled = !running && !st.canStart; }
+  if (hr) { const running = S.started && !S.paused; hr.hidden = !isHost; hr.innerHTML = running ? '⏸<span class="hr-t"> Stop</span>' : '▶<span class="hr-t"> Start</span>'; hr.title = running ? 'Stop dealing after this hand' : 'Deal the next hand and keep dealing'; hr.classList.toggle('primary', !running); hr.disabled = !running && !st.canStart; }
   let h = '';
   if (seat && seat.cards.length && seat.cards[0]) h += `<div class="pk-handrow"><div class="pk-myhand${seat.cards.length > 2 ? ' four' : ''}${seat.folded || !seat.inHand ? ' out' : ''}">${seat.cards.map((c) => cardHTML(c, 'big')).join('')}</div>${badge}</div>`;
   if (S.pre && S.pre.hand !== st.handNo) S.pre = null;
@@ -1130,7 +1131,6 @@ function drawMenu(st) {
   const isHost = S.role === 'host';
   el.innerHTML = `
     ${mySeatNow(st) ? '<button class="menu-item" data-act="add">🪙 My chips</button>' : ''}
-    <button class="menu-item" data-act="ledger">📒 Ledger</button>
     ${S.role === 'guest' ? '<button class="menu-item" data-act="become-host" title="The table moves to your browser. No vote.">👑 Become host</button>' : ''}
     <button class="menu-item" data-act="log">📝 Hand log</button>
     <button class="menu-item" data-act="dl-hands">⬇️ Download hand history</button>
