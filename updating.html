@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Updating game</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #0b0e13; color: #f2d58a; font: 700 18px Inter, system-ui, sans-serif; letter-spacing: .04em; }
+    body { display: flex; flex-direction: column; gap: 14px; align-items: center; justify-content: center; text-align: center; padding: 0 16px; box-sizing: border-box; }
+    .spin { width: 34px; height: 34px; border-radius: 50%; border: 3px solid rgba(242,213,138,.25); border-top-color: #f2d58a; animation: spin .9s linear infinite; }
+    .sub { color: #9aa3ad; font-weight: 500; font-size: 14px; letter-spacing: 0; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="spin"></div>
+  <div id="msg">Updating game</div>
+  <div class="sub">The game opens again on its own once the update is done.</div>
+  <script>
+    // Shown while version.txt has the line 'maint=1' (js/shell.js). Nobody can start or carry on a game here.
+    // Every 20 seconds the page asks again; once the line is gone it goes back to the table it came from.
+    var q = new URLSearchParams(location.search), v = (q.get('v') || '').replace(/[^\w]/g, '');
+    if (v) document.getElementById('msg').textContent = 'Updating game version ' + v;
+    function back() {
+      var b = '/';
+      try { var u = new URL(q.get('back') || '/', location.href); if (u.origin === location.origin && !/updating\.html/.test(u.pathname)) { u.searchParams.set('u', Date.now().toString(36)); b = u.pathname + u.search + u.hash; } } catch (e) {}
+      location.replace(b);
+    }
+    function check() {
+      fetch('version.txt?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.text(); }).then(function (t) {
+        var m = /v=(\w+)/.exec(t);
+        if (m) document.getElementById('msg').textContent = 'Updating game version ' + m[1];
+        if (!/^maint=1\s*$/m.test(t)) back();
+      }).catch(function () {});
+    }
+    setInterval(check, 20000);
+  </script>
+</body>
+</html>

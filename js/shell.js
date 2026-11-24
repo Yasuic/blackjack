@@ -35,8 +35,22 @@ function topLink(frameUrl) {
 const save = (v) => { try { sessionStorage.setItem(KEY, v); } catch { /* fine */ } };
 const load = () => { try { return sessionStorage.getItem(KEY); } catch { return null; } };
 
+// Maintenance: while version.txt has a line 'maint=1', every page goes to updating.html, which says
+// "Updating game version ..." and lets nobody start or carry on a game. It brings the page back when the line goes.
+async function maintOn() {
+  try { const r = await fetch('version.txt?t=' + Date.now(), { cache: 'no-store' }); const t = await r.text(); return /^maint=1\s*$/m.test(t) ? (/v=(\w+)/.exec(t) || [])[1] || '' : null; } catch { return null; }
+}
+function toMaint(v) { location.replace('updating.html?' + new URLSearchParams({ v, back: location.href })); }
 // Called by each game page. Inside the office (or in a test or a pop-up), the game itself starts.
 export function boot(game, start) {
+  if (window.top !== window) { boot2(game, start); return; } // the page around this one watches for maintenance
+  maintOn().then((v) => {
+    if (v !== null) { toMaint(v); return; }
+    setInterval(() => maintOn().then((x) => { if (x !== null) toMaint(x); }), 30000);
+    boot2(game, start);
+  });
+}
+function boot2(game, start) {
   const params = new URLSearchParams(location.search);
   if (window.top !== window || params.has('roomdebug') || params.has('noshell')) { start(); return; }
   // This page is opened in the browser: it becomes the office.
