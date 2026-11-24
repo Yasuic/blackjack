@@ -10,12 +10,12 @@ for (const [id, s] of [['a', 0], ['b', 2], ['c', 4]]) { t.join(id, id.toUpperCas
 let wrong = 0, splits = 0, doubles = 0, ins = 0, rounds = 0;
 const moves = () => (t.fair.dealt || []).filter((d) => d.want && d.to !== 'burn').length;
 for (let r = 0; r < 400; r++) {
-  for (const [id, s] of [['a', 0], ['b', 2], ['c', 4]]) t.setBet(id, { main: 10, sides: {}, seat: s });
+  for (const id of ['a', 'b', 'c']) t.setBet(id, { main: 10, sides: {}, seat: t.seatsOf(id)[0] }); // seat numbers move once empty seats go (dropEmpty)
   run(t, t.dealPlan(), () => t.deal());
   rounds++;
   let g = 0;
   while (t.inRound() && g++ < 200) {
-    if (t.phase === 'insurance') { for (const [id, s] of [['a', 0], ['b', 2], ['c', 4]]) { const seat = t.seats[s]; if (seat.hands.length && !seat.insuranceDecided) { const take = r % 2 === 0; if (take) ins++; run(t, [], () => t.insurance(id, take, s)); } } continue; }
+    if (t.phase === 'insurance') { for (const id of ['a', 'b', 'c']) { const s = t.seatsOf(id)[0], seat = t.seats[s]; if (seat.hands.length && !seat.insuranceDecided) { const take = r % 2 === 0; if (take) ins++; run(t, [], () => t.insurance(id, take, s)); } } continue; }
     if (t.phase === 'playing') {
       const id = t.seats[t.turn.seat].playerId, acts = t.allowedActions(id);
       const a = acts.includes('split') ? 'split' : acts.includes('double') && r % 3 === 0 ? 'double' : acts.includes('hit') && handTotalOf(t) < 15 ? 'hit' : 'stand';

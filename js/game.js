@@ -31,6 +31,11 @@ export const RULE_TEXT = {
   charlieEvery: (v) => (v ? `5 Card Charlie on about 1 round in ${v}` : '5 Card Charlie off'),
 };
 
+// The usual rules of a casino shoe game, as a second preset next to this table's own defaults: 3 to 2, dealer hits
+// soft 17, double on any two and after a split, split up to 3 times (4 hands), split aces once with one card each,
+// no surrender, no 5 Card Charlie.
+export const CASINO_RULES = { blackjackPays: 1.5, dealerHitsSoft17: true, allowSurrender: false, splitAces: true, resplitAces: false, maxSplits: 3, das: true, doubleOn: 'any', charlieEvery: 0 };
+
 export const DEFAULT_SETTINGS = {
   seats: 7,              // player seats at the table (any whole number from 1 up)
   decks: 1000,           // 1, 2, 6, 8, 20, 100, 1000, or 'csm' (randomized: full reshuffle before every round)
@@ -1295,7 +1300,61 @@ export class Table {
       if (seat.out) this.seats[i].out = true; // a seat that sits out stays out until its player comes back in
     }
     for (const p of Object.values(this.players)) if (p.leaving) { p.leaving = false; this.ev('leave seat (agreed to sit out)', p.id); }
+    this.dropEmpty();
     this.regroup();
+  }
+
+  // A seat nobody sits in for 2 rounds in a row is taken away, so the table shrinks to the players at it (never
+  // below 1 seat). Anyone at the table adds a seat back with the + on the table. Counted once per round.
+  dropEmpty() {
+    if (this.emptyRound === this.round) return;
+    this.emptyRound = this.round;
+    const e = Array.isArray(this.emptyFor) ? this.emptyFor : [];
+    const cnt = this.seats.map((x, i) => (x ? 0 : (e[i] || 0) + 1));
+    let keep = this.seats.map((_, i) => i).filter((i) => this.seats[i] || cnt[i] < 3); // counted as each round opens: 3 = empty through 2 whole rounds
+    if (!keep.length) keep = [0];
+    this.emptyFor = keep.map((i) => cnt[i]);
+    if (keep.length === this.seats.length) return;
+    const gone = this.seats.length - keep.length;
+    this.seats = keep.map((i) => this.seats[i]);
+    this.settings.seats = this.seats.length;
+    for (const p of Object.values(this.players)) this.fixSeat(p);
+    this.addLog(`${gone} empty seat${gone > 1 ? 's were' : ' was'} taken away after 2 rounds. The table has ${this.seats.length} seat${this.seats.length > 1 ? 's' : ''}.`);
+  }
+  // One more seat or one fewer, by anyone at the table, with no vote. A seat is only taken away when one is empty:
+  // the last empty one goes, and nobody moves.
+  changeSeats(clientId, delta) {
+    const p = this.players[clientId];
+    if (!p || p.kicked) throw new Error('Join the table first.');
+    if (delta > 0) {
+      this.seats.push(null); (this.emptyFor ||= []).push(0);
+      this.settings.seats = this.seats.length;
+      this.addLog(`${p.name} added a seat. The table has ${this.seats.length} seats.`);
+      return this.seats.length;
+    }
+    const i = this.seats.lastIndexOf(null);
+    if (i < 0) throw new Error('Every seat is taken.');
+    if (this.seats.length <= 1) throw new Error('The table needs at least 1 seat.');
+    if (this.inRound() && i !== this.seats.length - 1) throw new Error('That seat can be taken away when this round ends.'); // seat numbers stay put mid hand
+    this.seats.splice(i, 1); if (Array.isArray(this.emptyFor)) this.emptyFor.splice(i, 1);
+    this.settings.seats = this.seats.length;
+    for (const q of Object.values(this.players)) this.fixSeat(q);
+    this.addLog(`${p.name} took away an empty seat. The table has ${this.seats.length} seat${this.seats.length > 1 ? 's' : ''}.`);
+    return this.seats.length;
+  }
+  // The dealer frees every seat whose player is not here (offline). A seat with a hand in play is freed when the
+  // hand ends. Returns how many seats.
+  dealerUnseatMissing(byId) {
+    if (this.banker ? this.banker !== byId : this.hostId && this.hostId !== byId) throw new Error('Only the dealer can unseat a player.');
+    let n = 0;
+    this.seats.forEach((x, i) => {
+      if (!x || x.playerId === byId) return;
+      const p = this.players[x.playerId];
+      if (p && p.connected && !p.kicked) return;
+      if (x.leaving && x.byDealer) return; // already going after this hand
+      this.dealerUnseat(byId, i); n++;
+    });
+    return n;
   }
 
   // A player with several seats always has them side by side. Between rounds, with no bets down, the

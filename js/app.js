@@ -3,7 +3,7 @@
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
 import { startPresence } from './presence.js?v=20261124j';
 import { outerLink } from './shell.js?v=20261124j';
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe, destName, stepOf, RULE_TEXT, DEFAULT_SETTINGS } from './game.js?v=20261124j';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe, destName, stepOf, RULE_TEXT, DEFAULT_SETTINGS, CASINO_RULES } from './game.js?v=20261124j';
 import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261124j';
 import { bestMove, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261124j';
 import { tickSound, winSound } from './fx.js?v=20261124j';
@@ -658,7 +658,7 @@ function onHostMessage(conn, msg) {
 
 // How long a player who dropped out may stay away before the dealer stands their hand. Their own
 // turn clock keeps running as well, so whichever ends first counts.
-const AWAY_MS = 20000;
+const AWAY_MS = 60000; // 1 minute (the person's choice, 2026-11-24)
 function awayClock(id, already = 0) {
   clearTimeout(S.goneTimers[id]);
   S.goneTimers[id] = setTimeout(() => {
@@ -726,6 +726,8 @@ function runAction(id, msg, onError) {
       case 'sit-out': t.sitOut(id, msg.seat, !!msg.on); break;
       case 'leave-seat': t.leaveSeat(id, msg.seat); break;
       case 'dealer-unseat': t.dealerUnseat(id, Number(msg.seat)); break;
+      case 'seats-pm': t.changeSeats(id, msg.d > 0 ? 1 : -1); break;
+      case 'unseat-missing': t.dealerUnseatMissing(id); break;
       case 'stand-up': t.standUp(id, Number.isInteger(msg.seat) ? msg.seat : undefined); break;
       case 'bet': t.setBet(id, msg); break;
       case 'insurance': t.insurance(id, !!msg.take, Number.isInteger(msg.seat) ? msg.seat : undefined); break;
@@ -970,7 +972,9 @@ function scheduleTimer() {
     const tp = t.players[t.seats[t.turn.seat].playerId];
     // A player who is away does not get the full clock: the table plays their hand after a moment.
     const away = tp && !tp.connected && (tp.gone || tp.kicked);
-    if (away || s.turnTimer > 0) want = { key: `turn-${t.round}-${t.turn.seat}-${t.turn.hand}-${h.cards.length}${away ? '-away' : ''}`, kind: 'turn', secs: away ? 1.2 : s.turnTimer };
+    // One who only just dropped out keeps the full minute to come back before the dealer stands for them.
+    const dropped = tp && !tp.connected && !away;
+    if (away || s.turnTimer > 0) want = { key: `turn-${t.round}-${t.turn.seat}-${t.turn.hand}-${h.cards.length}${away ? '-away' : dropped ? '-dc' : ''}`, kind: 'turn', secs: away ? 1.2 : dropped ? Math.max(s.turnTimer, AWAY_MS / 1000) : s.turnTimer };
   }
   if (S.timer && want && S.timer.key === want.key) return;
   if (S.timer) { clearTimeout(S.timer.handle); S.timer = null; }
@@ -2134,28 +2138,45 @@ function dealingNow() { return performance.now() < S.dealEnds; }
 function inFlight(keys) { return S.dealing && keys.some((k) => (S.cardAt.get(k) ?? 0) >= S.dealStart); }
 
 function runDealQueue() {
-  const shoe = $('#shoe');
   document.querySelectorAll('.card.pending[data-key]').forEach((el) => {
     if (el._queued) return;
     el._queued = true;
-    const at = S.cardAt.get(el.dataset.key);
-    const delay = Math.max(0, at - performance.now());
-    setTimeout(() => {
-      if (!el.isConnected) return;
-      const a = shoe?.getBoundingClientRect();
-      const b = el.getBoundingClientRect();
-      el.classList.remove('pending');
-      cardSound();
-      S.room?.dealCard?.();
-      if (!a) return;
-      const dx = a.left + a.width / 2 - (b.left + b.width / 2);
-      const dy = a.top + a.height / 2 - (b.top + b.height / 2);
-      el.animate([
-        { transform: `translate(${dx}px, ${dy}px) rotate(-25deg) scale(.6)`, opacity: 0.6 },
-        { transform: 'none', opacity: 1 },
-      ], { duration: FLIGHT, easing: 'cubic-bezier(.2,.7,.3,1)' });
-    }, delay);
+    (S.dealQ ||= []).push(el);
   });
+  pumpDeal();
+}
+// One card at a time, in order, never closer together than most of a deal gap: a slow frame (many seats, the 3D
+// room) makes the cards and their sound late, but never bunched up and then fast.
+function pumpDeal() {
+  clearTimeout(S.dealPump);
+  const q = (S.dealQ ||= []).filter((el) => el.isConnected);
+  S.dealQ = q;
+  if (!q.length) return;
+  q.sort((a, b) => (S.cardAt.get(a.dataset.key) ?? 0) - (S.cardAt.get(b.dataset.key) ?? 0));
+  const now = performance.now(), el = q[0];
+  const due = Math.max(S.cardAt.get(el.dataset.key) ?? now, (S.lastDealt || 0) + DEAL_GAP * 0.8);
+  if (now < due) { S.dealPump = setTimeout(pumpDeal, due - now); return; }
+  q.shift();
+  S.lastDealt = now;
+  // Late: the rest of this deal moves back by the same time, so totals and buttons wait for the last card.
+  const late = now - (S.cardAt.get(el.dataset.key) ?? now);
+  if (late > 30) { for (const x of q) { const k = x.dataset.key; if (S.cardAt.has(k)) S.cardAt.set(k, S.cardAt.get(k) + late); } S.nextCardAt += late; S.dealEnds += late; clearTimeout(S.dealDone); S.dealDone = setTimeout(render, S.dealEnds - now + 40); }
+  S.cardAt.set(el.dataset.key, now);
+  const shoe = $('#shoe');
+  const a = shoe?.getBoundingClientRect();
+  const r = el.getBoundingClientRect();
+  el.classList.remove('pending');
+  cardSound();
+  S.room?.dealCard?.();
+  if (a) {
+    const dx = a.left + a.width / 2 - (r.left + r.width / 2);
+    const dy = a.top + a.height / 2 - (r.top + r.height / 2);
+    el.animate([
+      { transform: `translate(${dx}px, ${dy}px) rotate(-25deg) scale(.6)`, opacity: 0.6 },
+      { transform: 'none', opacity: 1 },
+    ], { duration: FLIGHT, easing: 'cubic-bezier(.2,.7,.3,1)' });
+  }
+  if (q.length) S.dealPump = setTimeout(pumpDeal, 0);
 }
 
 // The dealer is not told to place bets: during betting the felt line gives way to the yellow bar under the dealer settings.
@@ -2385,6 +2406,7 @@ function feltHTML(st) {
   const dealerH = box.phone ? (box.H < 500 ? 96 : 112) : 152;
   const zoomSeat = S.zoomSeat != null && (spots[order.indexOf(S.zoomSeat)]?.mode === 'mini' || (spots[order.indexOf(S.zoomSeat)]?.mode === 'seat' && st.seats[S.zoomSeat]?.hands.length > 2)) && st.seats[S.zoomSeat] ? S.zoomSeat : null;
   return `
+    ${me ? `<div class="seat-pm" title="Seats at this table. Anyone here can add one, or take away an empty one. A seat left empty for 2 rounds goes by itself."><button class="spm-btn" data-act="seat-minus" aria-label="Take away an empty seat" ${st.seats.some((x) => !x) && st.seats.length > 1 ? '' : 'disabled'}>−</button><span>${st.seats.length} seat${st.seats.length > 1 ? 's' : ''}</span><button class="spm-btn" data-act="seat-plus" aria-label="Add a seat">+</button></div>` : ''}
     <div class="shoe-box"><div class="shoe" id="shoe"><div class="shoe-cards"></div><div class="shoe-fill" style="--fill:${Math.round(100 * st.shoe.left / (st.shoe.size || 1))}%"></div></div><div class="shoe-info">${shoeTxt}</div></div>
     <div class="dealer" id="dealer-zone" style="--cw:${dcw}px">
       ${dealerSeat}
@@ -3397,6 +3419,9 @@ function runAct(el) {
     case 'sit-out': send({ t: 'sit-out', seat: Number(el.dataset.seat), on: el.dataset.on === '1' }); break;
     case 'leave-seat': send({ t: 'leave-seat', seat: Number(el.dataset.seat) }); break;
     case 'dealer-unseat': send({ t: 'dealer-unseat', seat: Number(el.dataset.seat) }); break;
+    case 'seat-plus': send({ t: 'seats-pm', d: 1 }); break;
+    case 'seat-minus': send({ t: 'seats-pm', d: -1 }); break;
+    case 'unseat-missing': send({ t: 'unseat-missing' }); break;
     case 'pick-seat': pickSeat(Number(el.dataset.seat)); break;
     case 'ask-out': send({ t: 'ask-out', to: el.dataset.id }); break;
     case 'auto': S.auto = { speed: 'normal', ...(S.auto || {}), on: !S.auto?.on, key: null }; clearTimeout(S.auto.timer); render(); autoStep(); break;
@@ -3527,11 +3552,19 @@ function runAct(el) {
     case 'view-reset': S.room?.home(); $('.view-walk')?.classList.remove('on'); break;
     case 'turn': S.room?.look(Number(el.dataset.d)); break;
     case 'walk': if (S.room) { const on = S.room.walk(!S.room.walking()); el.classList.toggle('on', on); if (on) toast(matchMedia('(pointer: coarse)').matches ? 'Walking: drag to move through the office. Two fingers turn and zoom. ⟲ takes you back to your seat.' : 'Walking: drag to move through the office. Right button turns, the wheel zooms. Reset view takes you back to your seat.'); } break;
-    case 'room3d': safeSet('bj-3d', use3D() ? '0' : '1'); location.reload(); break;
+    case 'room3d': {
+      // Switched in place, with no reload: the connection stays up, so a dealer or host never drops out.
+      safeSet('bj-3d', use3D() ? '0' : '1');
+      if (!use3D()) document.body.classList.remove('room3d');
+      S.prevView = null; S.cardAt = new Map(); S.dealQ = [];
+      buildLayout(); if (S.state) render();
+      break;
+    }
     case 'zoom': if (S.room) { S.room.zoomBy(Number(el.dataset.d)); break; } safeSet('bj-zoom', String(Math.round(Math.min(1.6, Math.max(0.6, getZoom() + 0.1 * Number(el.dataset.d))) * 10) / 10)); applyZoom(); break;
     case 'menu': $('#menu-wrap').classList.toggle('open'); break;
     case 'mute': setMuted(!isMuted()); el.textContent = isMuted() ? '🔇 Sound: off' : '🔊 Sound: on'; if (!isMuted()) chipSound(); break;
     case 'sit-dealer': send({ t: 'sit-dealer' }); break;
+    case 'dealer-casino': S.dealerDraft = { ...(S.dealerDraft || {}), ...casinoRules() }; render(); break;
     case 'dealer-defaults': S.dealerDraft = { ...(S.dealerDraft || {}), ...dealerDefaults() }; render(); break;
     case 'dealer-open': S.dealerOpen = !dealerOpen(); safeSet('bj-dpanel', S.dealerOpen ? '1' : '0'); render(); break;
     case 'leave-dealer': send({ t: 'leave-dealer' }); break;
@@ -4122,6 +4155,10 @@ function dealerDefaults() {
   const d = DEFAULT_SETTINGS;
   return { min: d.minBet, max: d.maxBet, side: d.maxSideBet, shuffle8: d.shuffle8 !== false, ...rulesCur(d), bigOn: !!d.bigBet, bigLimit: d.maxBet * 2, bigPer: d.bigBet?.per ?? 2, bigHands: d.bigBet?.hands ?? 10, capOn: true, capAmt: 30 * d.maxBet };
 }
+// The rule boxes at the usual casino rules (bets and the other boxes stay as they are).
+function casinoRules() { const { charlieN, ...r } = rulesCur(CASINO_RULES); void charlieN; return r; }
+// Seats whose player is not connected (the dealer's own excepted), not already going after this hand.
+function missingSeats(st) { return st.seats.filter((x) => x && x.playerId !== S.myId && !x.connected && !(x.leaving)).length; }
 function dealerVals(st) { return { ...dealerCur(st), ...(S.dealerDraft || {}) }; }
 function dealerDirty(st) { const cur = dealerCur(st), d = S.dealerDraft || {}; return Object.keys(d).some((k) => String(d[k]) !== String(cur[k])); }
 function dealerPanelHTML(st) {
@@ -4130,14 +4167,14 @@ function dealerPanelHTML(st) {
   const num = (k, label, min = 0) => `<label>${label}<input type="number" inputmode="numeric" min="${min}" step="1" data-dk="${k}" value="${esc(String(v[k]))}" /></label>`;
   const tick = (k, label) => `<label class="dp-tick"><input type="checkbox" data-dk="${k}" ${v[k] ? 'checked' : ''} /> ${label}</label>`;
   return `<div class="dealer-panel${open ? '' : ' shut'}">
-    <button class="dp-head" data-act="dealer-open" aria-expanded="${open}"><span>${owe ? `You owe ${money(-st.banker.chips)}. Tap your balance to buy in.` : 'Dealer settings'}</span><i>${open ? '▾' : '▸'}</i></button>
+    <button class="dp-head" data-act="dealer-open" aria-expanded="${open}"><span>${owe ? `You owe ${money(-st.banker.chips)}. Tap your balance to buy in.` : 'Dealer settings'}</span><i>${open ? '▾' : '▴'}</i></button>
     ${open ? `<div class="dp-secs">
       <section class="dp-sec"><h4>Normal bets</h4>${num('min', 'Min bet', 1)}${num('max', 'Max bet', 1)}${num('side', 'Max side bet')}${tick('shuffle8', 'Shuffle every 8 rounds')}</section>
       <section class="dp-sec"><h4>Big bets sometimes</h4>${tick('bigOn', 'On')}${num('bigLimit', 'Up to', 1)}${num('bigPer', 'Times', 1)}${num('bigHands', 'Every (hands)', 1)}</section>
       <section class="dp-sec"><h4>Stop at loss</h4>${tick('capOn', 'On')}${num('capAmt', 'Loss', 1)}<span class="cap-lost">Lost ${money(st.lossCap?.lost || 0)}</span></section>
       ${rulesSecHTML(st, v, 'dk')}
     </div>
-    <div class="dp-foot"><button class="btn ghost dp-reset" data-act="dealer-defaults" ${Object.entries(dealerDefaults()).every(([k, x]) => String(v[k]) === String(x)) ? 'disabled' : ''} title="Fills in the game's default settings and rules. Press Save to use them.">Reset to defaults</button><button class="btn dp-save${dealerDirty(st) && !(S.dealerHeld && st.settingsNext) ? ' dirty' : ''}" data-act="dealer-save">Save</button>${st.settingsNext ? '<span class="dp-next">Saved. Applies from the next hand.</span>' : ''}${st.settings.decks !== 'csm' && (st.phase === 'betting' || st.phase === 'settled') ? '<button class="btn" data-act="d-shuffle">🔀 Shuffle now</button>' : ''}</div>` : ''}
+    <div class="dp-foot">${missingSeats(st) ? `<button class="btn ghost dp-missing" data-act="unseat-missing" title="Frees every seat whose player is not here. A seat with a hand in play is freed when the hand ends.">Unseat missing (${missingSeats(st)})</button>` : ''}<button class="btn ghost dp-reset" data-act="dealer-defaults" ${Object.entries(dealerDefaults()).every(([k, x]) => String(v[k]) === String(x)) ? 'disabled' : ''} title="Fills in this game's own default settings and rules. Press Save to use them.">Our defaults</button><button class="btn ghost dp-reset" data-act="dealer-casino" ${Object.entries(casinoRules()).every(([k, x]) => String(v[k]) === String(x)) ? 'disabled' : ''} title="Fills in the usual casino rules: 3 to 2, dealer hits soft 17, split up to 4 hands, split aces once, no surrender, no 5 Card Charlie. Bets stay as they are. Press Save to use them.">Casino rules</button><button class="btn dp-save${dealerDirty(st) && !(S.dealerHeld && st.settingsNext) ? ' dirty' : ''}" data-act="dealer-save">Save</button>${st.settingsNext ? '<span class="dp-next">Saved. Applies from the next hand.</span>' : ''}${st.settings.decks !== 'csm' && (st.phase === 'betting' || st.phase === 'settled') ? '<button class="btn" data-act="d-shuffle">🔀 Shuffle now</button>' : ''}</div>` : ''}
   </div><button class="dp-bar" data-act="leave-dealer">Leave dealer seat</button>`;
 }
 // ---------- Rules of play and the dealer's edge ----------
@@ -4184,6 +4221,13 @@ function dealerSaveNow(st) {
   document.activeElement?.blur?.();
   render();
 }
+// Enter saves: in the dealer panel and in the host's settings, as the Save button would.
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter' || e.isComposing || !e.target.closest) return;
+  if (e.target.closest('.dealer-panel') && S.state) { e.preventDefault(); dealerSaveNow(S.state); return; }
+  const hs = e.target.closest('#host-settings');
+  if (hs && e.target.matches('input, select')) { e.preventDefault(); hs.querySelector('[data-act=h-settings]')?.click(); }
+});
 for (const ev of ['input', 'change']) document.addEventListener(ev, (e) => {
   const box = e.target.closest?.('#host-settings');
   if (box) {

@@ -695,3 +695,11 @@ export function bankLedgerHTML(st, myId) {
   const sum = Math.round(rows.reduce((a, r) => a + r.net, 0) * 100) / 100;
   return `<h3>Ledger${st.frozen ? ' (frozen)' : ''}</h3>${profitLineHTML()}<div class="ledger-body"><table class="pk-table"><tr><th>Player</th><th>Bought in</th><th>Chips</th><th>+/-</th></tr>${rows.map((r) => { const b = st.frozen && r.base ? r.base : r; return `<tr class="${r.id === myId ? 'me' : ''}"><td>${esc(r.name)}${r.id === st.bankId ? ' (dealer)' : ''}</td><td>${money(b.totalIn)}</td><td>${money(b.chips)}</td>${cell(r.net)}</tr>`; }).join('')}<tr><td>Total</td><td></td><td></td>${cell(sum)}</tr></table><p class="hint">The +/- column counts only rounds played with a player as the dealer, so it always adds up to zero. Rounds against the house are practice and are left out${st.frozen ? '. The ledger is frozen now: the chips on the table are practice chips' : ''}.</p><button class="btn small office-btn" data-act="office">🏢 All tables</button>${COPY_BTN}</div>`;
 }
+// Enter in a settings box of poker, baccarat or roulette presses its Save, as in the blackjack dealer panel.
+if (typeof document !== 'undefined') document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter' || e.isComposing || !e.target?.matches?.('input, select')) return;
+  let box = e.target.parentElement;
+  while (box && box !== document.body && !box.querySelector('[data-act=save-settings]')) box = box.parentElement;
+  const btn = box && box !== document.body ? box.querySelector('[data-act=save-settings]') : null;
+  if (btn) { e.preventDefault(); btn.click(); }
+});
