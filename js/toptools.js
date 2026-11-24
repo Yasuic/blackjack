@@ -86,7 +86,7 @@ export function initTopTools({ css = false, onChange = null } = {}) {
 
 // The player's own net result of the session, the same number as their line in the ledger. null hides it.
 // What the player has put in on the hand in play (the ledger only moves once it is settled). 0 or null hides it.
-let risk = 0, riskBase = 0, riskWon = 0, lastProfit = null, lastPractice = null;
+let risk = 0, riskBase = 0, riskWon = 0, riskPaid = 0, lastProfit = null, lastPractice = null;
 // Baccarat and roulette: [at risk, balance at the start of the round] for setRisk. A player risks their own
 // bets; the bank risks every bet on the table. shown: the chips the page shows (before this result is paid).
 export function bankRisk(st, me, betting, settling, shown) {
@@ -102,13 +102,14 @@ export function bankRisk(st, me, betting, settling, shown) {
 // base: their balance when the hand started, so the bar shows the share of it in play.
 // won (a dealer only): stakes already the dealer's this hand (busts, surrenders, lost side bets). The bar then shows
 // what is still open, with the tally beside it: everything put in against the dealer, less what is won for sure.
-export function setRisk(n, base, won = 0) {
+export function setRisk(n, base, won = 0, paid = 0) {
   const r2 = (x) => Math.round(x * 100) / 100;
   const w = Number.isFinite(won) && won > 0 ? r2(won) : 0;
+  const pd = Number.isFinite(paid) && paid > 0 ? r2(paid) : 0;
   const v = Number.isFinite(n) && n - w > 0 ? r2(n - w) : 0;
   const b = (v || w) && Number.isFinite(base) && base > 0 ? r2(base) : 0;
-  if (v === risk && b === riskBase && w === riskWon) return;
-  risk = v; riskBase = b; riskWon = w;
+  if (v === risk && b === riskBase && w === riskWon && pd === riskPaid) return;
+  risk = v; riskBase = b; riskWon = w; riskPaid = pd;
   setProfit(lastProfit);
 }
 // Session profit shows on the Ledger button (ledgerTitle) and in the ledger. The top bar shows "At risk" while a hand is in play.
@@ -117,9 +118,10 @@ export function setProfit(n) {
   showTitle();
   const el = document.getElementById('tt-profit');
   if (!el) return;
-  if (!risk && !riskWon) { el.hidden = true; return; }
+  if (!risk && !riskWon && !riskPaid) { el.hidden = true; return; }
   const pct = riskBase ? Math.round((risk / riskBase) * 100) : null;
-  const tally = riskWon ? ` <span class="tt-rw">${(risk + riskWon).toLocaleString()} in <span class="up">−${riskWon.toLocaleString()} won</span></span>` : '';
+  const tally = (riskWon ? ` <span class="tt-rw">${(risk + riskWon).toLocaleString()} in <span class="up">−${riskWon.toLocaleString()} won</span></span>` : '')
+    + (riskPaid ? ` <span class="tt-rw"><span class="down">${riskPaid.toLocaleString()} paid</span></span>` : '');
   const html = `<span class="tt-rl">At risk</span> <b>${risk.toLocaleString()}</b>${pct !== null ? ` <span class="tt-rp">(${pct}%<span class="tt-rof"> of ${riskBase.toLocaleString()}</span>)</span>` : ''}${tally}`;
   if (el.dataset.v !== html) { el.dataset.v = html; el.innerHTML = html; el.className = 'pill tt-profit tt-risk-only'; }
   el.hidden = false;

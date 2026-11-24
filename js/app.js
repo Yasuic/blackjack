@@ -1779,11 +1779,23 @@ function riskOf(st) {
   const own = (me.seats || []).reduce((a, i) => a + (st.seats[i]?.staked || 0), 0);
   const dealing = st.banker?.id === S.myId;
   const others = dealing ? st.seats.filter((x, i) => x && !(me.seats || []).includes(i)) : [];
-  const vs = others.reduce((a, x) => a + (x.staked || 0), 0);
-  // What is already the dealer's this hand: busted hands, half of a surrender, side bets that lost.
-  const won = others.reduce((a, x) => a + (x.hands || []).reduce((b, h) => b + (h.surrendered ? h.bet / 2 : h.total > 21 && !h.charlie ? h.bet : 0), 0)
-    + (x.sideResults || []).reduce((b, r) => b + (!r.win && !r.push ? r.stake || 0 : 0), 0), 0);
-  setRisk(own + vs, me.chips + own, won);
+  // The dealer's side: every main bet against them (each hand, doubles in) and each side bet still open, at its
+  // stake. Already the dealer's this hand: busted hands, half of a surrender, side bets that lost. Already paid:
+  // side bets that won (their payout, the stake back not counted).
+  let vs = 0, won = 0, paid = 0;
+  for (const x of others) {
+    for (const h of x.hands || []) { vs += h.bet || 0; if (h.surrendered) won += h.bet / 2; else if (h.total > 21 && !h.charlie) won += h.bet; }
+    const res = Object.fromEntries((x.sideResults || []).map((r) => [r.key, r]));
+    const open = { ...(x.bet?.sides || {}), ...(x.insurance ? { insurance: x.insurance } : {}) };
+    for (const [k, stake] of Object.entries(open)) {
+      if (!(stake > 0)) continue;
+      const r = res[k];
+      if (!r) vs += stake;
+      else if (r.win) paid += Math.max(0, (r.pay || 0) - (r.stake || stake));
+      else if (!r.push) { vs += r.stake || stake; won += r.stake || stake; }
+    }
+  }
+  setRisk(own + vs, me.chips + own, won, paid);
 }
 
 function renderLedger(st) {

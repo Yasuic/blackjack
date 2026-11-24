@@ -793,7 +793,7 @@ body:not(.room3d) .ro-result, .pfelt.tall .ro-result { display: none; }
 /* "At risk" in the top bar while a hand is in play; session profit is in the ledger (.ld-mine). */
 .tt-profit.tt-risk-only b { color: #f2d58a; }
 .tt-profit .tt-rp { font-size: .86em; opacity: .75; white-space: nowrap; }
-.tt-profit .tt-rw { font-size: .86em; white-space: nowrap; opacity: .9; } .tt-profit .tt-rw .up { color: #6fd39b; }
+.tt-profit .tt-rw { font-size: .86em; white-space: nowrap; opacity: .9; } .tt-profit .tt-rw .up { color: #6fd39b; } .tt-profit .tt-rw .down { color: #ff8f8f; }
 @media (max-width: 1040px) { .tt-profit .tt-rof { display: none; } }
 @media (max-width: 430px) { body.in-room .topbar .tt-profit.tt-risk-only { font-size: 12px; letter-spacing: -.2px; } .tt-profit .tt-rp { margin-left: -2px; } }
 .ld-mine { font-size: 15px; font-weight: 600; margin: 0 0 10px; }
