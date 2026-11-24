@@ -1,18 +1,18 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { startPresence } from './presence.js?v=20261123h';
-import { outerLink } from './shell.js?v=20261123h';
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe, destName } from './game.js?v=20261123h';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261123h';
-import { bestMove, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261123h';
-import { tickSound, winSound } from './fx.js?v=20261123h';
-import * as HX from './history.js?v=20261123h';
-import { webglOK, initRoom, COLLEAGUES } from './room3d.js?v=20261123h';
-import { COPY_BTN, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261123h';
-import { topToolsHTML, initTopTools, setProfit, setPractice, setRisk, cardScale, profitLineHTML } from './toptools.js?v=20261123h';
-import { statsHTML } from './pstats.js?v=20261123h';
-import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261123h';
+import { startPresence } from './presence.js?v=20261124a';
+import { outerLink } from './shell.js?v=20261124a';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe, destName } from './game.js?v=20261124a';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261124a';
+import { bestMove, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261124a';
+import { tickSound, winSound } from './fx.js?v=20261124a';
+import * as HX from './history.js?v=20261124a';
+import { webglOK, initRoom, COLLEAGUES } from './room3d.js?v=20261124a';
+import { COPY_BTN, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261124a';
+import { topToolsHTML, initTopTools, setProfit, setPractice, setRisk, cardScale, profitLineHTML } from './toptools.js?v=20261124a';
+import { statsHTML } from './pstats.js?v=20261124a';
+import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261124a';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -1366,6 +1366,15 @@ function doRebet() {
 }
 
 // ---------- Layout and rendering ----------
+// On a computer Info and Ledger are in the top bar's own row, so nothing floats over the table name; on a phone the top bar has no room, so they stay in the bar at the bottom.
+const WIDE = matchMedia('(min-width: 701px)');
+function dockTop() {
+  const bar = $('#hud-bar'), info = $('#sb-guide'), led = $('#ledger');
+  if (!bar || !info || !led) return;
+  if (WIDE.matches) { $('#slot-info')?.append(info); $('#slot-ledger')?.append(led); }
+  else if (info.parentNode !== bar) { bar.prepend(info); bar.querySelector('.float-insure')?.after(led); }
+}
+WIDE.addEventListener('change', dockTop);
 function buildLayout() {
   const host = S.role === 'host';
   try { S.room?.stop(); } catch {}
@@ -1376,8 +1385,10 @@ function buildLayout() {
     <div class="topbar">
       <select class="game-switch" id="game-switch" title="Switch game" aria-label="Game"><option value="blackjack" selected>🃏 Blackjack</option><option value="poker">♠️ Poker</option><option value="baccarat">🎴 Baccarat</option><option value="roulette">🎡 Roulette</option></select>
       <span id="conn-pill" class="pill">Connecting</span>
+      <span class="tb-slot" id="slot-info"></span>
       <span class="tt-box">${topToolsHTML()}<button class="pill afk-pill" data-act="afk-screen" title="A black screen with plain text while you are away. The table keeps running.">🌙<span class="fp-t"> AFK</span></button></span>
       <span class="spacer"></span>
+      <span class="tb-slot" id="slot-ledger"></span>
       <button id="fair-pill" class="pill fair-pill" data-act="fair" title="How the shuffle is kept fair">🔐<span class="fp-t"> Provably fair</span></button>
       <button class="btn small gold" data-act="copy">🔗 Invite</button>
       <div class="menu-wrap" id="menu-wrap">
@@ -1422,6 +1433,7 @@ function buildLayout() {
     <div class="buyin-pop" id="buyin-pop" hidden></div>
     <div class="host-pops" id="host-pops"></div>`;
   applyZoom();
+  dockTop();
   if (use3D()) {
     document.body.classList.add('room3d');
     try { S.room = initRoom($('#room'), $('#felt'), { phone: innerWidth < 700, hud: $('#hud3d'), size: innerWidth < 700 ? { W: Math.max(320, Math.min(460, innerWidth - 16)), H: 600 } : FELT, onGo: (g, now) => { if (!['poker', 'baccarat', 'roulette'].includes(g)) return; if (!now && (S.goAsk?.g !== g || Date.now() - S.goAsk.t > 4000)) { S.goAsk = { g, t: Date.now() }; toast(`Tap again to walk over to ${g[0].toUpperCase() + g.slice(1)}.`); return; } goGame(g); } }); }

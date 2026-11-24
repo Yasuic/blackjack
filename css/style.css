@@ -942,11 +942,6 @@ body:has(.card.pending) #tray > * { visibility: hidden; }
 .tray .side-res.win > b { color: #8ff5c0; }
 .sr-title { display: none; }
 .tray .side-results:has(.side-res:nth-child(6)) .side-res { font-size: 10.5px; line-height: 11px; padding: 0 5px; }
-/* Side bet guide and ledger buttons live in the top bar on a desktop, clear of the table. */
-@media (min-width: 701px) {
-  body.in-room .sb-guide { top: 10px; left: 300px; z-index: 55; }
-  body.in-room .ledger { top: 9px; right: 300px; z-index: 55; }
-}
 @media (min-width: 701px) and (max-width: 1340px) {
   .tray:has(.decide) .side-res span { font-size: 0; }
   .tray:has(.decide) .side-res span b { font-size: 11.5px; }
@@ -1671,7 +1666,8 @@ body:not(.game-poker) .spot { box-shadow: 0 0 10px rgba(63,230,214,.22), inset 0
 .office-dlg { max-height: calc(100vh - 24px); overflow: auto; }
 .vote-pop[hidden] { display: none !important; }
 .conn-drop-host { display: block; margin: 10px auto 0; pointer-events: auto; }
-body.in-room #conn-pill { max-width: 104px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+@media (max-width: 700px) { body.in-room #conn-pill { max-width: 104px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; } }
+#conn-pill { flex-shrink: 0; }
 /* Seat numbers: seat 1 is the first seat dealt (the dealer's left, the players' right), then 2, 3 and on round the table. */
 .sn { display: inline-block; min-width: 1.45em; height: 1.45em; line-height: 1.45em; padding: 0 .2em; margin-right: .4em; border-radius: 999px; background: rgba(232,196,106,.92); color: #14110a; font-size: .82em; font-weight: 800; text-align: center; vertical-align: .08em; font-style: normal; }
 /* A seat on the right side of the table: its Sit out tab goes on the left of the name plate, inside the table. */

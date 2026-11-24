@@ -684,7 +684,6 @@ body.no-cards .tt-size, body.no-cards .tt-pop .tt-row:first-child { display: non
 button.tt-profit { cursor: pointer; font-family: inherit; color: inherit; background: rgba(255,255,255,.04); flex: none; }
 /* Blackjack keeps its Side bets and Ledger buttons over the bar, so its tools have a fixed place between them. */
 .tt-box { display: contents; }
-@media (min-width: 701px) { body.in-room .topbar .tt-box { position: absolute; left: 446px; top: 50%; transform: translateY(-50%); display: flex; align-items: center; gap: 10px; } }
 @media (max-width: 1240px) { .tt-size { display: none; } }
 @media (max-width: 1040px) { .tt-profit.tt-risk-only .tt-rl { display: none; } .tt-profit.tt-risk-only::before { content: 'Risk '; opacity: .7; } }
 @media (max-width: 700px) {
@@ -803,3 +802,10 @@ body:not(.room3d) .ro-result, .pfelt.tall .ro-result { display: none; }
 /* Auto rebet: a full size button in the middle of its row. */
 .btn.auto-rebet { font-size: 15px; padding: 10px 22px; min-height: 44px; }
 .tray .actions:has(> .auto-rebet) { justify-content: center; }
+
+/* Info and Ledger in the top bar row on a computer (dockTop in app.js): plain buttons in the flow, their panels drop below. */
+.topbar .tb-slot { display: contents; }
+.topbar .sb-guide { position: relative; top: auto; left: auto; z-index: 60; flex-shrink: 0; }
+.topbar .sb-guide #sb-guide-body { position: absolute; left: 0; top: calc(100% + 6px); width: 340px; max-width: 80vw; padding: 4px 14px 12px; background: rgba(12,15,20,.96); border: 1px solid rgba(232,196,106,.35); border-radius: 12px; box-shadow: 0 10px 24px rgba(0,0,0,.5); }
+.topbar .ledger { position: relative !important; inset: auto !important; z-index: auto; flex-shrink: 0; }
+@media (min-width: 701px) and (max-width: 960px) { .topbar { flex-wrap: nowrap; gap: 8px; } .topbar .fp-t { display: none; } }
