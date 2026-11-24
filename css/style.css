@@ -675,7 +675,7 @@ body.aiming .seat[id^="seat-"]:not(.empty), body.aiming #dealer-zone { cursor: c
 .afk-pill { cursor: pointer; font: inherit; font-size: 12px; font-weight: 700; color: #cfd6e2; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.22); }
 .afk-pill:hover { background: rgba(255,255,255,.14); }
 @media (max-width: 640px) { .afk-pill { font-size: 10.5px; padding: 3px 7px; } .afk-pill .fp-t { display: none; } }
-body.in-room .topbar .afk-pill { flex-shrink: 0; }
+body.in-room .topbar .afk-pill, body.in-room .topbar .pill.afk-pill { flex-shrink: 0; min-width: max-content; }
 
 /* Seats. The host picks how many. Each seat is placed by the page script with --x and --y (where its
    outer edge sits on the felt, in percent), --s (its size, smaller when the table is crowded) and
@@ -1659,7 +1659,7 @@ body:not(.game-poker) .spot { box-shadow: 0 0 10px rgba(63,230,214,.22), inset 0
 .office-dlg { max-height: calc(100vh - 24px); overflow: auto; }
 .vote-pop[hidden] { display: none !important; }
 .conn-drop-host { display: block; margin: 10px auto 0; pointer-events: auto; }
-@media (max-width: 700px) { body.in-room #conn-pill { max-width: 104px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; } }
+@media (max-width: 700px) { body.in-room #conn-pill { max-width: 104px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; flex-shrink: 1 !important; min-width: 46px; } }
 #conn-pill { flex-shrink: 0; }
 /* Seat numbers: seat 1 is the first seat dealt (the dealer's left, the players' right), then 2, 3 and on round the table. */
 .sn { display: inline-block; min-width: 1.45em; height: 1.45em; line-height: 1.45em; padding: 0 .2em; margin-right: .4em; border-radius: 999px; background: rgba(232,196,106,.92); color: #14110a; font-size: .82em; font-weight: 800; text-align: center; vertical-align: .08em; font-style: normal; }

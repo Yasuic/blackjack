@@ -1,6 +1,6 @@
 // Top bar tools shared by every game: the card size slider, the "Session profit" readout and the volume sliders.
 // All of it is each player's own view; the browser remembers the choices.
-import { getVolume, setVolume, isMuted, setMuted, shoutSound, chipSound, throwSound } from './fx.js?v=20261124c';
+import { getVolume, setVolume, isMuted, setMuted, shoutSound, chipSound, throwSound } from './fx.js?v=20261124d';
 
 const SIZE_KEY = 'bj-cardz', MIN = 60, MAX = 160;
 let size = 100, onSize = null, useCss = false, bound = false;
@@ -86,11 +86,25 @@ export function initTopTools({ css = false, onChange = null } = {}) {
 
 // The player's own net result of the session, the same number as their line in the ledger. null hides it.
 // What the player has put in on the hand in play (the ledger only moves once it is settled). 0 or null hides it.
-let risk = 0, lastProfit = null, lastPractice = null;
-export function setRisk(n) {
+let risk = 0, riskBase = 0, lastProfit = null, lastPractice = null;
+// Baccarat and roulette: [at risk, balance at the start of the round] for setRisk. A player risks their own
+// bets; the bank risks every bet on the table. shown: the chips the page shows (before this result is paid).
+export function bankRisk(st, me, betting, settling, shown) {
+  if (!me || !(betting || settling)) return [0];
+  const sum = (b) => Object.values(b || {}).reduce((a, x) => a + (Number(x) || 0), 0);
+  const isBank = st.bankId === me.id;
+  let mine = 0, vs = 0;
+  if (betting) { mine = sum(st.bets?.[me.id]); if (isBank) for (const [id, b] of Object.entries(st.bets || {})) if (id !== me.id) vs += sum(b); }
+  else { const pay = st.pays?.[me.id]; mine = pay && !pay.bank ? Number(pay.staked) || 0 : 0; if (isBank) for (const [id, x] of Object.entries(st.pays || {})) if (id !== me.id && x && !x.bank) vs += Number(x.staked) || 0; }
+  return [mine + vs, shown + mine];
+}
+// n: what this hand can cost the person (their own bets, or for a dealer or bank every bet against them).
+// base: their balance when the hand started, so the bar shows the share of it in play.
+export function setRisk(n, base) {
   const v = Number.isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : 0;
-  if (v === risk) return;
-  risk = v;
+  const b = v && Number.isFinite(base) && base > 0 ? Math.round(base * 100) / 100 : 0;
+  if (v === risk && b === riskBase) return;
+  risk = v; riskBase = b;
   setProfit(lastProfit);
 }
 // Session profit shows on the Ledger button (ledgerTitle) and in the ledger. The top bar shows "At risk" while a hand is in play.
@@ -100,7 +114,8 @@ export function setProfit(n) {
   const el = document.getElementById('tt-profit');
   if (!el) return;
   if (!risk) { el.hidden = true; return; }
-  const html = `<span class="tt-rl">At risk</span> <b>${risk.toLocaleString()}</b>`;
+  const pct = riskBase ? Math.round((risk / riskBase) * 100) : null;
+  const html = `<span class="tt-rl">At risk</span> <b>${risk.toLocaleString()}</b>${pct !== null ? ` <span class="tt-rp">(${pct}%<span class="tt-rof"> of ${riskBase.toLocaleString()}</span>)</span>` : ''}`;
   if (el.dataset.v !== html) { el.dataset.v = html; el.innerHTML = html; el.className = 'pill tt-profit tt-risk-only'; }
   el.hidden = false;
 }

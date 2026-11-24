@@ -1,15 +1,15 @@
 // The baccarat page: a punto banco table for up to 9 in the small meeting room. The host's browser runs
 // the table (js/baccarat.js); every other browser sends its bets there and is told only what it may see.
-import { startPresence } from './presence.js?v=20261124c';
-import { outerLink } from './shell.js?v=20261124c';
-import { BacTable, BAC_SEATS, BAC_SPOTS, BAC_KEYS, verifyShoe, cardText } from './baccarat.js?v=20261124c';
-import { webglOK, initRoom } from './room3d.js?v=20261124c';
-import { statsHTML } from './pstats.js?v=20261124c';
-import { topToolsHTML, initTopTools, setProfit, setPractice, setRisk, cardScale, ledgerTitle } from './toptools.js?v=20261124c';
-import { autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML, breachCover } from './common.js?v=20261124c';
-import { KeyGuard, mixKeys, newNonce } from './cardkeys.js?v=20261124c';
+import { startPresence } from './presence.js?v=20261124d';
+import { outerLink } from './shell.js?v=20261124d';
+import { BacTable, BAC_SEATS, BAC_SPOTS, BAC_KEYS, verifyShoe, cardText } from './baccarat.js?v=20261124d';
+import { webglOK, initRoom } from './room3d.js?v=20261124d';
+import { statsHTML } from './pstats.js?v=20261124d';
+import { topToolsHTML, initTopTools, setProfit, setPractice, setRisk, bankRisk, cardScale, ledgerTitle } from './toptools.js?v=20261124d';
+import { autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML, breachCover } from './common.js?v=20261124d';
+import { KeyGuard, mixKeys, newNonce } from './cardkeys.js?v=20261124d';
 
-import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261124c';
+import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261124d';
 const PREFIX = 'bjt-bc-';
 // A settings change by vote (js/vote.js): any player at the table may ask, every other player at the table who is online has to say yes.
 const VOTE = {
@@ -583,7 +583,7 @@ function render() {
   // Session profit on the top bar: the player's own line of the ledger, held back like the chips while the result is still coming out.
   setProfit(me ? (st.frozen && me.base ? Math.round((me.base.chips - me.base.totalIn) * 100) / 100 : Math.round((me.net - (me.chips - shownChips(st, me, sg?.final))) * 100) / 100) : null);
   setPractice(me && st.frozen && me.base ? (me.chips - me.totalIn) - (me.base.chips - me.base.totalIn) : null);
-  setRisk(st.phase === 'peel' ? Object.values(st.bets?.[S.myId] || {}).reduce((a, x) => a + (Number(x) || 0), 0) : st.phase === 'done' && !sg?.final ? Number(st.pays?.[S.myId]?.staked) || 0 : 0); // what is on this round until its result shows
+  setRisk(...bankRisk(st, me, st.phase === 'peel', st.phase === 'done' && !sg?.final, me ? shownChips(st, me, sg?.final) : 0)); // what is on this round until its result shows
   if (S.peelRound !== st.round) { S.peelRound = st.round; S.peelF = {}; }
   const pl = st.peel;
   const hand = st.hand;

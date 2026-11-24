@@ -1,18 +1,18 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { startPresence } from './presence.js?v=20261124c';
-import { outerLink } from './shell.js?v=20261124c';
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe, destName, stepOf } from './game.js?v=20261124c';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261124c';
-import { bestMove, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261124c';
-import { tickSound, winSound } from './fx.js?v=20261124c';
-import * as HX from './history.js?v=20261124c';
-import { webglOK, initRoom, COLLEAGUES } from './room3d.js?v=20261124c';
-import { COPY_BTN, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261124c';
-import { topToolsHTML, initTopTools, setProfit, setPractice, setRisk, cardScale, profitLineHTML, ledgerTitle } from './toptools.js?v=20261124c';
-import { statsHTML } from './pstats.js?v=20261124c';
-import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261124c';
+import { startPresence } from './presence.js?v=20261124d';
+import { outerLink } from './shell.js?v=20261124d';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe, destName, stepOf } from './game.js?v=20261124d';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261124d';
+import { bestMove, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261124d';
+import { tickSound, winSound } from './fx.js?v=20261124d';
+import * as HX from './history.js?v=20261124d';
+import { webglOK, initRoom, COLLEAGUES } from './room3d.js?v=20261124d';
+import { COPY_BTN, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261124d';
+import { topToolsHTML, initTopTools, setProfit, setPractice, setRisk, cardScale, profitLineHTML, ledgerTitle } from './toptools.js?v=20261124d';
+import { statsHTML } from './pstats.js?v=20261124d';
+import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261124d';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -1736,11 +1736,25 @@ function renderGuestPlayers(st) {
     <span class="hint">${money(p.chips)} chips · ${p.seat === null ? 'not seated' : 'seat ' + (p.seat + 1)} · ${p.connected ? 'online' : 'away'}</span></div></div>`).join('');
 }
 
+// At risk on the top bar while a hand is in play: a player's own stakes (main, sides, doubles, splits,
+// insurance), and for the dealer every stake on the table against them. The base is the balance when the
+// hand started: stakes leave the player's chips at the deal, so chips + stakes; the dealer's chips do not
+// move until the settle.
+function riskOf(st) {
+  const live = ['insurance', 'playing', 'dealer'].includes(st.phase);
+  const me = st.players.find((p) => p.id === S.myId);
+  if (!live || !me) return setRisk(0);
+  const own = (me.seats || []).reduce((a, i) => a + (st.seats[i]?.staked || 0), 0);
+  const dealing = st.banker?.id === S.myId;
+  const vs = dealing ? st.seats.reduce((a, x, i) => a + (x && !(me.seats || []).includes(i) ? x.staked || 0 : 0), 0) : 0;
+  setRisk(own + vs, me.chips + own);
+}
+
 function renderLedger(st) {
   const box = $('#ledger');
   if (!box || !st.ledger) return;
   const net = (r) => r.chips - r.totalIn - (r.houseNet || 0); // hands against the house are left out
-  { const mine = st.ledger.find((r) => r.id === S.myId); setProfit(mine ? net(mine) : null); setPractice(mine && (st.frozen || mine.houseNet) ? mine.houseNet || 0 : null); setRisk(['insurance', 'playing', 'dealer'].includes(st.phase) ? (st.players.find((p) => p.id === S.myId)?.seats || []).reduce((a, i) => a + (st.seats[i]?.staked || 0), 0) : 0); if (mine && S.role !== 'host') carryDone('blackjack', S.code); }
+  { const mine = st.ledger.find((r) => r.id === S.myId); setProfit(mine ? net(mine) : null); setPractice(mine && (st.frozen || mine.houseNet) ? mine.houseNet || 0 : null); riskOf(st); if (mine && S.role !== 'host') carryDone('blackjack', S.code); }
   officeSave(S.code, 'blackjack', officeRows(st));
   const rows = st.ledger.slice().sort((a, b) => net(b) - net(a));
   const sumIn = rows.reduce((a, r) => a + r.totalIn, 0);
@@ -1892,7 +1906,7 @@ function render(note) {
   animateChanges(prev, st);
   // Freed from a seat for not betting in the round that was just dealt (game.js deal).
   if (st.unseated && st.unseated.round !== S.unseatSeen) { S.unseatSeen = st.unseated.round; if (st.unseated.ids?.includes(S.myId) && S.prevView) toast(st.unseated.dealer ? 'The dealer unseated you. Sit again any time.' : 'You were unseated for not betting. Sit again any time.'); }
-  S.prevView = { phase: st.phase, round: st.round, ins: Object.fromEntries(st.seats.filter(Boolean).map((s) => [s.playerId, s.insurance || 0])), bets: Object.fromEntries(st.seats.filter(Boolean).map((s) => [s.playerId, betTotal(s.bet)])) };
+  S.prevView = { phase: st.phase, round: st.round, ins: Object.fromEntries(st.seats.map((s, i) => s && [i + ':' + s.playerId, s.insurance || 0]).filter(Boolean)), bets: Object.fromEntries(st.seats.map((s, i) => s && [i + ':' + s.playerId, betTotal(s.bet)]).filter(Boolean)) }; // per seat: one person may hold several
 }
 
 // Pop-up vote when someone asks to move to the dealer seat.
@@ -1966,10 +1980,10 @@ function animateChanges(prev, st) {
     if (!s) return;
     const spot = $(`#spot-${i}`);
     // Insurance chips: onto the table when taken, to the dealer when the dealer has no blackjack.
-    const insBefore = prev.ins?.[s.playerId] || 0;
+    const insBefore = prev.ins?.[i + ':' + s.playerId] || 0;
     if (s.insurance > insBefore) flyChip(s.playerId === S.myId ? ($('#float-balance') || $(`#seat-${i} .who`)) : $(`#seat-${i} .who`), $(`#seat-${i} .ins-tag`) || spot, s.insurance);
     if (prev.phase === 'insurance' && st.phase === 'playing' && s.insurance > 0) flyChip($(`#seat-${i} .ins-tag`) || spot, dealer, s.insurance, 500);
-    const before = prev.bets[s.playerId] || 0;
+    const before = prev.bets?.[i + ':' + s.playerId] || 0;
     const now = betTotal(s.bet);
     // My own chips already flew when I clicked them.
     if (s.playerId !== S.myId && now > before && (st.phase === 'betting' || st.phase === 'settled') && prev.round === st.round) {

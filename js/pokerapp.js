@@ -1,18 +1,18 @@
 // The poker page: a Texas Hold'em table for up to 9 in the big meeting room. The host's browser runs
 // the table (js/poker.js); every other browser sends its moves there and is told only what it may see.
-import { startPresence } from './presence.js?v=20261124c';
-import { outerLink } from './shell.js?v=20261124c';
-import { PokerTable, POKER_SEATS, pokerDeck, cardText, mpClientMoves, mpMine, mpCheck, bestHand, bestOmaha } from './poker.js?v=20261124c';
-import { plainDeck, shufflePass, lockPass, checkDeck, keyFor } from './mental.js?v=20261124c';
-import { sha256 } from './game.js?v=20261124c';
-import { botMove, isBot, BOT_NAMES } from './pokerbot.js?v=20261124c';
-import { chipSound, cardSound, hitSound, standSound, potSound, tickSound, turnSound, punchSound } from './fx.js?v=20261124c';
-import { webglOK, initRoom } from './room3d.js?v=20261124c';
-import { statsHTML as ledgerStatsHTML } from './pstats.js?v=20261124c';
-import { topToolsHTML, initTopTools, setProfit, setRisk, cardScale, profitLineHTML, ledgerTitle } from './toptools.js?v=20261124c';
-import { COPY_BTN, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML } from './common.js?v=20261124c';
+import { startPresence } from './presence.js?v=20261124d';
+import { outerLink } from './shell.js?v=20261124d';
+import { PokerTable, POKER_SEATS, pokerDeck, cardText, mpClientMoves, mpMine, mpCheck, bestHand, bestOmaha } from './poker.js?v=20261124d';
+import { plainDeck, shufflePass, lockPass, checkDeck, keyFor } from './mental.js?v=20261124d';
+import { sha256 } from './game.js?v=20261124d';
+import { botMove, isBot, BOT_NAMES } from './pokerbot.js?v=20261124d';
+import { chipSound, cardSound, hitSound, standSound, potSound, tickSound, turnSound, punchSound } from './fx.js?v=20261124d';
+import { webglOK, initRoom } from './room3d.js?v=20261124d';
+import { statsHTML as ledgerStatsHTML } from './pstats.js?v=20261124d';
+import { topToolsHTML, initTopTools, setProfit, setRisk, cardScale, profitLineHTML, ledgerTitle } from './toptools.js?v=20261124d';
+import { COPY_BTN, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML } from './common.js?v=20261124d';
 
-import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261124c';
+import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261124d';
 const PREFIX = 'bjt-pk-';
 // A settings change by vote (js/vote.js): any player at the table may ask, every other player at the table who is online has to say yes.
 const VOTE = {
@@ -715,7 +715,7 @@ function statsHTML(t) {
 // Per seat, counted clockwise from your own: dx, dy = the plate (dy from: n near edge, f far edge, b board bottom),
 // bx, by = the bet, side = which end of the group the bubble lines up with. All in screen pixels of the design size.
 const RING = [
-  { dx: 0, from: 'n', dy: 0, bx: 175, bfrom: 'n', by: -26, side: '' },
+  { dx: 0, from: 'n', dy: 0, bx: 0, bfrom: 'n', by: -50, side: '' }, // your bet straight in front of your plate, like everyone else's
   { dx: -450, from: 'n', dy: 0, bx: -255, bfrom: 'n', by: -26, side: 'bl' },
   { dx: -222, from: 'b', dy: -78, bx: -45, bfrom: 'b', by: -86, side: 'bl', out: 1 },
   { dx: -359, from: 'f', dy: -9, bx: -370, bfrom: 'c', by: 12, side: 'bl' },
@@ -840,7 +840,7 @@ function render() {
   }
   playSounds(st);
   setProfit(st.ledger?.find((r) => r.id === S.myId)?.net ?? null);
-  { const x = st.seats?.find((y) => y && y.id === S.myId); setRisk(x && !['waiting', 'done'].includes(st.phase) ? x.total || 0 : 0); } // chips put in the pot this hand
+  { const x = st.seats?.find((y) => y && y.id === S.myId); setRisk(x && !['waiting', 'done'].includes(st.phase) ? x.total || 0 : 0, x ? (x.stack || 0) + (x.total || 0) : 0); } // chips put in the pot this hand
   officeSave(S.code, GAME, officeRows(st)); if (S.role === 'guest' && (st.ledger?.some((r) => r.id === S.myId))) carryDone(GAME, S.code);
   if (st.punch && S.punched !== st.punch.at) { S.punched = st.punch.at; if (st.punch.left > 400) showPunch(st); }
   const { mySeat, at, rel } = seatLayout(st);
@@ -882,7 +882,7 @@ function render() {
     : boards.map((b, r) => `<div class="pk-brow">${label(r)}${cardAt(b, r).join('')}${r === 0 ? rabbit : dbl && r === 1 ? rabbit2 : ''}</div>`).join('');
   seen.n = boards[0].length; seen.rows = boards.length;
   h += `<div class="pk-mid${many ? ' many n' + allBoards.length : ''}" style="--cols:${allBoards.length > 6 ? 3 : allBoards.length > 3 ? 2 : 1};--rcw:${[0, 59, 28, 18, 28, 18, 18, 15, 15, 15, 12][Math.min(10, allBoards.length)] || 12}">
-    <div class="pk-board pk-stand"><div class="pk-pot">${st.bomb && live && !ring ? '<span class="pk-bomb">💣 Bomb pot</span>' : ''}${(st.plo || dbl) && st.phase !== 'waiting' && !ring ? `<span class="pk-variant">${st.plo ? 'PLO' : "Hold'em"}${dbl ? ' · 2 boards' : ''}</span>` : ''}<b class="pk-potnum"><i>POT</i>${amt(potNow)}</b>${potLine && !ring ? `<small>${potLine}</small>` : ''}</div>${rows}</div>
+    <div class="pk-board pk-stand"><div class="pk-pot">${st.bomb && live && !ring ? '<span class="pk-bomb">💣 Bomb pot</span>' : ''}${(st.plo || dbl) && st.phase !== 'waiting' && !ring ? `<span class="pk-variant">${st.plo ? 'PLO' : "Hold'em"}${dbl ? ' · 2 boards' : ''}</span>` : ''}<b class="pk-potnum"><i>POT</i>${amt(live ? st.pot : potNow)}${live && potNow > st.pot ? `<em class="pk-street" title="Bets on this street. They go into the pot when the betting closes.">+${amt(potNow - st.pot)}</em>` : ''}</b>${potLine && !ring ? `<small>${potLine}</small>` : ''}</div>${rows}</div>
     <div class="pk-spot pot" id="spot-99"></div>
   </div>`;
   const people = [], chips = [], stools = [];
@@ -899,7 +899,7 @@ function render() {
     // The far seats keep their place along the table and only move towards you, so they do not bunch up in the middle.
     const wide = S.room && top && !phone();
     let A = wide ? { x: 50 + (P.x - 50) * (Math.abs(P.x - 50) > 30 ? 0.84 : 0.95), y: 50 + (P.y - 50) * 0.46 } : toward(P, fa);
-    let B = wide ? { x: 50 + (P.x - 50) * 0.9, y: 50 + (P.y - 50) * fb } : mineSpot && S.room ? { x: P.x + (phone() ? 16 : 9), y: 50 + (P.y - 50) * 0.5 } : toward(P, fb);
+    let B = wide ? { x: 50 + (P.x - 50) * 0.9, y: 50 + (P.y - 50) * fb } : mineSpot && S.room ? { x: P.x, y: 50 + (P.y - 50) * 0.5 } : toward(P, fb); // your bet straight in front of you, like everyone else's
     const R = plan ? plan.seats[rel(i)] : null;
     if (R) { A = R.a; B = R.b; }
     // Near things look larger from your chair, so they are drawn a little smaller: every name is about the same size on screen.
@@ -1056,7 +1056,10 @@ function drawHud(st, mySeat, showing) {
     if (o.canRaise && (S.raiseFor !== key || S.raiseTo === null)) { S.raiseFor = key; S.raiseTo = o.minTo; }
     const to = o.canRaise ? Math.max(o.minTo, Math.min(o.maxTo, S.raiseTo)) : 0;
     const frac = (f) => Math.max(o.minTo, Math.min(o.maxTo, Math.round(st.currentBet + f * (o.pot + o.toCall))));
-    h += `<div class="pk-acts">
+    // Your own time bar, above your buttons: full and green at first, it empties and ends red.
+    if (st.turnLeft !== null) { const left = Math.max(0.1, (st.turnLeft - (Date.now() - S.at)) / 1000); h += `<div class="pk-mytime"><i style="animation-duration:${left}s"></i></div>`; }
+    if (S.foldAsk === st.handNo + '|' + st.phase && o.canCheck) h += `<div class="pk-acts pk-foldask"><span>Check is free. Fold anyway?</span><button class="pk-act check" data-act="check">Check</button><button class="pk-act fold" data-act="fold" data-sure="1">Fold</button></div>`;
+    else h += `<div class="pk-acts">
       <button class="pk-act fold" data-act="fold">Fold</button>
       ${o.canCheck ? '<button class="pk-act check" data-act="check">Check</button>' : `<button class="pk-act call" data-act="call">Call ${amt(o.toCall)}${o.toCall >= seat.stack ? ' (all in)' : ''}</button>`}
       ${o.canRaise ? `<button class="pk-act raise" data-act="raise" id="raise-btn" title="Tap to raise. Hold and drag up to pick the amount."><i class="pk-dragtip">▲ drag</i><span id="raise-txt">${S.raiseOpen !== key ? (o.isBet ? 'Bet' : 'Raise') : (to >= o.maxTo && o.allIn !== false ? 'All in ' : o.isBet ? 'Bet ' : 'Raise to ') + amt(to)}</span></button>` : ''}
@@ -1253,8 +1256,13 @@ document.addEventListener('click', (e) => {
     }
     case 'move': send({ t: 'move', seat: Number(el.dataset.seat) }); break;
     case 'sit-go': send({ t: 'sit', seat: Number(el.dataset.seat), buyIn: Number($('#buyin').value) }); $('#modal').close(); break;
-    case 'fold': send({ t: 'act', a: 'fold' }); break;
-    case 'check': send({ t: 'act', a: 'check' }); break;
+    case 'fold': {
+      // Folding when Check is free is almost always a slip: ask first, with Check as the main choice.
+      const o = S.st?.options;
+      if (o?.canCheck && el.dataset.sure !== '1') { S.foldAsk = S.st.handNo + '|' + S.st.phase; render(); break; }
+      S.foldAsk = null; send({ t: 'act', a: 'fold' }); break;
+    }
+    case 'check': S.foldAsk = null; send({ t: 'act', a: 'check' }); break;
     case 'call': send({ t: 'act', a: 'call' }); break;
     case 'bot-add': if (t) { try {
         const free = t.seats.findIndex((x) => !x), used = new Set(Object.values(t.players).map((p) => p.name));
