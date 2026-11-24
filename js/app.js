@@ -1,18 +1,18 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { startPresence } from './presence.js?v=20261124d';
-import { outerLink } from './shell.js?v=20261124d';
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe, destName, stepOf } from './game.js?v=20261124d';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261124d';
-import { bestMove, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261124d';
-import { tickSound, winSound } from './fx.js?v=20261124d';
-import * as HX from './history.js?v=20261124d';
-import { webglOK, initRoom, COLLEAGUES } from './room3d.js?v=20261124d';
-import { COPY_BTN, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261124d';
-import { topToolsHTML, initTopTools, setProfit, setPractice, setRisk, cardScale, profitLineHTML, ledgerTitle } from './toptools.js?v=20261124d';
-import { statsHTML } from './pstats.js?v=20261124d';
-import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261124d';
+import { startPresence } from './presence.js?v=20261124e';
+import { outerLink } from './shell.js?v=20261124e';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe, destName, stepOf, RULE_TEXT } from './game.js?v=20261124e';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261124e';
+import { bestMove, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261124e';
+import { tickSound, winSound } from './fx.js?v=20261124e';
+import * as HX from './history.js?v=20261124e';
+import { webglOK, initRoom, COLLEAGUES } from './room3d.js?v=20261124e';
+import { COPY_BTN, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261124e';
+import { topToolsHTML, initTopTools, setProfit, setPractice, setRisk, cardScale, profitLineHTML, ledgerTitle } from './toptools.js?v=20261124e';
+import { statsHTML } from './pstats.js?v=20261124e';
+import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261124e';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -734,6 +734,7 @@ function runAction(id, msg, onError) {
       case 'leave-later': t.leaveLater(id, msg.on !== false); break;
       case 'dealer-save': t.dealerSave(id, msg.cfg); break;
       case 'dealer-shuf': t.setShuffle8(id, !!msg.on); break;
+      case 'dealer-rules': t.setRules(id, msg.rules || {}); break;
       case 'dealer-shuffle': t.dealerShuffle(id); break;
       case 'shuffle': t.playerShuffle(id); break;
       case 'seed': t.setClientSeed(id, msg.seed); return; // nothing on the table changes, so no update is sent
@@ -1183,7 +1184,7 @@ function wireGuestConn(conn) {
 
 // Send a move: players send it to the host, the host runs it directly.
 function send(msg) {
-  S.live?.actFor(msg); // my figure makes the move on everybody's screen (js/presence.js)
+  S.live?.actFor(msg, ['action', 'insurance'].includes(msg.t) && !Number.isInteger(msg.seat) ? S.state?.turn?.seat : undefined); // my figure makes the move on everybody's screen (js/presence.js): the one in the seat that moved
   if (S.role === 'host' && msg.t === 'chat') { relayChat(S.myId, msg); return; }
   if (S.role === 'host' && msg.t === 'voice') { voiceSet(S.myId, S.peer?.id, !!msg.on, !!msg.mic); return; }
   if (S.role === 'host' && msg.t === 'hurry') { relayHurry(S.myId, msg.say); return; }
@@ -1387,7 +1388,7 @@ function buildLayout() {
       <select class="game-switch" id="game-switch" title="Switch game" aria-label="Game"><option value="blackjack" selected>🃏 Blackjack</option><option value="poker">♠️ Poker</option><option value="baccarat">🎴 Baccarat</option><option value="roulette">🎡 Roulette</option></select>
       <span id="conn-pill" class="pill">Connecting</span>
       <span class="tb-slot" id="slot-info"></span>
-      <span class="tt-box">${topToolsHTML()}<button class="pill afk-pill" data-act="afk-screen" title="A black screen with plain text while you are away. The table keeps running.">🌙<span class="fp-t"> AFK</span></button></span>
+      <span class="tt-box">${topToolsHTML()}<button class="pill afk-pill" data-act="afk-screen" title="A black screen with plain text while you are away. The table keeps running. Double click it to come back.">🌙<span class="fp-t"> AFK (Office)</span></button></span>
       <span class="spacer"></span>
       <span class="tb-slot" id="slot-ledger"></span>
       <button id="fair-pill" class="pill fair-pill" data-act="fair" title="How the shuffle is kept fair">🔐<span class="fp-t"> Provably fair</span></button>
@@ -1853,6 +1854,9 @@ function render(note) {
   { const fp = $('#fair-pill'), bad = !!Object.keys(S.fair?.moved || {}).length || Object.values(S.fair?.checks || {}).some((k) => !k.ok); if (fp) { fp.classList.toggle('bad', bad); fp.innerHTML = bad ? '⚠️<span class="fp-t"> Shuffle check failed</span>' : '🔐<span class="fp-t"> Provably fair</span>'; } }
   const prev = S.prevView;
   if (prev && st.round !== prev.round) { S.undo = []; S.mainChips = []; S.sideChips = {}; }
+  // A 5 Card Charlie round is said out loud as its betting opens, so everyone knows before the cards come.
+  { const note = (st.rulesNote || []).join(', '); if (note && note !== S.rulesSeen) banner('Rules changed', note, 'ok', 5000); S.rulesSeen = note; }
+  if (st.charlieRound && st.phase === 'betting' && (!prev || prev.phase !== 'betting')) banner('5 Card Charlie round', 'Five cards without busting win 1 to 1 this round. A dealer blackjack still wins.', 'ok', 4000);
   // Once the cards are dealt, the picked chip is put down, so the next round starts with none picked.
   if (prev && prev.phase !== st.phase && !(st.phase === 'betting' || st.phase === 'settled')) { S.chip = null; S.bigOn = false; } // the Big bet switch is for one hand only
   // The dealer sees the table from the dealer's side: dealer at the bottom, players across the top.
@@ -2125,6 +2129,11 @@ function runDealQueue() {
 // The dealer is not told to place bets: during betting the felt line gives way to the yellow bar under the dealer settings.
 function dealerBar(st) { return st.phase === 'betting' && !st.noDealer && !st.bankShort && st.banker?.id === S.myId; }
 function statusText(st) {
+  const s = statusLine(st);
+  const pre = (st.rulesNote?.length && st.phase === 'betting' ? `New rules: ${st.rulesNote.join(', ')}. ` : '') + (st.charlieRound && ['betting', 'insurance', 'playing', 'dealer'].includes(st.phase) ? '5 Card Charlie round. ' : '');
+  return pre + s;
+}
+function statusLine(st) {
   const turnSeat = st.turn && st.seats[st.turn.seat];
   if (S.dealing && S.dealMany && (st.phase === 'insurance' || st.phase === 'playing')) return 'Dealing the cards';
   switch (st.phase) {
@@ -2429,7 +2438,7 @@ function dealMeInHTML(st) {
 const ARC_Y = [262, 281, 289]; // lowest point of the two lines of lettering and of the rule under them, in felt pixels from the top
 function arcTextHTML(st, box) {
   const s = st.settings;
-  const bj = s.blackjackPays === 1.5 ? '3 TO 2' : s.blackjackPays + ' TO 1';
+  const bj = s.blackjackPays === 1.5 ? '3 TO 2' : s.blackjackPays === 1.2 ? '6 TO 5' : s.blackjackPays + ' TO 1';
   const rules = `DEALER MUST DRAW TO 16 AND ${s.dealerHitsSoft17 ? 'HIT SOFT 17' : 'STAND ON ALL 17s'}`;
   const ins = `INSURANCE PAYS 2 TO 1 · ${isStrip(s) ? 'LAS VEGAS STRIP RULES' : 'HOUSE RULES'}`;
   const label = `Blackjack pays ${bj}. ${rules}. Insurance pays 2 to 1.`;
@@ -3118,10 +3127,7 @@ function renderSettings(st) {
       ${dealer ? '' : `<label>Min bet<input id="set-min" type="number" min="1" value="${s.minBet}" ${dis} /></label>`}
     </div>`, true)}
     ${fold('set-rules', '📏 Rules', `<div class="settings-grid">
-      <label class="check full"><input id="set-h17" type="checkbox" ${s.dealerHitsSoft17 ? 'checked' : ''} ${dis} /> Dealer hits soft 17</label>
-      <label class="check full"><input id="set-sur" type="checkbox" ${s.allowSurrender ? 'checked' : ''} ${dis} /> Allow surrender (get half your bet back)</label>
-      <label class="check full"><input id="set-charlie" type="checkbox" ${s.charlie !== false ? 'checked' : ''} ${dis} /> 5 Card Charlie (five cards without busting win)</label>
-      <button class="btn full" data-act="h-strip" ${dis}>Reset to Las Vegas Strip rules</button>
+      ${!dealer && S.role === 'host' ? `<div class="dealer-panel host-rules">${rulesSecHTML(st, rulesCur(s), 'rk')}</div>` : `<p class="hint full">${dealer ? 'The dealer sets the rules in the dealer panel.' : 'The host sets the rules while the house deals.'} ${esc(rulesLine(s))}.</p>`}
     </div>`, true)}
     ${fold('set-sides', '🎲 Side bets offered', `<div class="settings-grid">
       <label class="check full sb-all"><input type="checkbox" id="sb-all" ${SIDE_KEYS.every((k) => sideKeys(st).includes(k)) ? 'checked' : ''} ${dis} /> <b>All side bets</b></label>
@@ -3156,12 +3162,8 @@ const SETTING_NAMES = {
   shuffleMode: ['Reshuffle', (v) => (v === 'rounds' ? 'every few rounds' : 'by share of shoe used')],
   penetration: ['Reshuffle at', (v) => v + '% used'],
   startChips: ['Starting chips', money], minBet: ['Min bet', money], // the max bets are the dealer's alone, set in the dealer row
-  dealerHitsSoft17: ['Dealer', (v) => (v ? 'hits soft 17' : 'stands on all 17s')],
-  allowSurrender: ['Surrender', (v) => (v ? 'allowed' : 'not allowed')],
-  charlie: ['5 Card Charlie', (v) => (v ? 'on' : 'off')],
   autoDeal: ['Deal when all ready', (v) => (v ? 'on' : 'off')],
   betTimer: ['Betting time', (v) => (v ? v + 's' : 'off')], turnTimer: ['Time per move', (v) => (v ? v + 's' : 'off')],
-  blackjackPays: ['Blackjack pays', (v) => (v === 1.5 ? '3 to 2' : v + ' to 1')],
   sideBets: ['Side bets', (v) => (v.length ? v.map((k) => SIDE_BETS[k]?.name).join(', ') : 'none')],
 };
 // Which settings of a patch differ from the table's, as a list of setting names.
@@ -3276,14 +3278,14 @@ function fairHTML() {
 }
 
 function rulesHTML(st) {
-  return `<h2 style="margin-top:0">Side bets</h2><div class="paytable">
+  return `<h2>Side bets</h2><div class="paytable">
     <div class="hint">Payouts are "to 1": a 10 chip bet that pays 25 to 1 wins 250 and you get your 10 back. There is no rake or fee.</div>
     ${sideKeys(st).map((k) => {
       const sb = SIDE_BETS[k];
       return `<div><h4>${sb.icon || ''} ${sb.name}</h4><p>${esc(sb.about)}</p><table>${sb.table.map(([l, m]) => `<tr><td>${esc(l)}</td><td>${m} to 1</td></tr>`).join('')}</table></div>`;
     }).join('')}
     <div><h4>Insurance</h4><p>Offered when the dealer shows an ace. Costs half your main bet.</p><table><tr><td>Dealer has blackjack</td><td>2 to 1</td></tr></table></div>
-    <div><h4>Main game</h4><p>Blackjack pays 3 to 2. Double on any first two cards, also after a split. Split every pair, with no limit on the number of hands; split aces get one card each, and an ace that gets another ace can be split again. Surrender gives back half your bet when the host allows it.</p>${st.settings.charlie !== false ? '<p>5 Card Charlie: a hand that reaches five cards without busting wins at once, paid 1 to 1, and takes no more cards. A dealer blackjack found at the start still beats every hand.</p>' : ''}<p>Chips are whole. With an odd bet, a win or a refund is rounded down and insurance is rounded up. A blackjack on 25 pays 37, and insurance on 25 costs 13.</p></div>
+    <div><h4>Main game</h4><p>${esc(rulesLine(st.settings))}. Split aces get one card each. A hand that reaches 21 stands by itself. Insurance pays 2 to 1.</p>${st.settings.charlieEvery ? `<p>5 Card Charlie rounds are announced while bets are open: a hand that reaches five cards without busting wins at once, paid 1 to 1, and takes no more cards. A dealer blackjack found at the start still beats every hand.</p>` : ''}<p>Chips are whole. With an odd bet, a win or a refund is rounded down and insurance is rounded up. A blackjack on 25 pays 37, and insurance on 25 costs 13.</p></div>
   </div>`;
 }
 
@@ -3578,9 +3580,6 @@ function runAct(el) {
       if (c) { c.send({ t: 'kicked' }); setTimeout(() => c.close(), 300); delete S.conns[id]; }
       break;
     }
-    case 'h-strip':
-      proposeSettings({ decks: 6, dealerHitsSoft17: false, allowSurrender: true, blackjackPays: 1.5, shuffleMode: 'penetration', penetration: 75 });
-      break;
     case 'h-settings': {
       const v = (id) => $('#' + id).value;
       const decks = v('set-decks') === 'csm' ? 'csm' : Number(v('set-decks'));
@@ -3589,7 +3588,7 @@ function runAct(el) {
       proposeSettings({
         seats, decks, shuffleMode: 'penetration', penetration: Number(v('set-pen')),
         startChips: Number(v('set-start')), ...($('#set-min') ? { minBet: Number(v('set-min')) } : {}),
-        dealerHitsSoft17: $('#set-h17').checked, allowSurrender: $('#set-sur').checked, charlie: $('#set-charlie').checked, autoDeal: $('#set-auto').checked,
+        autoDeal: $('#set-auto').checked,
         betTimer: Number(v('set-bettimer')), turnTimer: Number(v('set-turntimer')),
         sideBets: [...document.querySelectorAll('[data-sidebet]')].filter((x) => x.checked).map((x) => x.dataset.sidebet),
       });
@@ -3640,7 +3639,7 @@ function playMove(a) {
 const KEY_HELP = [['H', 'Hit'], ['S', 'Stand'], ['D', 'Double'], ['P', 'Split'], ['U', 'Surrender'], ['Y / N', 'Take insurance, or say no'],
   ['R', 'Type your bet, then Enter'], ['B', 'Rebet: the same bet as last round'], ['Space / Enter', 'Deal me in'], ['L', 'Open or close the ledger'], ['?', 'Show this list'], ['Esc', 'Put the picked chip down'], ['W / A / S / D', 'Move freely through the office (the arrow keys work too). On your turn S and D play your hand'], ['Esc', 'After moving: back to your seat']];
 function keysHTML() {
-  return `<h2>Keyboard keys</h2><table class="keys-help">${KEY_HELP.map(([k, what]) => `<tr><td>${k.split(' / ').map((x) => `<kbd>${x}</kbd>`).join(' ')}</td><td>${what}</td></tr>`).join('')}</table>
+  return `<table class="keys-help">${KEY_HELP.map(([k, what]) => `<tr><td>${k.split(' / ').map((x) => `<kbd>${x}</kbd>`).join(' ')}</td><td>${what}</td></tr>`).join('')}</table>
     <p class="hint">Keys work when you are not typing in a box.</p>`;
 }
 document.addEventListener('keydown', (e) => {
@@ -3649,7 +3648,7 @@ document.addEventListener('keydown', (e) => {
   const st = S.state;
   if (!st) return;
   const k = e.key.toLowerCase();
-  if (e.key === '?') { const g = $('#sb-guide'); if (g) g.open = !g.open; return; }
+  if (e.key === '?') { const g = $('#sb-guide'); if (g) { g.open = !g.open; const k = g.querySelectorAll('.ig-fold')[1]; if (k && g.open) k.open = true; } return; }
   if (k === 'l') { const d = $('#ledger-dlg'); if (d?.open) d.close(); else openLedger(); return; }
   const map = { h: 'hit', s: 'stand', d: 'double', p: 'split', u: 'surrender' };
   // While the first cards are still being dealt there is nothing to decide yet.
@@ -3945,10 +3944,12 @@ addEventListener('resize', () => { applyZoom(); placeSeats(); placePanels(); });
 function renderGuide(st) {
   const body = $('#sb-guide-body');
   if (!body) return;
-  const key = sideKeys(st).join(',');
+  const key = sideKeys(st).join(',') + '|' + rulesLine(st.settings);
   if (body.dataset.key === key) return;
   body.dataset.key = key;
-  body.innerHTML = rulesHTML(st) + (matchMedia('(pointer: fine)').matches ? keysHTML() : '');
+  // Two folds, both closed at first: how to play (payouts and rules) and the keyboard keys. A redraw keeps them as they were.
+  const was = [...body.querySelectorAll('.ig-fold')].map((d) => d.open);
+  body.innerHTML = `<details class="ig-fold"${was[0] ? ' open' : ''}><summary>How to play</summary>${rulesHTML(st)}</details>` + (matchMedia('(pointer: fine)').matches ? `<details class="ig-fold"${was[1] ? ' open' : ''}><summary>Keyboard shortcuts</summary>${keysHTML()}</details>` : '');
 }
 
 
@@ -4080,7 +4081,7 @@ document.addEventListener('change', (e) => {
 function dealerOpen() { return S.dealerOpen ?? (safeGet('bj-dpanel') ? safeGet('bj-dpanel') === '1' : innerWidth >= 700); }
 function dealerCur(st) {
   const s = st.settings, b = s.bigBet, c = st.lossCap || { on: true, amount: 30 * s.maxBet, lost: 0 };
-  return { min: s.minBet, max: s.maxBet, side: s.maxSideBet, shuffle8: s.shuffle8 !== false, bigOn: !!b, bigLimit: b?.limit ?? s.maxBet * 4, bigPer: b?.per ?? 2, bigHands: b?.hands ?? 10, capOn: !!c.on, capAmt: c.amount };
+  return { min: s.minBet, max: s.maxBet, side: s.maxSideBet, shuffle8: s.shuffle8 !== false, ...rulesCur(s), bigOn: !!b, bigLimit: b?.limit ?? s.maxBet * 4, bigPer: b?.per ?? 2, bigHands: b?.hands ?? 10, capOn: !!c.on, capAmt: c.amount };
 }
 function dealerVals(st) { return { ...dealerCur(st), ...(S.dealerDraft || {}) }; }
 function dealerDirty(st) { const cur = dealerCur(st), d = S.dealerDraft || {}; return Object.keys(d).some((k) => String(d[k]) !== String(cur[k])); }
@@ -4094,14 +4095,69 @@ function dealerPanelHTML(st) {
       <section class="dp-sec"><h4>Normal bets</h4>${num('min', 'Min bet', 1)}${num('max', 'Max bet', 1)}${num('side', 'Max side bet')}${tick('shuffle8', 'Shuffle every 8 rounds')}</section>
       <section class="dp-sec"><h4>Big bets sometimes</h4>${tick('bigOn', 'On')}${num('bigLimit', 'Up to', 1)}${num('bigPer', 'Times', 1)}${num('bigHands', 'Every (hands)', 1)}</section>
       <section class="dp-sec"><h4>Stop at loss</h4>${tick('capOn', 'On')}${num('capAmt', 'Loss', 1)}<span class="cap-lost">Lost ${money(st.lossCap?.lost || 0)}</span></section>
+      ${rulesSecHTML(st, v, 'dk')}
     </div>
     <div class="dp-foot"><button class="btn dp-save${dealerDirty(st) ? ' dirty' : ''}" data-act="dealer-save">Save</button>${st.settings.decks !== 'csm' ? '<button class="btn" data-act="d-shuffle">🔀 Shuffle now</button>' : ''}</div>` : ''}
   </div><button class="dp-bar" data-act="leave-dealer">Leave dealer seat</button>`;
 }
+// ---------- Rules of play and the dealer's edge ----------
+// The table's rules in one line, as the Info panel and the host's settings show them.
+function rulesLine(s) { const r = rulesOut(rulesCur(s)); return Object.keys(RULE_TEXT).map((k) => RULE_TEXT[k](r[k])).join('. '); }
+// The dealer's edge for the rules at this table, in % of each bet, for players who use basic strategy. An estimate:
+// 0.30% for the defaults (8 decks, stands on soft 17, 3 to 2, surrender, double any two and after a split, split and
+// resplit aces, no limit on splits) from 5.2 million simulated rounds on this table's own code, and published rule
+// effects (Wizard of Odds, rule variations) for each change. 5 Card Charlie on every round cost the dealer about
+// 1.2% in the same simulation.
+const EDGE_BASE = 0.30;
+const EDGE = {
+  blackjackPays: (v) => (v === 1.2 ? 1.39 : v === 1 ? 2.27 : 0),
+  dealerHitsSoft17: (v) => (v ? 0.22 : 0),
+  allowSurrender: (v) => (v ? 0 : 0.08),
+  splitAces: (v) => (v ? 0 : 0.18),
+  resplitAces: (v, r) => (v || !r.splitAces ? 0 : 0.08),
+  maxSplits: (v) => ({ 1: 0.1, 2: 0.04, 3: 0.01 })[v] || 0,
+  das: (v) => (v ? 0 : 0.14),
+  doubleOn: (v) => (v === '9-11' ? 0.09 : v === '10-11' ? 0.18 : 0),
+  charlieEvery: (v) => (v ? -1.2 / v : 0),
+};
+const deckEdge = (d) => ({ 1: -0.48, 2: -0.19, 6: -0.02 })[d] ?? (Number(d) > 8 ? 0.02 : 0);
+function rulesCur(s) { return { blackjackPays: s.blackjackPays, dealerHitsSoft17: !!s.dealerHitsSoft17, allowSurrender: !!s.allowSurrender, splitAces: s.splitAces !== false, resplitAces: s.resplitAces !== false, maxSplits: s.maxSplits || 0, das: s.das !== false, doubleOn: s.doubleOn || 'any', charlieOn: !!s.charlieEvery, charlieN: s.charlieEvery || 10 }; }
+// The rules as the table stores them, from the form's values (strings from inputs and selects).
+function rulesOut(v) {
+  const b = (x) => x === true || x === 'true';
+  return { blackjackPays: Number(v.blackjackPays), dealerHitsSoft17: b(v.dealerHitsSoft17), allowSurrender: b(v.allowSurrender), splitAces: b(v.splitAces), resplitAces: b(v.resplitAces), maxSplits: Math.round(Number(v.maxSplits)), das: b(v.das), doubleOn: v.doubleOn, charlieEvery: b(v.charlieOn) ? Math.max(1, Math.round(Number(v.charlieN)) || 10) : 0 };
+}
+const fmtEdge = (x) => `${x > 0.004 ? '+' : x < -0.004 ? '−' : '±'}${Math.abs(x).toFixed(2)}%`;
+const edgeTag = (x) => `<i class="dp-edge ${x > 0.004 ? 'up' : x < -0.004 ? 'down' : ''}">${fmtEdge(x)}</i>`;
+function edgeParts(r, decks) {
+  const parts = Object.fromEntries(Object.keys(EDGE).map((k) => [k, EDGE[k](r[k], r)]));
+  return { parts, total: EDGE_BASE + deckEdge(decks) + Object.values(parts).reduce((a, x) => a + x, 0) };
+}
+// One control per rule, each with what it does to the dealer's edge, and the total. attr: 'dk' in the dealer
+// panel (saved with its Save button), 'rk' in the host's settings while the house deals (applied at once).
+function rulesSecHTML(st, v, attr) {
+  const r = rulesOut(v), { parts, total } = edgeParts(r, st.settings.decks);
+  const sel = (k, label, opts) => `<label>${label}<span class="dp-ctl"><select data-${attr}="${k}">${opts.map(([val, l]) => `<option value="${val}" ${String(v[k]) === String(val) ? 'selected' : ''}>${l}</option>`).join('')}</select><span data-edge="${k}">${edgeTag(parts[k])}</span></span></label>`;
+  const tick = (k, label, ek = k) => `<label class="dp-tick"><input type="checkbox" data-${attr}="${k}" ${v[k] === true || v[k] === 'true' ? 'checked' : ''} /> ${label}<span data-edge="${ek}">${edgeTag(parts[ek])}</span></label>`;
+  return `<section class="dp-sec dp-rules"><h4>Rules <span class="dp-total" data-edge="total">Dealer edge ${edgeTag(total)}</span></h4>
+    ${sel('blackjackPays', 'Blackjack pays', [[1.5, '3 to 2'], [1.2, '6 to 5'], [1, '1 to 1']])}
+    ${sel('dealerHitsSoft17', 'Soft 17', [[false, 'Dealer stands'], [true, 'Dealer hits']])}
+    ${sel('doubleOn', 'Double on', [['any', 'Any two'], ['9-11', '9 to 11'], ['10-11', '10 to 11']])}
+    ${sel('maxSplits', 'Splits', [[0, 'No limit'], [1, '1'], [2, '2'], [3, '3']])}
+    ${tick('das', 'Double after split')}${tick('splitAces', 'Split aces')}${tick('resplitAces', 'Resplit aces')}${tick('allowSurrender', 'Surrender')}
+    <label class="dp-tick dp-charlie"><input type="checkbox" data-${attr}="charlieOn" ${v.charlieOn === true || v.charlieOn === 'true' ? 'checked' : ''} /> 5 Card Charlie, 1 round in<input type="number" inputmode="numeric" min="1" max="1000" step="1" data-${attr}="charlieN" value="${esc(String(v.charlieN))}" /><span data-edge="charlieEvery">${edgeTag(parts.charlieEvery)}</span></label>
+    <span class="dp-note">Estimates for players who use basic strategy. + is good for the dealer.</span>
+  </section>`;
+}
+// Live edge figures while the dealer changes the form, before Save.
+function paintEdges(box, v, decks) {
+  const { parts, total } = edgeParts(rulesOut(v), decks);
+  box.querySelectorAll('[data-edge]').forEach((el) => { const k = el.dataset.edge; el.innerHTML = k === 'total' ? `Dealer edge ${edgeTag(total)}` : edgeTag(parts[k] || 0); });
+}
 function dealerSaveNow(st) {
   if (!dealerDirty(st)) return;
   const v = dealerVals(st), n = (x) => Math.round(Number(x));
-  send({ t: 'dealer-save', cfg: { min: n(v.min), max: n(v.max), side: n(v.side), shuffle8: !!v.shuffle8, big: { on: !!v.bigOn, limit: n(v.bigLimit), per: n(v.bigPer), hands: n(v.bigHands) }, cap: { on: !!v.capOn, amount: n(v.capAmt) } } });
+  send({ t: 'dealer-save', cfg: { min: n(v.min), max: n(v.max), side: n(v.side), shuffle8: !!v.shuffle8, rules: rulesOut(v), big: { on: !!v.bigOn, limit: n(v.bigLimit), per: n(v.bigPer), hands: n(v.bigHands) }, cap: { on: !!v.capOn, amount: n(v.capAmt) } } });
   S.dealerDraft = null;
   document.activeElement?.blur?.();
   render();
@@ -4114,10 +4170,19 @@ for (const ev of ['input', 'change']) document.addEventListener(ev, (e) => {
     box.querySelector('[data-act=h-settings]')?.classList.toggle('dirty', dirty);
     return;
   }
+  const rk = e.target.dataset?.rk;
+  if (rk && S.state && e.type === 'change') {
+    // The host's rules while the house deals: applied at once.
+    const v = { ...rulesCur(S.state.settings), [rk]: e.target.type === 'checkbox' ? e.target.checked : e.target.value };
+    send({ t: 'dealer-rules', rules: rulesOut(v) });
+    return;
+  }
   const k = e.target.dataset?.dk;
   if (!k || !S.state) return;
   S.dealerDraft = { ...(S.dealerDraft || {}), [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value };
-  e.target.closest('.dealer-panel')?.querySelector('.dp-save')?.classList.toggle('dirty', dealerDirty(S.state));
+  const panel = e.target.closest('.dealer-panel');
+  panel?.querySelector('.dp-save')?.classList.toggle('dirty', dealerDirty(S.state));
+  if (panel) paintEdges(panel, dealerVals(S.state), S.state.settings.decks);
 });
 
 // ---------- AFK screen ----------
@@ -4136,8 +4201,10 @@ function afkScreen(on) {
   afk = { el, timer: 0, lock: null, key: '', changed: Date.now() };
   window.__afkScreen = true;
   try { navigator.wakeLock?.request('screen').then((l) => { if (afk) afk.lock = l; else l.release(); }).catch(() => {}); } catch { /* fine */ }
-  const off = (e) => { if (e.type === 'keydown' || e.target === el || el.contains(e.target)) { el.removeEventListener('click', off); removeEventListener('keydown', off); afkScreen(false); } };
-  setTimeout(() => { el.addEventListener('click', off); addEventListener('keydown', off); }, 400);
+  // Only a double click (or two taps close together) leaves, so a stray click or key keeps the screen up.
+  let lastTap = 0;
+  const off = (e) => { const now = Date.now(); if (now - lastTap > 450) { lastTap = now; return; } el.removeEventListener('click', off); afkScreen(false); };
+  setTimeout(() => el.addEventListener('click', off), 400);
   const draw = () => {
     const st = S.state;
     if (!st) { el.textContent = 'Waiting for the table…'; return; }

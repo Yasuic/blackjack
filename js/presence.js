@@ -8,7 +8,7 @@
 // How browsers find each other: the first one to open the office takes the office's meeting name ('bjo-' + code)
 // and passes every message on to all the others; everybody else links to it. When that browser leaves, the
 // next one to notice takes the name over, so the office never depends on any one table's host.
-import { peerOptions } from './common.js?v=20261124d';
+import { peerOptions } from './common.js?v=20261124e';
 
 const GAMES = ['blackjack', 'poker', 'baccarat', 'roulette'];
 const KINDS = ['tap', 'wave', 'push', 'fold', 'react'];
@@ -49,7 +49,7 @@ export function startPresence({ game, room, code, me, at, phone = false }) {
       heard.set(id, Date.now());
       R().livePose(id, { n: String(m.n || 'Player').slice(0, 22), l: { skin: num(m.l?.skin, 9) | 0, hair: num(m.l?.hair, 9) | 0, flag: typeof m.l?.flag === 'string' ? m.l.flag.slice(0, 8) : undefined },
         at: GAMES.includes(m.at) ? m.at : '', x: num(m.x, 60), z: num(m.z, 60), fx: num(m.fx, 1), fz: num(m.fz, 1), p: num(m.p, 1.6) });
-    } else if (m.t === 'g' && KINDS.includes(m.k)) R().gesture(id, m.k);
+    } else if (m.t === 'g' && KINDS.includes(m.k)) R().gesture(id, m.k, Number.isInteger(m.s) && m.s >= 0 && m.s < 100 ? m.s : undefined);
     else if (m.t === 'b') { heard.delete(id); R().liveGone(id); }
   };
   // The meeting browser passes each message on to everybody else and keeps the last place of each person,
@@ -145,8 +145,9 @@ export function startPresence({ game, room, code, me, at, phone = false }) {
 
   const api = {
     // A move of mine at the table: my own figure makes it here at once and everybody else's a moment later.
-    act(kind) { if (!KINDS.includes(kind) || window.__officeAway) return; R().gesture(myId(), kind); out({ t: 'g', i: myId(), k: kind }); },
-    actFor(m) { const k = actKind(m); if (k) api.act(k); },
+    // seat: the seat the move is for, when the player holds several: only the figure in that seat moves.
+    act(kind, seat) { if (!KINDS.includes(kind) || window.__officeAway) return; const s = Number.isInteger(seat) ? seat : undefined; R().gesture(myId(), kind, s); out({ t: 'g', i: myId(), k: kind, ...(s !== undefined ? { s } : {}) }); },
+    actFor(m, seat) { const k = actKind(m); if (k) api.act(k, seat ?? m.seat); },
     info: () => ({ trail: trail.join(','), hub, linked: hub ? conns.size : up?.open ? 1 : 0, people: [...heard.keys()] }),
     close() { dead = true; clearInterval(timer); clearInterval(watch); clearTimeout(again); removeEventListener('pagehide', bye); bye(); try { peer?.destroy(); } catch { /* fine */ } },
   };

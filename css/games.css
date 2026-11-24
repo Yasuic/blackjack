@@ -806,6 +806,12 @@ body:not(.room3d) .ro-result, .pfelt.tall .ro-result { display: none; }
 /* Info and Ledger in the top bar row on a computer (dockTop in app.js): plain buttons in the flow, their panels drop below. */
 .topbar .tb-slot { display: contents; }
 .topbar .sb-guide { position: relative; top: auto; left: auto; z-index: 60; flex-shrink: 0; }
+.sb-guide .ig-fold { border-top: 1px solid rgba(255,255,255,.1); margin-top: 8px; }
+.sb-guide .ig-fold > summary { cursor: pointer; padding: 8px 0 4px; font-weight: 800; font-size: 13px; color: #f2d58a; list-style: none; }
+.sb-guide .ig-fold > summary::-webkit-details-marker { display: none; }
+.sb-guide .ig-fold > summary::after { content: ' ▸'; opacity: .7; }
+.sb-guide .ig-fold[open] > summary::after { content: ' ▾'; }
+.sb-guide .ig-fold:first-child { border-top: 0; margin-top: 4px; }
 .topbar .sb-guide #sb-guide-body { position: absolute; left: 0; top: calc(100% + 6px); width: 340px; max-width: 80vw; padding: 4px 14px 12px; background: rgba(12,15,20,.96); border: 1px solid rgba(232,196,106,.35); border-radius: 12px; box-shadow: 0 10px 24px rgba(0,0,0,.5); }
 .topbar .ledger { position: relative !important; inset: auto !important; z-index: auto; flex-shrink: 0; }
 @media (min-width: 701px) and (max-width: 960px) { .topbar { flex-wrap: nowrap; gap: 8px; } .topbar .fp-t { display: none; } }

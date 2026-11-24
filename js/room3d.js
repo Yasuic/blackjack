@@ -217,7 +217,7 @@ function buildOffice(signText, midShift = 0, midScale = 1, skipRoom = null, live
     chrome: mk({ color: '#b9bec4', roughness: 0.25, metalness: 0.9 }),
     screen: mk({ color: '#0d0f12', roughness: 0.25, metalness: 0.2 }),
     // What the office screens show: the ARC Group logo, from the photo of it, lit like a screen that is on.
-    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261124d'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
+    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261124e'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
     dark: mk({ color: '#30353c', roughness: 0.6 }),
   };
   const group = new THREE.Group();
@@ -1005,7 +1005,7 @@ function buildStorefront() {
     lamp: lam('#c8161d', 0.6), bulb: lit('#ffe9a8'), red: lit('#c8161d'), gold: lit('#f4c542'), wood: lam('#7a5234', 0.35),
     glass: new THREE.MeshBasicMaterial({ color: '#dff3f7', transparent: true, opacity: 0.13, depthWrite: false }),
     awning: new THREE.MeshBasicMaterial({ map: canvasTexture(512, 64, (g, w, h) => { for (let i = 0; i < 16; i++) { g.fillStyle = i % 2 ? '#fff6e6' : '#f08a1c'; g.fillRect((i * w) / 16, 0, w / 16 + 1, h); } }), side: THREE.DoubleSide }),
-    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261124d') }),
+    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261124e') }),
     menu: new THREE.MeshBasicMaterial({ map: canvasTexture(256, 384, (g, w, h) => {
       g.fillStyle = '#c8161d'; g.fillRect(0, 0, w, h); g.fillStyle = '#f4c542'; g.fillRect(14, 14, w - 28, 44);
       const r = rng(11); g.fillStyle = '#fff3d6';
@@ -1153,6 +1153,34 @@ export function initRoom(container, feltEl, { phone, hud = null, size = null, ga
   container.classList.toggle('html-top', TOP);
   let clothMap = null;
   if (TOP) { clothMap = pokerFelt(W, H); clothMap.repeat.set(1 / W, 1 / H); clothMap.offset.set(0.5, 0.5); }
+  // Blackjack: names and hand totals stand up off the felt and face you, and at the far edge they reach past the
+  // felt, where the 3D rail is drawn over the HTML. A copy of the felt with only those labels showing is drawn in a
+  // second HTML layer above the 3D picture, so they always show. The labels on the felt itself are hidden.
+  const LIFT = !TOP && game === 'blackjack';
+  const cssTop = LIFT ? new CSS3DRenderer() : null, topScene = LIFT ? new THREE.Scene() : null;
+  const topEl = LIFT ? document.createElement('div') : null, topObj = LIFT ? new CSS3DObject(topEl) : null;
+  let liftT = 0, liftObs = null;
+  const syncTop = () => {
+    liftT = 0;
+    const c = feltEl.cloneNode(true);
+    c.querySelectorAll('[id]').forEach((e) => e.removeAttribute('id'));
+    topEl.className = feltEl.className + ' felt-top';
+    // The felt's own inline values (size, --bb and the rest), but the copy keeps the 3D placement its renderer gave it.
+    const own = topEl.style.transform;
+    topEl.style.cssText = feltEl.style.cssText;
+    topEl.style.transform = own;
+    topEl.replaceChildren(...c.childNodes);
+    touch();
+  };
+  if (LIFT) {
+    cssTop.domElement.className = 'room-css room-css-top';
+    container.append(cssTop.domElement);
+    topScene.add(topObj);
+    feltEl.classList.add('lifted');
+    liftObs = new MutationObserver(() => { if (!liftT) liftT = setTimeout(syncTop, 120); });
+    liftObs.observe(feltEl, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['class', 'style'] });
+    syncTop();
+  }
   const hole = flat(new THREE.Mesh(feltGeo, TOP ? new THREE.MeshStandardMaterial({ color: '#ffffff', map: clothMap, roughness: 0.95 })
     : new THREE.MeshBasicMaterial({ color: 0x000000, opacity: 0, blending: THREE.NoBlending })), 1);
   hole.receiveShadow = TOP;
@@ -1414,7 +1442,7 @@ export function initRoom(container, feltEl, { phone, hud = null, size = null, ga
     const label = makeLabel(((look.flag ? look.flag + ' ' : '') + (p.name || 'Player')).slice(0, 22));
     label.position.y = 290 + up;
     g.add(label);
-    g.userData = { arms, legs, label, reach: 0, headParts: [headG, label], headG, pid: String(p.id).split('#')[0] };
+    g.userData = { arms, legs, label, reach: 0, headParts: [headG, label], headG, pid: String(p.id).split('#')[0], seat: Number.isInteger(p.seat) ? p.seat : undefined };
     return g;
   }
   function disposeTree(o) {
@@ -2062,7 +2090,9 @@ export function initRoom(container, feltEl, { phone, hud = null, size = null, ga
     if (!animate) { cur.theta = goal.theta; cur.phi = goal.phi; cur.r = goal.r; cur.yaw = goal.yaw; cur.pitch = goal.pitch; cur.t.copy(goal.t); }
     touch();
   }
+  let away = false; // seat unlocked and the view moved off the chair: the view button reads Reset view
   function home(animate) {
+    if (away) { away = false; try { drawLock(); } catch { /* not drawn yet */ } }
     walking = false; container.classList.remove('walking');
     seated = true; goal.yaw = 0; goal.pitch = 0; rate = 4.5;
     seatGoal(animate);
@@ -2122,24 +2152,25 @@ export function initRoom(container, feltEl, { phone, hud = null, size = null, ga
   }
 
   // Seat lock, on by default: nothing you tap, drag, scroll or type moves you out of your chair. The button at the
-  // top left unlocks it for looking and walking around; Back to seat beside it always brings you back to the chair.
+  // top left unlocks it for looking and walking around. Once the view has moved, the same button reads Reset view:
+  // it takes you back to the chair and locks the seat again, and a further tap unlocks it again.
   let locked = true;
   try { locked = localStorage.getItem('bj-seat-lock') !== '0'; } catch { /* no storage: stay locked */ }
   document.querySelectorAll('.room-view').forEach((b) => b.remove());
-  const lockBtn = document.createElement('button'), resetBtn = document.createElement('button');
+  const lockBtn = document.createElement('button');
   // Poker on a computer: a second view, from your own eyes in the chair. The seat view stays the default.
   const povBtn = document.createElement('button'); povBtn.className = 'room-pov';
   const drawPov = () => { povBtn.textContent = firstPerson ? '👁 First person' : '👁 Seat view'; povBtn.title = firstPerson ? 'You see the table from your own eyes. Tap for the higher seat view.' : 'Tap to see the table from your own eyes.'; povBtn.classList.toggle('on', firstPerson); document.body.classList.toggle('room-fp', firstPerson); };
   povBtn.addEventListener('click', (e) => { e.stopPropagation(); firstPerson = !firstPerson; try { localStorage.setItem('pk-pov', firstPerson ? '1' : '0'); } catch { /* fine */ } drawPov(); resize(); home(true); });
   if (OVAL) { document.body.append(povBtn); drawPov(); }
-  lockBtn.className = 'room-lock'; resetBtn.className = 'room-reset'; resetBtn.textContent = '🪑 Back to seat'; resetBtn.title = 'Back to your chair';
-  const drawLock = () => { lockBtn.textContent = locked ? '🔒 Seat locked' : '🔓 Free view'; lockBtn.title = locked ? 'You stay in your chair. Drag to look around. Tap to unlock and walk around.' : 'Tap to lock yourself in your chair again.'; lockBtn.classList.toggle('on', locked); container.classList.toggle('seat-locked', locked); };
-  const setLock = (v) => { locked = !!v; try { localStorage.setItem('bj-seat-lock', locked ? '1' : '0'); } catch { /* fine */ } if (locked) { moveKeys.clear(); home(true); } drawLock(); };
-  lockBtn.addEventListener('click', (e) => { e.stopPropagation(); setLock(!locked); });
-  resetBtn.addEventListener('click', (e) => { e.stopPropagation(); home(true); });
-  // One view control at the top left: the seat lock and, beside it, the way back to your chair.
+  lockBtn.className = 'room-lock';
+  const drawLock = () => { if (!locked && away) { lockBtn.textContent = '🪑 Reset view'; lockBtn.title = 'Back to your chair. Tap again after to unlock the view.'; lockBtn.classList.remove('on'); container.classList.remove('seat-locked'); return; } lockBtn.textContent = locked ? '🔒 Seat locked' : '🔓 Free view'; lockBtn.title = locked ? 'You stay in your chair. Drag to look around. Tap to unlock and walk around.' : 'Tap to lock yourself in your chair again.'; lockBtn.classList.toggle('on', locked); container.classList.toggle('seat-locked', locked); };
+  const setLock = (v) => { locked = !!v; away = false; try { localStorage.setItem('bj-seat-lock', locked ? '1' : '0'); } catch { /* fine */ } if (locked) { moveKeys.clear(); home(true); } drawLock(); };
+  lockBtn.addEventListener('click', (e) => { e.stopPropagation(); setLock(away ? true : !locked); });
+  const markAway = () => { if (!locked && !away) { away = true; drawLock(); } };
+  // One view control at the top left.
   const viewBox = document.createElement('div'); viewBox.className = 'room-view';
-  viewBox.append(lockBtn, resetBtn);
+  viewBox.append(lockBtn);
   document.body.append(viewBox);
   drawLock();
 
@@ -2189,7 +2220,7 @@ export function initRoom(container, feltEl, { phone, hud = null, size = null, ga
     const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
     if (!drag.moved) {
       if (Math.hypot(dx, dy) < 5) return;
-      drag.moved = true;
+      drag.moved = true; markAway();
       try { container.setPointerCapture(e.pointerId); } catch { /* the pointer is already gone */ }
       container.classList.add('dragging');
     }
@@ -2222,7 +2253,7 @@ export function initRoom(container, feltEl, { phone, hud = null, size = null, ga
   const onKeyDown = (e) => {
     if (!running || locked || typingNow(e)) return;
     const k = KEYMAP[e.key.toLowerCase()];
-    if (k) { moveKeys.add(k); tour = null; tourW = 1; if (e.key.startsWith('Arrow')) e.preventDefault(); touch(); }
+    if (k) { moveKeys.add(k); markAway(); tour = null; tourW = 1; if (e.key.startsWith('Arrow')) e.preventDefault(); touch(); }
     else if (e.key === 'Escape' && walking) home(true);
   };
   const onKeyUp = (e) => { const k = KEYMAP[e.key.toLowerCase()]; if (k) moveKeys.delete(k); };
@@ -2232,10 +2263,11 @@ export function initRoom(container, feltEl, { phone, hud = null, size = null, ga
   container.addEventListener('wheel', (e) => {
     e.preventDefault();
     if (locked) return;
+    markAway();
     const d = e.deltaMode === 1 ? e.deltaY * 30 : e.deltaY;
     zoom(Math.exp(Math.max(-240, Math.min(240, d)) * 0.0011));
   }, { passive: false });
-  // A double click does nothing: quick taps on chips must never move the view. The Back to my seat button does that.
+  // A double click does nothing: quick taps on chips must never move the view. The Reset view button does that.
   // A drag that ends on the felt must not count as a click on whatever is under the finger.
   container.addEventListener('click', (e) => { if (container.classList.contains('was-drag')) { e.stopPropagation(); e.preventDefault(); } }, true);
 
@@ -2246,6 +2278,7 @@ export function initRoom(container, feltEl, { phone, hud = null, size = null, ga
     camera.fov = w / h < 0.8 ? 56 : OVAL ? (firstPerson ? 76 : 58) : 42; // poker looks across the table from the chair, so it sees wider
     camera.updateProjectionMatrix();
     css.setSize(w, h);
+    cssTop?.setSize(w, h);
     sizeGl();
     if (seated) seatGoal(!!homeFit); else homeFit = fitHome();
     touch();
@@ -2365,10 +2398,12 @@ export function initRoom(container, feltEl, { phone, hud = null, size = null, ga
   // The moves a real player makes at the table (presence.js actKind): a tap on the felt for a hit or a check,
   // a wave over the cards to stand, chips pushed forward for a bet, cards tossed in for a fold, arms up for a shout.
   const GEST_MS = { tap: 650, wave: 900, push: 700, fold: 650, react: 1000 };
-  function gesture(id, kind) {
+  // seat: when the person holds several seats, only the figure in that seat makes the move.
+  function gesture(id, kind, seat) {
     if (!GEST_MS[kind]) return;
     const pid = String(id).split('#')[0], t0 = performance.now();
-    const list = [...figs.values(), ...otherGroup.children].filter((f) => f.userData?.pid === pid && f.userData.arms && !f.userData.gone);
+    let list = [...figs.values(), ...otherGroup.children].filter((f) => f.userData?.pid === pid && f.userData.arms && !f.userData.gone);
+    if (seat !== undefined && list.some((f) => f.userData.seat === seat)) list = list.filter((f) => f.userData.seat === seat);
     const L = live.get(pid); if (L?.fig) list.push(L.fig);
     for (const f of list) { f.userData.gest = { k: kind, t0 }; gesturing.add(f); }
     if (list.length) touch();
@@ -2571,8 +2606,9 @@ export function initRoom(container, feltEl, { phone, hud = null, size = null, ga
     bbM.makeRotationFromQuaternion(bbQ);
     const m = bbM.elements, f = (i, flip) => { const v = Math.round((flip ? -m[i] : m[i]) * 1e5) / 1e5; return v === 0 ? 0 : v; };
     const bb = `matrix3d(${f(0)},${f(1, 1)},${f(2)},0,${f(4, 1)},${f(5)},${f(6, 1)},0,${f(8)},${f(9, 1)},${f(10)},0,0,0,0,1)`;
-    if (bb !== bbLast) { bbLast = bb; feltEl.style.setProperty('--bb', bb); }
+    if (bb !== bbLast) { bbLast = bb; feltEl.style.setProperty('--bb', bb); topEl?.style.setProperty('--bb', bb); }
     css.render(scene, camera);
+    if (LIFT) { topObj.position.copy(feltObj.position); topObj.position.y += 2; topObj.quaternion.copy(feltObj.quaternion); topObj.scale.copy(feltObj.scale); cssTop.render(topScene, camera); }
   };
   requestAnimationFrame(loop);
 
@@ -2666,7 +2702,7 @@ export function initRoom(container, feltEl, { phone, hud = null, size = null, ga
     setChips,
     // One card leaves the shoe: the dealer's hand moves with it.
     // Walk mode: leave the chair and move through the whole office. A drag moves you, two fingers or the
-    // right button turn and zoom. Back to my seat takes you back to your seat.
+    // right button turn and zoom. Reset view takes you back to your seat.
     walk(on) {
       if (on && locked) setLock(false); // Walk around in the menu unlocks the seat
       if (!on) { home(true); return false; }
@@ -2705,6 +2741,6 @@ export function initRoom(container, feltEl, { phone, hud = null, size = null, ga
     info: () => ({ calls: gl.info.render.calls, triangles: gl.info.render.triangles, fps, seated, side, pos: camera.position.toArray().map(Math.round), yaw: cur.yaw, r: Math.round(cur.r), home: homeFit && Math.round(homeFit.r), phi: homeFit && homeFit.phi, people: figs.size, others: otherGroup.children.length }),
     // Jump straight to where the camera is heading (used by tests, which cannot wait for the glide).
     settle() { for (const key of ['theta', 'phi', 'r', 'yaw', 'pitch']) cur[key] = goal[key]; cur.t.copy(goal.t); touch(); },
-    stop() { running = false; },
+    stop() { running = false; if (LIFT) { liftObs?.disconnect(); clearTimeout(liftT); cssTop.domElement.remove(); feltEl.classList.remove('lifted'); } },
   };
 }

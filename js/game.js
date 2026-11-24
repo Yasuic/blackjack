@@ -4,6 +4,33 @@
 export const SUITS = ['♠', '♥', '♦', '♣'];
 export const RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
 
+// The rules the dealer sets (or the host while the house deals), with the values each may take.
+export const RULE_KEYS = ['blackjackPays', 'dealerHitsSoft17', 'allowSurrender', 'splitAces', 'resplitAces', 'maxSplits', 'das', 'doubleOn', 'charlieEvery'];
+export function cleanRules(r, base) {
+  const out = {};
+  for (const k of RULE_KEYS) {
+    if (r[k] === undefined) continue;
+    const v = r[k];
+    if (k === 'blackjackPays') { const n = Number(v); if (![1.5, 1.2, 1].includes(n)) throw new Error('Blackjack pays 3 to 2, 6 to 5 or 1 to 1.'); out[k] = n; }
+    else if (k === 'maxSplits') { const n = Math.round(Number(v)); if (![0, 1, 2, 3].includes(n)) throw new Error('Splits: 1, 2, 3 or no limit.'); out[k] = n; }
+    else if (k === 'doubleOn') { if (!['any', '9-11', '10-11'].includes(v)) throw new Error('Double on any two cards, 9 to 11 or 10 to 11.'); out[k] = v; }
+    else if (k === 'charlieEvery') { const n = Math.round(Number(v)); if (!(n >= 0) || n > 1000) throw new Error('5 Card Charlie: pick 0 (off) or 1 to 1000 rounds.'); out[k] = n; }
+    else out[k] = !!v;
+  }
+  return Object.fromEntries(Object.entries(out).filter(([k, v]) => v !== base[k]));
+}
+export const RULE_TEXT = {
+  blackjackPays: (v) => `Blackjack pays ${v === 1.5 ? '3 to 2' : v === 1.2 ? '6 to 5' : '1 to 1'}`,
+  dealerHitsSoft17: (v) => (v ? 'Dealer hits soft 17' : 'Dealer stands on soft 17'),
+  allowSurrender: (v) => `Surrender ${v ? 'allowed' : 'not allowed'}`,
+  splitAces: (v) => `Split aces ${v ? 'allowed' : 'not allowed'}`,
+  resplitAces: (v) => `Resplit aces ${v ? 'allowed' : 'not allowed'}`,
+  maxSplits: (v) => (v ? `Up to ${v} split${v > 1 ? 's' : ''} per seat` : 'No limit on splits'),
+  das: (v) => `Double after split ${v ? 'allowed' : 'not allowed'}`,
+  doubleOn: (v) => (v === 'any' ? 'Double on any two cards' : `Double on ${v.replace('-', ' to ')} only`),
+  charlieEvery: (v) => (v ? `5 Card Charlie on about 1 round in ${v}` : '5 Card Charlie off'),
+};
+
 export const DEFAULT_SETTINGS = {
   seats: 7,              // player seats at the table (any whole number from 1 up)
   decks: 1000,           // 1, 2, 6, 8, 20, 100, 1000, or 'csm' (randomized: full reshuffle before every round)
@@ -18,7 +45,15 @@ export const DEFAULT_SETTINGS = {
   dealerHitsSoft17: false,
   blackjackPays: 1.5,    // 3:2
   allowSurrender: true,
-  charlie: true,         // Five Card Charlie: five cards without busting win at once, paid 1 to 1
+  // The dealer's rules (setRules; the host's while the house deals). Changed only between rounds.
+  splitAces: true,       // aces may be split (one card each)
+  resplitAces: true,     // a split ace that gets another ace may be split again
+  maxSplits: 0,          // splits per seat: 1, 2 or 3, or 0 for no limit
+  das: true,             // double after a split
+  doubleOn: 'any',       // double on 'any' first two cards, or only on totals '9-11' or '10-11'
+  charlieEvery: 10,      // Five Card Charlie on about 1 random round in this many (0 = off). Each such round is
+                         // announced while bets are open. Five cards without busting win at once, paid 1 to 1;
+                         // a dealer blackjack still beats it. The dealer sets it: on every round it costs the dealer.
   autoDeal: true,        // deal as soon as every seated player is ready
   betTimer: 30,          // seconds for betting before the dealer deals on its own (0 = off)
   turnTimer: 30,
@@ -302,7 +337,7 @@ export function evalBustIt(dealerCards) {
 // ---------- The table ----------
 export class Table {
   constructor(settings = {}) {
-    this.settings = { ...DEFAULT_SETTINGS, ...settings };
+    this.settings = charlieFix({ ...DEFAULT_SETTINGS, ...settings }, settings);
     this.settings.seats = seatCount(this.settings.seats);
     this.seats = Array(this.settings.seats).fill(null);
     this.players = {}; // clientId -> { name, chips, seat, connected }
@@ -468,8 +503,10 @@ export class Table {
     s.sideBets = Array.isArray(s.sideBets) ? [...new Set(s.sideBets)].filter((k) => SIDE_KEYS.includes(k)) : (Array.isArray(old.sideBets) ? old.sideBets : DEFAULT_SETTINGS.sideBets);
     if (s.shuffleMode !== 'rounds') s.shuffleMode = 'penetration';
     s.shuffle8 = s.shuffle8 !== false;
-    for (const k of ['dealerHitsSoft17', 'allowSurrender', 'autoDeal']) s[k] = !!s[k];
-    s.charlie = s.charlie !== false;
+    s.autoDeal = !!s.autoDeal;
+    // The rules of play and 5 Card Charlie are the dealer's (setRules, dealerSave): a settings change or vote never touches them.
+    for (const k of RULE_KEYS) s[k] = old[k];
+    delete s.charlie;
     // There is no Deal or Stand for a slow player button: a round always starts and every move always ends on its own.
     if (!s.betTimer) s.autoDeal = true;
     if (!s.turnTimer) s.turnTimer = 30;
@@ -526,6 +563,22 @@ export class Table {
   }
 
   // The shuffle every 8 rounds, on by default: the dealer turns it on or off (with no dealer, the host does).
+  // 5 Card Charlie rounds: about 1 in n, picked at random as each betting round opens (0 = off).
+  setCharlieEvery(clientId, n) { this.setRules(clientId, { charlieEvery: n }); }
+  // The rules of play: the dealer's, or the host's while the house deals. Between rounds only; each change is
+  // logged and shown to the table before the next deal.
+  setRules(clientId, r = {}) {
+    if (this.banker ? this.banker !== clientId : this.hostId && this.hostId !== clientId) throw new Error('Only the dealer changes the rules.');
+    if (this.phase !== 'betting' && this.phase !== 'settled') throw new Error('Change the rules between rounds.');
+    const ch = cleanRules(r, this.settings);
+    if (!Object.keys(ch).length) return;
+    this.settings = { ...this.settings, ...ch };
+    if ('charlieEvery' in ch && this.phase === 'betting' && !ch.charlieEvery) this.charlieRound = false;
+    const who = this.banker ? `${this.players[this.banker]?.name || 'The dealer'}, the dealer,` : 'The host';
+    this.rulesNote = { ...(this.rulesNote || {}), ...ch }; // every change since the last deal
+    this.addLog(`${who} changed the rules: ${Object.keys(ch).map((k) => RULE_TEXT[k](ch[k])).join('; ')}.`);
+  }
+  pickCharlie() { const n = this.settings.charlieEvery || 0; this.charlieRound = n > 0 && Math.random() < 1 / n; if (this.charlieRound) this.addLog('5 Card Charlie is on this round.'); }
   setShuffle8(clientId, on) {
     if (this.banker ? this.banker !== clientId : this.hostId && this.hostId !== clientId) throw new Error('Only the dealer turns the shuffle every 8 rounds on or off.');
     this.settings = { ...this.settings, shuffle8: !!on };
@@ -592,6 +645,8 @@ export class Table {
     if (c.cap && capAmt !== null && (!(capAmt >= 1) || capAmt > 1e9)) throw new Error('Pick a loss of at least 1.');
     if (min !== s.minBet) { this.settings = { ...this.settings, minBet: min }; this.addLog(`${this.players[clientId].name}, the dealer, set the minimum bet to ${min}.`); }
     if (max !== s.maxBet || side !== s.maxSideBet) this.setDealerMax(clientId, max, side);
+    if (c.rules) cleanRules(c.rules, s); // checked before anything changes
+    if (c.rules) this.setRules(clientId, c.rules);
     if (c.shuffle8 !== undefined && !!c.shuffle8 !== (this.settings.shuffle8 !== false)) this.setShuffle8(clientId, !!c.shuffle8);
     if (c.big !== undefined) {
       const b = this.settings.bigBet;
@@ -1191,6 +1246,7 @@ export class Table {
     if (this.phase !== 'settled' && this.phase !== 'betting') return;
     this.phase = 'betting';
     this.ledgerHold = null;
+    this.pickCharlie();
     this.dealer = { cards: [], revealed: false };
     this.turn = null;
     for (let i = 0; i < this.seats.length; i++) {
@@ -1305,6 +1361,7 @@ export class Table {
     if (!this.banker && !this.frozen) throw new Error('Nobody is the dealer. Someone has to sit as the dealer, or the host can deal with frozen balances.');
     this.dealerAutoBuy();
     if (!this.canDeal()) throw new Error('Nobody has placed a bet.');
+    this.rulesNote = null; // a rules change is shown from when it is made until the next deal
     const playing = this.seats.filter((x) => x && x.bet.main >= this.settings.minBet).length;
     // An untouched shoe is shuffled again when a player's code is not in it yet, so the first shoe
     // of a table also mixes in the codes of the people who are playing it.
@@ -1489,10 +1546,12 @@ export class Table {
     const h = seat.hands[this.turn.hand];
     const two = h.cards.length === 2;
     // A split ace got its one card. It is only still in play when that card is another ace: split again or stand.
-    if (h.splitAces) return two && h.cards[0].r === 'A' && h.cards[1].r === 'A' && p.chips >= h.bet ? ['stand', 'split'] : ['stand'];
+    const st = this.settings, room = !st.maxSplits || seat.hands.length <= st.maxSplits; // one more split still allowed
+    if (h.splitAces) return two && h.cards[0].r === 'A' && h.cards[1].r === 'A' && p.chips >= h.bet && st.resplitAces !== false && room ? ['stand', 'split'] : ['stand'];
     const acts = ['hit', 'stand'];
-    if (two && p.chips >= h.bet) acts.push('double');
-    if (two && cardValue(h.cards[0]) === cardValue(h.cards[1]) && p.chips >= h.bet) acts.push('split');
+    const tot = handTotal(h.cards).total, dOk = st.doubleOn === '9-11' ? tot >= 9 && tot <= 11 : st.doubleOn === '10-11' ? tot >= 10 && tot <= 11 : true;
+    if (two && p.chips >= h.bet && dOk && (!h.fromSplit || st.das !== false)) acts.push('double');
+    if (two && cardValue(h.cards[0]) === cardValue(h.cards[1]) && p.chips >= h.bet && room && (h.cards[0].r !== 'A' || st.splitAces !== false)) acts.push('split');
     if (two && seat.hands.length === 1 && this.settings.allowSurrender) acts.push('surrender');
     return acts;
   }
@@ -1517,7 +1576,7 @@ export class Table {
       const t = handTotal(h.cards).total;
       if (t >= 21) h.done = true;
       // Five Card Charlie: a fifth card without busting wins at once, and the hand takes no more cards.
-      if (this.settings.charlie !== false && h.cards.length === 5 && t <= 21) { h.charlie = true; h.done = true; }
+      if (this.charlieRound && h.cards.length === 5 && t <= 21) { h.charlie = true; h.done = true; }
     } else if (a === 'stand') {
       h.done = true;
     } else if (a === 'double') {
@@ -1539,7 +1598,8 @@ export class Table {
       if (aces) {
         // Split aces get one card each. An ace that gets another ace may be split again, if the chips are there.
         h.splitAces = second.splitAces = true;
-        for (const x of [h, second]) x.done = !(x.cards[1].r === 'A' && p.chips >= x.bet);
+        const more = this.settings.resplitAces !== false && (!this.settings.maxSplits || seat.hands.length + 1 <= this.settings.maxSplits);
+        for (const x of [h, second]) x.done = !(more && x.cards[1].r === 'A' && p.chips >= x.bet);
       } else {
         if (handTotal(h.cards).total === 21) h.done = true;
         if (handTotal(second.cards).total === 21) second.done = true;
@@ -1778,6 +1838,8 @@ export class Table {
       settings: this.settings,
       phase: this.phase,
       round: this.round,
+      charlieRound: !!this.charlieRound,
+      rulesNote: this.rulesNote ? Object.keys(this.rulesNote).filter((k) => RULE_TEXT[k]).map((k) => RULE_TEXT[k](this.rulesNote[k])) : null,
       unseated: this.unseated || null,
       turn: this.turn,
       dealer: {
@@ -1851,8 +1913,8 @@ export class Table {
 
   // Save and restore so the host can refresh the page without losing the table.
   toJSON() {
-    const { settings, seats, players, phase, dealer, turn, round, roundsSinceShuffle, log, shoe, shoeSize, banker, bankerNet, pendingBanker, buyIns, hostId, pendingSettings, frozen, fair, hist, evts, created, frozenSnap, shuffleNext, bankerLeaving, ledgerHold, lossCap } = this;
-    return { settings, seats, players, phase, dealer, turn, round, roundsSinceShuffle, log, shoe: packShoe(shoe), shoeSize, banker, bankerNet, pendingBanker, buyIns, hostId, pendingSettings, frozen, fair, hist, evts, created, frozenSnap, shuffleNext, bankerLeaving, ledgerHold, lossCap };
+    const { settings, seats, players, phase, dealer, turn, round, roundsSinceShuffle, charlieRound, log, shoe, shoeSize, banker, bankerNet, pendingBanker, buyIns, hostId, pendingSettings, frozen, fair, hist, evts, created, frozenSnap, shuffleNext, bankerLeaving, ledgerHold, lossCap } = this;
+    return { settings, seats, players, phase, dealer, turn, round, roundsSinceShuffle, charlieRound, log, shoe: packShoe(shoe), shoeSize, banker, bankerNet, pendingBanker, buyIns, hostId, pendingSettings, frozen, fair, hist, evts, created, frozenSnap, shuffleNext, bankerLeaving, ledgerHold, lossCap };
   }
   static fromJSON(obj) {
     const t = new Table(obj.settings);
@@ -1863,7 +1925,7 @@ export class Table {
     if (!obj.fair) t.fair.current = null; // a table saved before fair shuffles: its shoe has no seed to show
     // Tables saved before the seat count was a setting keep the seats they had.
     if (!Array.isArray(t.seats) || !t.seats.length) t.seats = Array(seatCount(obj.settings?.seats)).fill(null);
-    t.settings = { ...DEFAULT_SETTINGS, ...obj.settings, seats: t.seats.length };
+    t.settings = charlieFix({ ...DEFAULT_SETTINGS, ...obj.settings, seats: t.seats.length }, obj.settings || {});
     // Side bets and settings that were taken out of the game: a table saved before keeps none of them.
     delete t.settings.countTraining;
     if (Array.isArray(t.settings.sideBets)) t.settings.sideBets = t.settings.sideBets.filter((k) => SIDE_BETS[k]);
@@ -1873,6 +1935,16 @@ export class Table {
     Object.values(t.players).forEach((p) => (p.gone = false));
     return t;
   }
+}
+
+// 5 Card Charlie: a whole number of rounds from 0 (off) to 1000. Tables from before had an on/off switch (charlie).
+function charlieFix(s, given) {
+  if (given.charlieEvery === undefined && given.charlie !== undefined) s.charlieEvery = given.charlie === false ? 0 : DEFAULT_SETTINGS.charlieEvery;
+  delete s.charlie;
+  try { Object.assign(s, cleanRules(Object.fromEntries(RULE_KEYS.filter((k) => k !== 'charlieEvery').map((k) => [k, s[k]])), {})); } catch { for (const k of RULE_KEYS) if (k !== 'charlieEvery') s[k] = DEFAULT_SETTINGS[k]; }
+  const n = Math.round(Number(s.charlieEvery));
+  s.charlieEvery = Number.isFinite(n) ? Math.max(0, Math.min(1000, n)) : DEFAULT_SETTINGS.charlieEvery;
+  return s;
 }
 
 // A place a card goes, in words.
