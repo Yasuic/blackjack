@@ -1782,3 +1782,4 @@ body.room3d .room-css-top { z-index: 2; pointer-events: none !important; }
 .charlie-badge { display: table; margin: 4px auto 0; padding: 3px 12px; border-radius: 999px; background: #1f7a4d; color: #eafff3; border: 1px solid #6fe0a0; font: 700 12px Inter, system-ui, sans-serif; letter-spacing: .3px; white-space: nowrap; }
 .dp-rules .dp-charlie-now { justify-self: start; }
 .dp-rules .dp-charlie-now:disabled { opacity: .6; }
+.dp-foot .dp-next { align-self: center; font-size: 12px; font-weight: 600; color: #f2d58a; }

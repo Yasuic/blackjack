@@ -1,18 +1,18 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { startPresence } from './presence.js?v=20261124g';
-import { outerLink } from './shell.js?v=20261124g';
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe, destName, stepOf, RULE_TEXT } from './game.js?v=20261124g';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261124g';
-import { bestMove, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261124g';
-import { tickSound, winSound } from './fx.js?v=20261124g';
-import * as HX from './history.js?v=20261124g';
-import { webglOK, initRoom, COLLEAGUES } from './room3d.js?v=20261124g';
-import { COPY_BTN, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261124g';
-import { topToolsHTML, initTopTools, setProfit, setPractice, setRisk, cardScale, profitLineHTML, ledgerTitle } from './toptools.js?v=20261124g';
-import { statsHTML } from './pstats.js?v=20261124g';
-import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261124g';
+import { startPresence } from './presence.js?v=20261124h';
+import { outerLink } from './shell.js?v=20261124h';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe, destName, stepOf, RULE_TEXT } from './game.js?v=20261124h';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261124h';
+import { bestMove, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261124h';
+import { tickSound, winSound } from './fx.js?v=20261124h';
+import * as HX from './history.js?v=20261124h';
+import { webglOK, initRoom, COLLEAGUES } from './room3d.js?v=20261124h';
+import { COPY_BTN, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261124h';
+import { topToolsHTML, initTopTools, setProfit, setPractice, setRisk, cardScale, profitLineHTML, ledgerTitle } from './toptools.js?v=20261124h';
+import { statsHTML } from './pstats.js?v=20261124h';
+import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261124h';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -2973,10 +2973,7 @@ function trayInner(st) {
   const { me, seat, isBanker } = myInfo(st);
   if (!me) return '';
   const ph = st.phase;
-  if (isBanker) {
-    if (!(ph === 'betting' || ph === 'settled')) return '';
-    return dealerPanelHTML(st);
-  }
+  if (isBanker) return dealerPanelHTML(st); // also during a hand: what the dealer saves then applies from the next hand
   if (!seat) {
     return `<div class="tray-msg">Tap Sit on a seat to play, or Ask to be dealer.</div>${askOutHTML(st)}`;
   }
@@ -4086,11 +4083,12 @@ document.addEventListener('change', (e) => {
 function dealerOpen() { return S.dealerOpen ?? (safeGet('bj-dpanel') ? safeGet('bj-dpanel') === '1' : innerWidth >= 700); }
 function dealerCur(st) {
   const s = st.settings, b = s.bigBet, c = st.lossCap || { on: true, amount: 30 * s.maxBet, lost: 0 };
-  return { min: s.minBet, max: s.maxBet, side: s.maxSideBet, shuffle8: s.shuffle8 !== false, ...rulesCur(s), bigOn: !!b, bigLimit: b?.limit ?? s.maxBet * 4, bigPer: b?.per ?? 2, bigHands: b?.hands ?? 10, capOn: !!c.on, capAmt: c.amount };
+  return { min: s.minBet, max: s.maxBet, side: s.maxSideBet, shuffle8: s.shuffle8 !== false, ...rulesCur(s), bigOn: !!b, bigLimit: b?.limit ?? s.maxBet * 2, bigPer: b?.per ?? 2, bigHands: b?.hands ?? 10, capOn: !!c.on, capAmt: c.amount };
 }
 function dealerVals(st) { return { ...dealerCur(st), ...(S.dealerDraft || {}) }; }
 function dealerDirty(st) { const cur = dealerCur(st), d = S.dealerDraft || {}; return Object.keys(d).some((k) => String(d[k]) !== String(cur[k])); }
 function dealerPanelHTML(st) {
+  if (S.dealerHeld && !st.settingsNext && !['insurance', 'playing', 'dealer'].includes(st.phase)) { S.dealerHeld = false; S.dealerDraft = null; } // applied: the form shows the table again
   const open = dealerOpen(), v = dealerVals(st), owe = st.banker.chips < 0;
   const num = (k, label, min = 0) => `<label>${label}<input type="number" inputmode="numeric" min="${min}" step="1" data-dk="${k}" value="${esc(String(v[k]))}" /></label>`;
   const tick = (k, label) => `<label class="dp-tick"><input type="checkbox" data-dk="${k}" ${v[k] ? 'checked' : ''} /> ${label}</label>`;
@@ -4102,7 +4100,7 @@ function dealerPanelHTML(st) {
       <section class="dp-sec"><h4>Stop at loss</h4>${tick('capOn', 'On')}${num('capAmt', 'Loss', 1)}<span class="cap-lost">Lost ${money(st.lossCap?.lost || 0)}</span></section>
       ${rulesSecHTML(st, v, 'dk')}
     </div>
-    <div class="dp-foot"><button class="btn dp-save${dealerDirty(st) ? ' dirty' : ''}" data-act="dealer-save">Save</button>${st.settings.decks !== 'csm' ? '<button class="btn" data-act="d-shuffle">🔀 Shuffle now</button>' : ''}</div>` : ''}
+    <div class="dp-foot"><button class="btn dp-save${dealerDirty(st) && !(S.dealerHeld && st.settingsNext) ? ' dirty' : ''}" data-act="dealer-save">Save</button>${st.settingsNext ? '<span class="dp-next">Saved. Applies from the next hand.</span>' : ''}${st.settings.decks !== 'csm' && (st.phase === 'betting' || st.phase === 'settled') ? '<button class="btn" data-act="d-shuffle">🔀 Shuffle now</button>' : ''}</div>` : ''}
   </div><button class="dp-bar" data-act="leave-dealer">Leave dealer seat</button>`;
 }
 // ---------- Rules of play and the dealer's edge ----------
@@ -4164,7 +4162,8 @@ function dealerSaveNow(st) {
   if (!dealerDirty(st)) return;
   const v = dealerVals(st), n = (x) => Math.round(Number(x));
   send({ t: 'dealer-save', cfg: { min: n(v.min), max: n(v.max), side: n(v.side), shuffle8: !!v.shuffle8, rules: rulesOut(v), big: { on: !!v.bigOn, limit: n(v.bigLimit), per: n(v.bigPer), hands: n(v.bigHands) }, cap: { on: !!v.capOn, amount: n(v.capAmt) } } });
-  S.dealerDraft = null;
+  // Saved during a hand: the table applies it once the hand is settled, so the form keeps the new values until then.
+  if (['insurance', 'playing', 'dealer'].includes(st.phase)) S.dealerHeld = true; else S.dealerDraft = null;
   document.activeElement?.blur?.();
   render();
 }

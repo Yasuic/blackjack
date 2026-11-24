@@ -51,9 +51,10 @@ for (const [on, tot, yes] of [['9-11', ['5', '4'], true], ['9-11', ['5', '3'], f
   ok(t.players.a.chips - before === 22, '6 to 5: a 10 blackjack gets 22 back (12 win), got ' + (t.players.a.chips - before)); }
 // Who and when
 { const t = mk(); assert.throws(() => t.setRules('a', { das: false }), /dealer/); n++;
-  play(t, ['10', '6']); assert.throws(() => t.setRules('bank', { das: false }), /between rounds/); n++;
+  play(t, ['10', '6']); ok(t.setRules('bank', { das: false }) === 'next' && t.settings.das !== false, 'saved mid hand: not applied to the hand in play');
+  ok(t.publicState('a').settingsNext, 'the table shows a change is waiting for the next hand');
   while (t.phase === 'playing') t.action('a', 'stand'); while (t.dealerStep()) {}
-  t.setRules('bank', { das: false }); ok(t.settings.das === false, 'dealer sets a rule between rounds');
+  t.startBetting(); ok(t.settings.das === false && !t.publicState('a').settingsNext, 'applied when the next hand opens');
   t.updateSettings({ das: true, dealerHitsSoft17: true, blackjackPays: 1, charlieEvery: 2 }); ok(t.settings.das === false && !t.settings.dealerHitsSoft17 && t.settings.blackjackPays === 1.5 && t.settings.charlieEvery === 0, 'a settings change never touches the rules');
   assert.throws(() => t.setRules('bank', { maxSplits: 9 })); assert.throws(() => t.setRules('bank', { blackjackPays: 2 })); assert.throws(() => t.setRules('bank', { doubleOn: 'x' })); n += 3;
   ok(t.publicState('a').rulesNote.join() === 'Double after split not allowed', 'the change is shown to the table: ' + t.publicState('a').rulesNote);

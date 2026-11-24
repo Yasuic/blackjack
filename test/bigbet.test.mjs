@@ -8,6 +8,7 @@ const mk = () => {
   t.join('b', 'Bob'); t.sit('b', 1);
   t.join('bank', 'Bank'); t.sitDealer('bank');
   t.giveChips('bank', 100000); t.giveChips('a', 10000); t.giveChips('b', 10000);
+  t.setBigBet('bank', { off: true }); // the checks below start with it off
   return t;
 };
 const play = (t) => {
@@ -21,13 +22,19 @@ const play = (t) => {
 const tryBet = (t, id, main, big) => { try { t.setBet(id, { main, sides: {}, ready: true, big }); return 'ok'; } catch (e) { return e.message; } };
 
 // Only the dealer can set it, and only with sensible numbers.
-{ const t = mk();
+{ const t = mk(); t.setBigBet('bank', { off: true });
   assert.throws(() => t.setBigBet('a', { limit: 500, per: 2, hands: 3 }), /Only the dealer/);
   assert.throws(() => t.setBigBet('bank', { limit: 50, per: 2, hands: 3 }), /above the normal maximum/);
   assert.throws(() => t.setBigBet('bank', { limit: 500, per: 0, hands: 3 }), /at least 1 big bet/);
   assert.throws(() => t.setBigBet('bank', { limit: 500, per: 2, hands: 0 }), /at least 1/);
   ok(t.settings.bigBet === null, 'still off after bad input'); }
 
+// On by default: up to 2 x the max bet, following the max bet until the dealer types an amount.
+{ const t = Object.assign(new G.Table({ maxBet: 75 }), {}); const b = t.settings.bigBet;
+  ok(b && b.auto && b.limit === 150 && b.per === 2 && b.hands === 10, 'on by default at 2 x max bet: ' + JSON.stringify(b));
+  t.join('bank', 'Bank'); t.sitDealer('bank'); t.setDealerMax('bank', 100, 10); ok(t.settings.bigBet.limit === 200, 'follows the max bet (100 -> 200)');
+  t.setBigBet('bank', { limit: 450, per: 2, hands: 10 }); ok(!t.settings.bigBet.auto, 'a typed amount stays');
+  t.setDealerMax('bank', 120, 10); ok(t.settings.bigBet.limit === 450, 'and no longer follows the max bet'); }
 // Without the feature, a bet over the maximum is refused even with the big flag.
 { const t = mk(); ok(/Maximum bet is 75/.test(tryBet(t, 'a', 200, true)), 'off: over max refused'); }
 

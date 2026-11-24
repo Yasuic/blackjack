@@ -39,7 +39,7 @@ export const DEFAULT_SETTINGS = {
   shuffleEvery: 5,       // or reshuffle every N rounds
   shuffle8: true,        // also a fresh shuffle every 8 rounds (the dealer can turn it off)
   startChips: 1000,
-  minBet: 10,
+  minBet: 5,
   maxBet: 75,
   maxSideBet: 10,
   dealerHitsSoft17: false,
@@ -59,7 +59,7 @@ export const DEFAULT_SETTINGS = {
   turnTimer: 30,
   peekCost: 10,          // price to see the next card in the shoe
   sideBets: ['hot3', 'bustIt', 'twentyOnePlus3'], // side bets offered at this table
-  bigBet: null,          // 'Big Bets Sometimes': { limit, per, hands, since } or null when off         // seconds per decision before the dealer stands for you (0 = off)
+  bigBet: { limit: 150, per: 2, hands: 10, since: 0, auto: true }, // 'Big Bets Sometimes', on by default: { limit, per, hands, since, auto } or null when off. auto: the limit follows 2 x the max bet until the dealer types one         // seconds per decision before the dealer stands for you (0 = off)
 };
 
 // ---------- Side bets ----------
@@ -338,6 +338,7 @@ export function evalBustIt(dealerCards) {
 export class Table {
   constructor(settings = {}) {
     this.settings = charlieFix({ ...DEFAULT_SETTINGS, ...settings }, settings);
+    if (this.settings.bigBet?.auto) this.settings.bigBet = { ...this.settings.bigBet, limit: 2 * this.settings.maxBet };
     this.settings.seats = seatCount(this.settings.seats);
     this.seats = Array(this.settings.seats).fill(null);
     this.players = {}; // clientId -> { name, chips, seat, connected }
@@ -557,7 +558,8 @@ export class Table {
     if (limit > 1e9) throw new Error('That big bet amount is too large.');
     // A fresh window starts from the hand being bet on now, and everyone's used count goes back to zero.
     for (const q of Object.values(this.players)) { q.bigUsed = 0; q.bigWin = 0; }
-    this.settings = { ...this.settings, bigBet: { limit, per, hands, since: this.bigHand() } };
+    const auto = cfg.auto !== undefined ? !!cfg.auto : limit === 2 * this.settings.maxBet; // typed a different amount: it stays put from now on
+    this.settings = { ...this.settings, bigBet: { limit, per, hands, since: this.bigHand(), auto } };
     this.addLog(`${name}, the dealer, set Big Bets Sometimes: up to ${per} bet${per === 1 ? '' : 's'} of ${limit} each, every ${hands} hand${hands === 1 ? '' : 's'}.`);
     this.ev('big bets on', clientId, `${per} x ${limit} / ${hands}`);
   }
@@ -569,6 +571,7 @@ export class Table {
   // logged and shown to the table before the next deal.
   setRules(clientId, r = {}) {
     if (this.banker ? this.banker !== clientId : this.hostId && this.hostId !== clientId) throw new Error('Only the dealer changes the rules.');
+    if (this.inRound()) { cleanRules(r, this.settings); this.rulesNext = { id: clientId, r: { ...(this.rulesNext?.r || {}), ...r } }; this.addLog('New rules saved. They apply from the next hand.'); return 'next'; }
     if (this.phase !== 'betting' && this.phase !== 'settled') throw new Error('Change the rules between rounds.');
     const ch = cleanRules(r, this.settings);
     if (!Object.keys(ch).length) return;
@@ -636,24 +639,17 @@ export class Table {
   // checked first, so a bad number changes nothing. Only what differs from the table is applied.
   dealerSave(clientId, c = {}) {
     if (this.banker !== clientId) throw new Error('Only the dealer changes these.');
-    if (this.phase !== 'betting' && this.phase !== 'settled') throw new Error('Change these between rounds.');
-    const s = this.settings, num = (v, d) => (v === undefined || v === null || v === '' ? d : Math.round(Number(v)));
-    const min = num(c.min, s.minBet), max = num(c.max, s.maxBet), side = num(c.side, s.maxSideBet);
-    if (!(min >= 1)) throw new Error('The minimum bet has to be at least 1.');
-    if (!(max >= min)) throw new Error(`The maximum bet cannot be below the minimum bet of ${min}.`);
-    if (!(side >= 0)) throw new Error('The maximum side bet cannot be below 0.');
-    if (min > 1e9 || max > 1e9 || side > 1e9) throw new Error('That amount is too large.');
-    const big = c.big && c.big.on ? { limit: num(c.big.limit, 0), per: num(c.big.per, 0), hands: num(c.big.hands, 0) } : null;
-    if (big) {
-      if (!(big.limit > max)) throw new Error(`The big bet amount has to be above the maximum bet of ${max}.`);
-      if (!(big.per >= 1) || !(big.hands >= 1)) throw new Error('Big bets each and Every need at least 1.');
-      if (big.limit > 1e9) throw new Error('That big bet amount is too large.');
+    // Saved while a hand is in play: checked now, applied as soon as that hand is settled (never mid hand).
+    if (this.inRound()) {
+      this.dealerCheck(c);
+      this.dealerNext = { id: clientId, c };
+      this.addLog(`${this.players[clientId].name}, the dealer, saved new settings. They apply from the next hand.`);
+      return 'next';
     }
-    const capAmt = c.cap ? num(c.cap.amount, null) : null;
-    if (c.cap && capAmt !== null && (!(capAmt >= 1) || capAmt > 1e9)) throw new Error('Pick a loss of at least 1.');
+    if (this.phase !== 'betting' && this.phase !== 'settled') throw new Error('Change these between rounds.');
+    const { min, max, side, big, capAmt } = this.dealerCheck(c), s = this.settings;
     if (min !== s.minBet) { this.settings = { ...this.settings, minBet: min }; this.addLog(`${this.players[clientId].name}, the dealer, set the minimum bet to ${min}.`); }
     if (max !== s.maxBet || side !== s.maxSideBet) this.setDealerMax(clientId, max, side);
-    if (c.rules) cleanRules(c.rules, s); // checked before anything changes
     if (c.rules) this.setRules(clientId, c.rules);
     if (c.shuffle8 !== undefined && !!c.shuffle8 !== (this.settings.shuffle8 !== false)) this.setShuffle8(clientId, !!c.shuffle8);
     if (c.big !== undefined) {
@@ -666,6 +662,36 @@ export class Table {
       const k = this.lossCap;
       if (!!c.cap.on !== !!k.on || (capAmt !== null && capAmt !== this.capAmount())) this.setLossCap(clientId, !!c.cap.on, capAmt);
     }
+  }
+  // Settings saved during a hand, applied once it is settled. A dealer who left in between loses them.
+  applyNext() {
+    this.applyDealerNext();
+    const q = this.rulesNext; this.rulesNext = null;
+    if (q && (this.banker ? q.id === this.banker : q.id === this.hostId)) { try { this.setRules(q.id, q.r); } catch (e) { this.addLog(`The saved rules could not be applied: ${e.message}`); } }
+  }
+  applyDealerNext() {
+    const q = this.dealerNext; this.dealerNext = null;
+    if (q && q.id === this.banker) { try { this.dealerSave(q.id, q.c); } catch (e) { this.addLog(`The dealer's saved settings could not be applied: ${e.message}`); } }
+  }
+  // Every value of a dealer Save checked, nothing changed. Throws on the first bad one.
+  dealerCheck(c) {
+    const s = this.settings, num = (v, d) => (v === undefined || v === null || v === '' ? d : Math.round(Number(v)));
+    const min = num(c.min, s.minBet), max = num(c.max, s.maxBet), side = num(c.side, s.maxSideBet);
+    if (!(min >= 1)) throw new Error('The minimum bet has to be at least 1.');
+    if (!(max >= min)) throw new Error(`The maximum bet cannot be below the minimum bet of ${min}.`);
+    if (!(side >= 0)) throw new Error('The maximum side bet cannot be below 0.');
+    if (min > 1e9 || max > 1e9 || side > 1e9) throw new Error('That amount is too large.');
+    const big = c.big && c.big.on ? { limit: num(c.big.limit, 0), per: num(c.big.per, 0), hands: num(c.big.hands, 0) } : null;
+    if (big && s.bigBet?.auto && big.limit === s.bigBet.limit) big.limit = 2 * max; // the default amount left as it was keeps following the max bet
+    if (big) {
+      if (!(big.limit > max)) throw new Error(`The big bet amount has to be above the maximum bet of ${max}.`);
+      if (!(big.per >= 1) || !(big.hands >= 1)) throw new Error('Big bets each and Every need at least 1.');
+      if (big.limit > 1e9) throw new Error('That big bet amount is too large.');
+    }
+    const capAmt = c.cap ? num(c.cap.amount, null) : null;
+    if (c.cap && capAmt !== null && (!(capAmt >= 1) || capAmt > 1e9)) throw new Error('Pick a loss of at least 1.');
+    if (c.rules) cleanRules(c.rules, s);
+    return { min, max, side, big, capAmt };
   }
 
   setDealerMax(clientId, amount, sideAmount) {
@@ -687,7 +713,8 @@ export class Table {
       seat.bet = { ...seat.bet, main: Math.min(seat.bet.main, seat.bet.big && this.settings.bigBet ? this.settings.bigBet.limit : max), sides };
     }
     const name = this.players[clientId].name;
-    // A big bet has to be above the normal maximum. If the new maximum reaches it, big bets are switched off.
+    // The default big bet amount follows the max bet (2 x). A typed one stays; if the new maximum reaches it, big bets are switched off.
+    if (this.settings.bigBet?.auto) this.settings = { ...this.settings, bigBet: { ...this.settings.bigBet, limit: 2 * max } };
     if (this.settings.bigBet && max >= this.settings.bigBet.limit) {
       this.settings = { ...this.settings, bigBet: null };
       for (const seat of this.seats) if (seat && !seat.hands.length && seat.bet.big) seat.bet = { ...seat.bet, big: false, main: Math.min(seat.bet.main, max) };
@@ -1254,6 +1281,7 @@ export class Table {
     if (this.phase !== 'settled' && this.phase !== 'betting') return;
     this.phase = 'betting';
     this.ledgerHold = null;
+    this.applyNext();
     this.pickCharlie();
     this.dealer = { cards: [], revealed: false };
     this.turn = null;
@@ -1847,6 +1875,7 @@ export class Table {
       phase: this.phase,
       round: this.round,
       charlieRound: !!this.charlieRound,
+      settingsNext: !!(this.dealerNext || this.rulesNext), // saved during the hand, applied after it
       rulesNote: this.rulesNote ? Object.keys(this.rulesNote).filter((k) => RULE_TEXT[k]).map((k) => RULE_TEXT[k](this.rulesNote[k])) : null,
       unseated: this.unseated || null,
       turn: this.turn,

@@ -41,8 +41,8 @@ const who = (t) => t.seats.map((s) => (s ? s.playerId : '-')).join('');
   t.proposeSettings('h', { seats: 3 }); t.castVote('a', false); t.castVote('b', false); ok(!t.vote && t.seats.length === 2, 'two no: the seat vote fails');
   t.proposeSettings('h', { seats: 3 }); t.castVote('a', true); t.castVote('b', true); t.castVote('c', true); const id = t.vote?.id;
   ok(!t.vote && t.seats.length === 3, 'enough yes before time runs out');
-  t.proposeSettings('h', { minBet: 5 }); ok(t.vote && t.vote.need === 4, 'other settings still need everyone');
-  t.castVote('a', false); ok(!t.vote && t.settings.minBet !== 5, 'one no ends other votes');
+  t.proposeSettings('h', { minBet: 7 }); ok(t.vote && t.vote.need === 4, 'other settings still need everyone');
+  t.castVote('a', false); ok(!t.vote && t.settings.minBet !== 7, 'one no ends other votes');
   const u = new Table({}); u.join('h', 'h', 1000); u.join('x', 'x', 1000); u.players.x.connected = true; u.sit('x', 0);
   u.proposeSettings('h', { seats: 1 }); ok(!u.vote && u.seats.length === 1, 'only one other player: the seat change goes through at once');
 }
