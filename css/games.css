@@ -818,3 +818,4 @@ body:not(.room3d) .ro-result, .pfelt.tall .ro-result { display: none; }
 @media (max-width: 700px) { .ld-w { display: none; } .ld-btn { font-size: 11px; padding: 3px 7px; flex-shrink: 0; } }
 @media (max-width: 700px) { body.in-room .topbar .ld-btn { flex-shrink: 0; overflow: visible; } }
 @media (max-width: 430px) { #host-run .hr-t { display: none; } }
+.chat-line time { font-size: 10px; opacity: .55; margin-right: 6px; font-variant-numeric: tabular-nums; }

@@ -18,6 +18,7 @@ export const DEFAULT_SETTINGS = {
   dealerHitsSoft17: false,
   blackjackPays: 1.5,    // 3:2
   allowSurrender: true,
+  charlie: true,         // Five Card Charlie: five cards without busting win at once, paid 1 to 1
   autoDeal: true,        // deal as soon as every seated player is ready
   betTimer: 30,          // seconds for betting before the dealer deals on its own (0 = off)
   turnTimer: 30,
@@ -468,6 +469,7 @@ export class Table {
     if (s.shuffleMode !== 'rounds') s.shuffleMode = 'penetration';
     s.shuffle8 = s.shuffle8 !== false;
     for (const k of ['dealerHitsSoft17', 'allowSurrender', 'autoDeal']) s[k] = !!s[k];
+    s.charlie = s.charlie !== false;
     // There is no Deal or Stand for a slow player button: a round always starts and every move always ends on its own.
     if (!s.betTimer) s.autoDeal = true;
     if (!s.turnTimer) s.turnTimer = 30;
@@ -1514,6 +1516,8 @@ export class Table {
       h.cards.push(this.draw(at));
       const t = handTotal(h.cards).total;
       if (t >= 21) h.done = true;
+      // Five Card Charlie: a fifth card without busting wins at once, and the hand takes no more cards.
+      if (this.settings.charlie !== false && h.cards.length === 5 && t <= 21) { h.charlie = true; h.done = true; }
     } else if (a === 'stand') {
       h.done = true;
     } else if (a === 'double') {
@@ -1604,7 +1608,7 @@ export class Table {
   // The dealer draws one card at a time so players can watch. Returns true while more cards are needed.
   dealerNeedsCard() {
     if (this.phase !== 'dealer') return false;
-    const anyLive = this.seats.some((s) => s && s.hands.some((h) => !h.surrendered && handTotal(h.cards).total <= 21 && !isBlackjack(h)));
+    const anyLive = this.seats.some((s) => s && s.hands.some((h) => !h.surrendered && !h.charlie && handTotal(h.cards).total <= 21 && !isBlackjack(h)));
     const anyBustBet = this.seats.some((s) => s && s.hands.length && s.bet.sides.bustIt);
     if (!anyLive && !anyBustBet) return false;
     const { total, soft } = handTotal(this.dealer.cards);
@@ -1638,6 +1642,7 @@ export class Table {
         if (h.surrendered) { h.result = 'Surrender'; pay = h.bet / 2; }
         else if (t > 21) { h.result = 'Bust'; }
         else if (isBlackjack(h) && !dealerBJ) { h.result = 'Blackjack'; pay = h.bet + h.bet * this.settings.blackjackPays; }
+        else if (h.charlie && !dealerBJ) { h.result = '5 Card Charlie'; pay = h.bet * 2; }
         else if (dealerBJ) { h.result = isBlackjack(h) ? 'Push' : 'Lose'; pay = isBlackjack(h) ? h.bet : 0; }
         else if (dealerBust || t > d) { h.result = 'Win'; pay = h.bet * 2; }
         else if (t === d) { h.result = 'Push'; pay = h.bet; }

@@ -1,18 +1,18 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { startPresence } from './presence.js?v=20261124b';
-import { outerLink } from './shell.js?v=20261124b';
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe, destName, stepOf } from './game.js?v=20261124b';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261124b';
-import { bestMove, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261124b';
-import { tickSound, winSound } from './fx.js?v=20261124b';
-import * as HX from './history.js?v=20261124b';
-import { webglOK, initRoom, COLLEAGUES } from './room3d.js?v=20261124b';
-import { COPY_BTN, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261124b';
-import { topToolsHTML, initTopTools, setProfit, setPractice, setRisk, cardScale, profitLineHTML, ledgerTitle } from './toptools.js?v=20261124b';
-import { statsHTML } from './pstats.js?v=20261124b';
-import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261124b';
+import { startPresence } from './presence.js?v=20261124c';
+import { outerLink } from './shell.js?v=20261124c';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe, destName, stepOf } from './game.js?v=20261124c';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261124c';
+import { bestMove, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261124c';
+import { tickSound, winSound } from './fx.js?v=20261124c';
+import * as HX from './history.js?v=20261124c';
+import { webglOK, initRoom, COLLEAGUES } from './room3d.js?v=20261124c';
+import { COPY_BTN, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261124c';
+import { topToolsHTML, initTopTools, setProfit, setPractice, setRisk, cardScale, profitLineHTML, ledgerTitle } from './toptools.js?v=20261124c';
+import { statsHTML } from './pstats.js?v=20261124c';
+import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261124c';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -599,6 +599,7 @@ function onHostMessage(conn, msg) {
     if (msg.carry && typeof msg.carry === 'object') { try { S.table.carryIn(id, msg.carry.amount, msg.carry.from, msg.carry.cid); } catch { /* not at this table */ } }
     hostChanged();
     if (S.snapSent) { try { conn.send(snapMsg(conn)); } catch {} }
+    restoreChat();
     if (S.chat?.length) { try { conn.send({ t: 'chat-log', list: S.chat.slice(-40) }); } catch {} }
     try { conn.send({ t: 'voice-list', list: voiceList() }); } catch {}
     return;
@@ -1146,7 +1147,7 @@ function wireGuestConn(conn) {
     else if (msg.t === 'say') toast(String(msg.msg || '').slice(0, 200));
     else if (msg.t === 'chat') gotChat(msg);
     else if (msg.t === 'voice-list') gotVoiceList(msg.list);
-    else if (msg.t === 'chat-log') { if (Array.isArray(msg.list) && !S.chat?.length) { S.chat = []; msg.list.slice(-40).forEach((m) => gotChat(m, true)); } }
+    else if (msg.t === 'chat-log') { if (Array.isArray(msg.list)) { restoreChat(); mergeChat(msg.list.slice(-40)); saveChat(); if (S.chatOpen) drawChat(); } }
     else if (msg.t === 'ask-out') showAsk(msg);
     else if (msg.t === 'note') showNote(msg);
     else if (msg.t === 'fx' && msg.kind === 'hurry') showHurry(msg);
@@ -2176,6 +2177,9 @@ function seatLayout(n, c, { W, H, phone, flip, round, noFocus, in3d }) {
   const pct = (v, of) => Math.round((v / of) * 10000) / 100;
   if (phone) return phoneLayout(n, c, { W, H, flip, noFocus, pct, in3d });
   const B = SEAT_BOX.desk, rad = Math.PI / 180;
+  // With no big seat of your own the arc is mirrored round the table's middle: an even count has the middle
+  // between two seats, so both sides always hold the same number of seats.
+  if (noFocus) c = (n - 1) / 2;
   const K = Math.max(c, n - 1 - c, 1);
   const step = Math.min(24, 60 / K); // degrees between two seats
   const cy = B.top, Ry = H - B.bottom - cy;
@@ -2670,18 +2674,44 @@ function relayChat(from, msg) {
   for (const c of Object.values(S.conns || {})) { if (c?.open) { try { c.send(out); } catch {} } }
   gotChat(out);
 }
+// The chat of a table is kept in this browser too, so a reload (also an automatic update) keeps it.
+const chatKey = () => (S.code ? 'bj-chat:' + S.code : '');
+function restoreChat() {
+  const k = chatKey();
+  if (!k || S.chatFrom === k) return;
+  S.chatFrom = k;
+  let saved = [];
+  try { saved = JSON.parse(safeGet(k) || '[]'); } catch { saved = []; }
+  if (Array.isArray(saved)) mergeChat(saved);
+}
+function mergeChat(list) {
+  S.chat ||= [];
+  const seen = new Set(S.chat.map((m) => `${m.at}|${m.id}|${m.text}`));
+  for (const m of list) {
+    const x = { id: String(m?.id || ''), name: String(m?.name || 'Someone').slice(0, 16), text: String(m?.text || '').slice(0, 200), at: Number(m?.at) || 0 };
+    if (!x.text || seen.has(`${x.at}|${x.id}|${x.text}`)) continue;
+    seen.add(`${x.at}|${x.id}|${x.text}`); S.chat.push(x);
+  }
+  S.chat.sort((a, b) => a.at - b.at);
+  if (S.chat.length > 100) S.chat.splice(0, S.chat.length - 100);
+}
+function saveChat() { const k = chatKey(); if (k) safeSet(k, JSON.stringify((S.chat || []).slice(-100))); }
 function gotChat(m, old = false) {
+  restoreChat();
   S.chat ||= [];
   S.chat.push({ id: String(m.id || ''), name: String(m.name || 'Someone').slice(0, 16), text: String(m.text || '').slice(0, 200), at: Number(m.at) || Date.now() });
   if (S.chat.length > 100) S.chat.splice(0, S.chat.length - 100);
+  saveChat();
   if (old) return;
   if (S.chatOpen) drawChat();
   else if (m.id !== S.myId) { S.chatUnread = (S.chatUnread || 0) + 1; chatPeek(S.chat[S.chat.length - 1]); if (S.state) drawSitOut(S.state); }
 }
-const chatLine = (m) => `<div class="chat-line ${m.id === S.myId ? 'mine' : ''}"><b>${esc(m.name)}</b> ${esc(m.text)}</div>`;
+const chatTime = (at) => (at ? new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '');
+const chatLine = (m) => `<div class="chat-line ${m.id === S.myId ? 'mine' : ''}"><time>${chatTime(m.at)}</time><b>${esc(m.name)}</b> ${esc(m.text)}</div>`;
 function drawChat() {
   const list = $('#chat-list');
   if (!list) return;
+  restoreChat();
   list.innerHTML = (S.chat || []).map(chatLine).join('') || '<div class="chat-empty">Say hello to the table.</div>';
   list.scrollTop = list.scrollHeight;
 }
@@ -3076,6 +3106,7 @@ function renderSettings(st) {
     ${fold('set-rules', '📏 Rules', `<div class="settings-grid">
       <label class="check full"><input id="set-h17" type="checkbox" ${s.dealerHitsSoft17 ? 'checked' : ''} ${dis} /> Dealer hits soft 17</label>
       <label class="check full"><input id="set-sur" type="checkbox" ${s.allowSurrender ? 'checked' : ''} ${dis} /> Allow surrender (get half your bet back)</label>
+      <label class="check full"><input id="set-charlie" type="checkbox" ${s.charlie !== false ? 'checked' : ''} ${dis} /> 5 Card Charlie (five cards without busting win)</label>
       <button class="btn full" data-act="h-strip" ${dis}>Reset to Las Vegas Strip rules</button>
     </div>`, true)}
     ${fold('set-sides', '🎲 Side bets offered', `<div class="settings-grid">
@@ -3113,6 +3144,7 @@ const SETTING_NAMES = {
   startChips: ['Starting chips', money], minBet: ['Min bet', money], // the max bets are the dealer's alone, set in the dealer row
   dealerHitsSoft17: ['Dealer', (v) => (v ? 'hits soft 17' : 'stands on all 17s')],
   allowSurrender: ['Surrender', (v) => (v ? 'allowed' : 'not allowed')],
+  charlie: ['5 Card Charlie', (v) => (v ? 'on' : 'off')],
   autoDeal: ['Deal when all ready', (v) => (v ? 'on' : 'off')],
   betTimer: ['Betting time', (v) => (v ? v + 's' : 'off')], turnTimer: ['Time per move', (v) => (v ? v + 's' : 'off')],
   blackjackPays: ['Blackjack pays', (v) => (v === 1.5 ? '3 to 2' : v + ' to 1')],
@@ -3237,7 +3269,7 @@ function rulesHTML(st) {
       return `<div><h4>${sb.icon || ''} ${sb.name}</h4><p>${esc(sb.about)}</p><table>${sb.table.map(([l, m]) => `<tr><td>${esc(l)}</td><td>${m} to 1</td></tr>`).join('')}</table></div>`;
     }).join('')}
     <div><h4>Insurance</h4><p>Offered when the dealer shows an ace. Costs half your main bet.</p><table><tr><td>Dealer has blackjack</td><td>2 to 1</td></tr></table></div>
-    <div><h4>Main game</h4><p>Blackjack pays 3 to 2. Double on any first two cards, also after a split. Split every pair, with no limit on the number of hands; split aces get one card each, and an ace that gets another ace can be split again. Surrender gives back half your bet when the host allows it.</p><p>Chips are whole. With an odd bet, a win or a refund is rounded down and insurance is rounded up. A blackjack on 25 pays 37, and insurance on 25 costs 13.</p></div>
+    <div><h4>Main game</h4><p>Blackjack pays 3 to 2. Double on any first two cards, also after a split. Split every pair, with no limit on the number of hands; split aces get one card each, and an ace that gets another ace can be split again. Surrender gives back half your bet when the host allows it.</p>${st.settings.charlie !== false ? '<p>5 Card Charlie: a hand that reaches five cards without busting wins at once, paid 1 to 1, and takes no more cards. A dealer blackjack found at the start still beats every hand.</p>' : ''}<p>Chips are whole. With an odd bet, a win or a refund is rounded down and insurance is rounded up. A blackjack on 25 pays 37, and insurance on 25 costs 13.</p></div>
   </div>`;
 }
 
@@ -3543,7 +3575,7 @@ function runAct(el) {
       proposeSettings({
         seats, decks, shuffleMode: 'penetration', penetration: Number(v('set-pen')),
         startChips: Number(v('set-start')), ...($('#set-min') ? { minBet: Number(v('set-min')) } : {}),
-        dealerHitsSoft17: $('#set-h17').checked, allowSurrender: $('#set-sur').checked, autoDeal: $('#set-auto').checked,
+        dealerHitsSoft17: $('#set-h17').checked, allowSurrender: $('#set-sur').checked, charlie: $('#set-charlie').checked, autoDeal: $('#set-auto').checked,
         betTimer: Number(v('set-bettimer')), turnTimer: Number(v('set-turntimer')),
         sideBets: [...document.querySelectorAll('[data-sidebet]')].filter((x) => x.checked).map((x) => x.dataset.sidebet),
       });
