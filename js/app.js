@@ -1,19 +1,19 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { startPresence } from './presence.js?v=20261124m';
-import { outerLink } from './shell.js?v=20261124m';
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe, destName, stepOf, RULE_TEXT, DEFAULT_SETTINGS, CASINO_RULES } from './game.js?v=20261124m';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261124m';
-import { bestMove, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261124m';
-import { tickSound, winSound } from './fx.js?v=20261124m';
-import * as HX from './history.js?v=20261124m';
-import { webglOK, initRoom, COLLEAGUES } from './room3d.js?v=20261124m';
-import { COPY_BTN, onElsewhere, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261124m';
-import { topToolsHTML, initTopTools, setProfit, setPractice, setRisk, cardScale, profitLineHTML, ledgerTitle } from './toptools.js?v=20261124m';
-import { statsHTML } from './pstats.js?v=20261124m';
-import { betLogAdd, betLogHTML, bjEntry } from './betlog.js?v=20261124m';
-import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261124m';
+import { startPresence } from './presence.js?v=20261124n';
+import { outerLink } from './shell.js?v=20261124n';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe, destName, stepOf, RULE_TEXT, DEFAULT_SETTINGS, CASINO_RULES } from './game.js?v=20261124n';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261124n';
+import { bestMove, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261124n';
+import { tickSound, winSound } from './fx.js?v=20261124n';
+import * as HX from './history.js?v=20261124n';
+import { webglOK, initRoom, COLLEAGUES } from './room3d.js?v=20261124n';
+import { COPY_BTN, onElsewhere, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261124n';
+import { topToolsHTML, initTopTools, setProfit, setPractice, setRisk, cardScale, profitLineHTML, ledgerTitle } from './toptools.js?v=20261124n';
+import { statsHTML } from './pstats.js?v=20261124n';
+import { betLogAdd, betLogHTML, bjEntry } from './betlog.js?v=20261124n';
+import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261124n';
 
 // The dealer's edge for the rules at this table, in % of each bet, for players who use basic strategy. An estimate:
 // 0.30% for 8 decks, dealer stands on soft 17, 3 to 2, surrender, double any two and after a split, split and
