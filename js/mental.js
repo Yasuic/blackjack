@@ -6,7 +6,7 @@
 // The locks are multiplications on the elliptic curve secp256k1: a card is a point P, a lock is a secret
 // number a, the locked card is a·P. Locks can be put on and taken off in any order (a·(b·P) = b·(a·P)),
 // and taking a lock off is multiplying by the inverse of a. Without the number, a·P says nothing about P.
-import { SUITS, RANKS, sha256 } from './game.js?v=20261124p';
+import { SUITS, RANKS, sha256 } from './game.js?v=20261124q';
 
 const P = 2n ** 256n - 2n ** 32n - 977n;
 const N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n;
