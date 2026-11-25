@@ -1,19 +1,19 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { startPresence } from './presence.js?v=20261124r';
-import { outerLink } from './shell.js?v=20261124r';
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe, destName, stepOf, RULE_TEXT, DEFAULT_SETTINGS, CASINO_RULES } from './game.js?v=20261124r';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261124r';
-import { bestMove, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261124r';
-import { tickSound, winSound } from './fx.js?v=20261124r';
-import * as HX from './history.js?v=20261124r';
-import { webglOK, initRoom, COLLEAGUES } from './room3d.js?v=20261124r';
-import { COPY_BTN, onElsewhere, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261124r';
-import { topToolsHTML, initTopTools, setProfit, setPractice, setRisk, cardScale, profitLineHTML, ledgerTitle } from './toptools.js?v=20261124r';
-import { statsHTML } from './pstats.js?v=20261124r';
-import { betLogAdd, betLogHTML, bjEntry } from './betlog.js?v=20261124r';
-import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261124r';
+import { startPresence } from './presence.js?v=20261124s';
+import { outerLink } from './shell.js?v=20261124s';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe, destName, stepOf, RULE_TEXT, DEFAULT_SETTINGS, CASINO_RULES } from './game.js?v=20261124s';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261124s';
+import { bestMove, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261124s';
+import { tickSound, winSound } from './fx.js?v=20261124s';
+import * as HX from './history.js?v=20261124s';
+import { webglOK, initRoom, COLLEAGUES } from './room3d.js?v=20261124s';
+import { COPY_BTN, onElsewhere, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261124s';
+import { topToolsHTML, initTopTools, setProfit, setPractice, setRisk, cardScale, profitLineHTML, ledgerTitle } from './toptools.js?v=20261124s';
+import { statsHTML } from './pstats.js?v=20261124s';
+import { betLogAdd, betLogHTML, bjEntry } from './betlog.js?v=20261124s';
+import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261124s';
 
 // The dealer's edge for the rules at this table, in % of each bet, for players who use basic strategy. An estimate:
 // 0.30% for 8 decks, dealer stands on soft 17, 3 to 2, surrender, double any two and after a split, split and
@@ -45,6 +45,7 @@ const ROOM_PREFIX = 'bjt-';
 // so the new host never has to wait for the old host's address to be released.
 const hostAddr = (g) => ROOM_PREFIX + S.code + (g > 0 ? '-' + g : '');
 const CHIPS = [1, 5, 25, 100, 500];
+const HOST_GONE = 20000; // the host is silent this long: the dealer takes the table over (or anyone may, when the host was the dealer)
 const HOST_WAIT = 30000; // how long the players wait for a host who dropped before one of them takes the table
 const VOTE_SECONDS = 12; // short, so one player away from the screen does not hold the table up for long
 
@@ -392,6 +393,12 @@ setInterval(() => {
 }, 15000);
 // "Become host" from the menu or the connection notice: the host's browser hands the table over, or, when the
 // host's browser is gone, this browser takes the table at once. The table never changes host on its own.
+// The table as last seen, when its host is a player who is gone: who deals (a player who is not the host), or null.
+function hostGone(st) {
+  if (!st || S.role !== 'player' || S.kicked || !S.snap) return null;
+  const b = st.banker;
+  return { dealer: b && b.id !== st.hostId ? b : null };
+}
 function askBecomeHost() {
   if (S.role !== 'player') return;
   if (S.taking) { toast('Taking over as host…'); return; }
@@ -1881,6 +1888,24 @@ function render(note) {
   if (S.role !== 'host') {
     if (S.online) S.offSince = 0; else S.offSince ||= Date.now();
     const stuck = !S.online && Date.now() - S.offSince > 6000;
+    // The host is gone: a countdown for everyone. Then a player dealer takes the table over by itself; when the
+    // host was the dealer (or nobody deals), everyone gets a Take over button.
+    const hg = hostGone(st), left = Math.max(0, Math.ceil((S.offSince + HOST_GONE - Date.now()) / 1000));
+    if (stuck && hg && S.why !== 'net') {
+      const line = hg.dealer ? (left ? `${hg.dealer.id === S.myId ? 'You' : esc(hg.dealer.name)} (the dealer) ${hg.dealer.id === S.myId ? 'become' : 'becomes'} the host in ${left} s.` : `${hg.dealer.id === S.myId ? 'You are' : esc(hg.dealer.name) + ' is'} taking over as host…`)
+        : left ? `Anyone can take over as host in ${left} s.` : 'Anyone can take over as host now.';
+      const key = 'gone:' + line;
+      let box = $('#offline-note');
+      if (box && box.dataset.line !== key) { box.remove(); box = null; }
+      if (!box) {
+        box = document.createElement('div'); box.id = 'offline-note'; box.className = 'offline-note'; box.dataset.why = 'gone'; box.dataset.line = key;
+        box.innerHTML = `<b>The host is away.</b><div class="hg-line">${line}</div>${!hg.dealer && !left ? '<button class="btn gold" data-act="force-host">👑 Take over as host</button>' : ''}<a class="btn" href="${location.pathname}">Start a new table</a>`;
+        document.body.appendChild(box);
+      }
+      if (hg.dealer?.id === S.myId && !left && !S.taking && !S.goneTried) { S.goneTried = true; maybeTakeOver(true); }
+    }
+    if (S.online) S.goneTried = false;
+    if (stuck && hg && S.why !== 'net') { /* the countdown note above is shown */ } else {
     let box = $('#offline-note');
     if (box && box.dataset.why !== (S.why || '')) { box.remove(); box = null; }
     if (box && stuck) { const n = box.querySelector('.link-note'); if (n) n.outerHTML = linkNote() || '<small class="link-note"></small>'; }
@@ -1893,7 +1918,8 @@ function render(note) {
       box.innerHTML = `<b>${why[0]}</b><div>${why[1]}</div>${mine === S.code ? `<a class="btn gold" href="${location.pathname}?host=${encodeURIComponent(S.code)}">I am the host: reopen my table</a>` : ''}${S.why === 'nohost' && S.role === 'player' && S.state ? '<button class="btn gold" data-act="become-host">👑 Become host</button>' : ''}<a class="btn" href="${location.pathname}">Start a new table</a>`;
       document.body.appendChild(box);
     } else if (!stuck && box) box.remove();
-    if (!S.online && !S.offTick) S.offTick = setInterval(() => { if (S.online) { clearInterval(S.offTick); S.offTick = null; } render(); }, 2000);
+    }
+    if (!S.online && !S.offTick) S.offTick = setInterval(() => { if (S.online) { clearInterval(S.offTick); S.offTick = null; } render(); }, 1000);
   }
   if (!st) {
     setHTML($('#felt'), `<div class="center-msg">${esc(note || 'Connecting to the table...')}</div>`);
@@ -4380,3 +4406,10 @@ S.live = startPresence({ game: 'blackjack', room: () => S.room, code: () => S.co
 
 // "Connection dropped" notice and blocked buttons while this browser has no link to the table (common.js showDropped).
 setInterval(() => showDropped(S.role === 'player' && !S.online && !!S.state && !S.kicked, 'Your moves are not being sent. The table waits for the host. If the host is gone, you can take over.', askBecomeHost), 400);
+// The host away note sits outside the table's page area, so its buttons get their own listener.
+document.addEventListener('click', (e) => {
+  const el = e.target.closest('#offline-note [data-act]');
+  if (!el || S.role !== 'player') return;
+  if (el.dataset.act === 'force-host' && !S.taking) { toast('Taking the table over…'); maybeTakeOver(true); }
+  else if (el.dataset.act === 'become-host') askBecomeHost();
+});
