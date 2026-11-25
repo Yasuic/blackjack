@@ -1,19 +1,19 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { startPresence } from './presence.js?v=20261124s';
-import { outerLink } from './shell.js?v=20261124s';
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe, destName, stepOf, RULE_TEXT, DEFAULT_SETTINGS, CASINO_RULES } from './game.js?v=20261124s';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261124s';
-import { bestMove, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261124s';
-import { tickSound, winSound } from './fx.js?v=20261124s';
-import * as HX from './history.js?v=20261124s';
-import { webglOK, initRoom, COLLEAGUES } from './room3d.js?v=20261124s';
-import { COPY_BTN, onElsewhere, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261124s';
-import { topToolsHTML, initTopTools, setProfit, setPractice, setRisk, cardScale, profitLineHTML, ledgerTitle } from './toptools.js?v=20261124s';
-import { statsHTML } from './pstats.js?v=20261124s';
-import { betLogAdd, betLogHTML, bjEntry } from './betlog.js?v=20261124s';
-import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261124s';
+import { startPresence } from './presence.js?v=20261124t';
+import { outerLink } from './shell.js?v=20261124t';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe, destName, stepOf, RULE_TEXT, DEFAULT_SETTINGS, CASINO_RULES } from './game.js?v=20261124t';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261124t';
+import { bestMove, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261124t';
+import { tickSound, winSound } from './fx.js?v=20261124t';
+import * as HX from './history.js?v=20261124t';
+import { webglOK, initRoom, COLLEAGUES } from './room3d.js?v=20261124t';
+import { COPY_BTN, onElsewhere, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261124t';
+import { topToolsHTML, initTopTools, setProfit, setPractice, setRisk, cardScale, profitLineHTML, ledgerTitle } from './toptools.js?v=20261124t';
+import { statsHTML } from './pstats.js?v=20261124t';
+import { betLogAdd, betLogHTML, bjEntry } from './betlog.js?v=20261124t';
+import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261124t';
 
 // The dealer's edge for the rules at this table, in % of each bet, for players who use basic strategy. An estimate:
 // 0.30% for 8 decks, dealer stands on soft 17, 3 to 2, surrender, double any two and after a split, split and
@@ -658,9 +658,14 @@ function onHostMessage(conn, msg) {
   // cards of the shoe and the shuffle secret are not part of a round and are never sent.
   if (msg.t === 'hist-get') {
     const now = Date.now();
-    if (now - (conn.histAt || 0) < 800) return;
+    if (now - (conn.histAt || 0) < 150) return;
     conn.histAt = now;
-    hostRounds().then((all) => { try { conn.send({ t: 'hist', n: (S.table.hist || []).length, total: all.length, rounds: all.slice(-80).map(({ events, table, backed, ...r }) => r) }); } catch {} });
+    // Only the rounds the player does not have yet (after round 'since'), 200 at a time, oldest first.
+    const since = Number.isInteger(msg.since) && msg.since >= 0 ? msg.since : 0;
+    hostRounds().then((all) => {
+      const newer = all.filter((r) => r.round > since), page = newer.slice(0, 200);
+      try { conn.send({ t: 'hist', since, total: all.length, more: newer.length > page.length, rounds: page.map(({ events, table, backed, ...r }) => r) }); } catch {}
+    });
     return;
   }
   fresh(movePlanFor(msg, conn.clientId), () => runAction(conn.clientId, msg, (err) => conn.open && conn.send({ t: 'error', msg: err, bet: msg.t === 'bet' })), msg.t === 'action' && msg.pre ? { ...msg.pre, by: conn.clientId } : null);
@@ -1187,7 +1192,7 @@ function wireGuestConn(conn) {
     if (msg.t === 'ping') { try { conn.send({ t: 'pong' }); } catch {} return; }
     if (msg.t === 'state') { setState(msg.state); render(); setTimerFromState(msg.state); checkDealt(msg.state); }
     else if (msg.t === 'error') { toast(msg.msg); if (msg.bet) dropPend(); }
-    else if (msg.t === 'hist') { S.guestHist = Array.isArray(msg.rounds) ? msg.rounds : []; S.guestHistTotal = msg.total || S.guestHist.length; drawHistPanel(true); if ($('#modal')?.open && $('#hist-list')) showHistory(); }
+    else if (msg.t === 'hist') { gotHist(msg); drawHistPanel(true); if ($('#modal')?.open && $('#hist-list')) showHistory(); }
     else if (msg.t === 'snap') { S.snap = String(msg.snap || '').slice(0, 400000); if (Number.isInteger(msg.gen) && msg.gen >= 0 && msg.gen < 100000) S.gen = msg.gen; }
     else if (msg.t === 'say') toast(String(msg.msg || '').slice(0, 200));
     else if (msg.t === 'chat') gotChat(msg);
@@ -1685,11 +1690,29 @@ function histHTML(list) {
 // Finished rounds for the hand history. The host reads its own store; a player asks the host once per new round.
 async function allRounds() {
   if (S.role === 'host') return hostRounds();
-  const n = S.state?.histN;
-  if (S.guestHistN !== n) { S.guestHistN = n; send({ t: 'hist-get' }); }
+  // Asked again whenever a round ends (the round number moves on; the table's own list stops growing at 300).
+  const n = S.state ? S.state.histN + '|' + S.state.round + '|' + S.code : null;
+  if (S.guestHistN !== n) { S.guestHistN = n; askHist(); }
   return S.guestHist || [];
 }
+// A player keeps every round of the table it has seen (from round 1), and asks only for the newer ones.
+function askHist() {
+  if (S.guestHistCode !== S.code) { S.guestHistCode = S.code; S.guestHist = []; }
+  const have = S.guestHist || [];
+  send({ t: 'hist-get', since: have.length ? have[have.length - 1].round : 0 });
+}
+function gotHist(msg) {
+  if (!Array.isArray(msg.rounds)) return;
+  const by = new Map((S.guestHist || []).map((r) => [r.round, r]));
+  for (const r of msg.rounds) if (r && Number.isInteger(r.round)) by.set(r.round, r);
+  S.guestHist = [...by.values()].sort((a, b) => a.round - b.round).slice(-5000);
+  S.guestHistTotal = Math.max(msg.total || 0, S.guestHist.length);
+  if (msg.more) setTimeout(askHist, 200);
+}
 async function hostRounds(id = S.table.created?.id) {
+  // A browser that took the table over from another host has only the table's last 300 rounds: the rounds the
+  // earlier hosts saved come from the online backup, once, into this browser's database.
+  if (id && id === S.table.created?.id && !(S.pulled ||= {})[id]) { S.pulled[id] = true; try { const old = await HX.fetchBackup(id); if (old.length) await HX.saveRounds(id, old.map((r) => ({ ...r, backed: true }))); } catch { S.pulled[id] = false; } }
   let list = id ? await HX.getRounds(id) : [];
   if (id === S.table.created?.id) { const have = new Set(list.map((r) => r.round)); list = list.concat((S.table.hist || []).filter((r) => !have.has(r.round))).sort((a, b) => a.round - b.round); }
   return list;

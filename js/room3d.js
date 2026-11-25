@@ -217,7 +217,7 @@ function buildOffice(signText, midShift = 0, midScale = 1, skipRoom = null, live
     chrome: mk({ color: '#b9bec4', roughness: 0.25, metalness: 0.9 }),
     screen: mk({ color: '#0d0f12', roughness: 0.25, metalness: 0.2 }),
     // What the office screens show: the ARC Group logo, from the photo of it, lit like a screen that is on.
-    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261124s'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
+    logo: (() => { const t = new THREE.TextureLoader().load('img/arc-screen.png?v=20261124t'); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return new THREE.MeshBasicMaterial({ map: t }); })(),
     dark: mk({ color: '#30353c', roughness: 0.6 }),
   };
   const group = new THREE.Group();
@@ -1005,7 +1005,7 @@ function buildStorefront() {
     lamp: lam('#c8161d', 0.6), bulb: lit('#ffe9a8'), red: lit('#c8161d'), gold: lit('#f4c542'), wood: lam('#7a5234', 0.35),
     glass: new THREE.MeshBasicMaterial({ color: '#dff3f7', transparent: true, opacity: 0.13, depthWrite: false }),
     awning: new THREE.MeshBasicMaterial({ map: canvasTexture(512, 64, (g, w, h) => { for (let i = 0; i < 16; i++) { g.fillStyle = i % 2 ? '#fff6e6' : '#f08a1c'; g.fillRect((i * w) / 16, 0, w / 16 + 1, h); } }), side: THREE.DoubleSide }),
-    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261124s') }),
+    sign: new THREE.MeshBasicMaterial({ map: tex('img/siumei-sign.png?v=20261124t') }),
     menu: new THREE.MeshBasicMaterial({ map: canvasTexture(256, 384, (g, w, h) => {
       g.fillStyle = '#c8161d'; g.fillRect(0, 0, w, h); g.fillStyle = '#f4c542'; g.fillRect(14, 14, w - 28, 44);
       const r = rng(11); g.fillStyle = '#fff3d6';
@@ -2365,13 +2365,28 @@ export function initRoom(container, feltEl, { phone, hud = null, size = null, ga
   function lookYaw(L) { office.localToWorld(lv.set(L.s.x, 0, L.s.z)); office.localToWorld(lw.set(L.s.x + L.s.fx, 0, L.s.z + L.s.fz)); return Math.atan2(lw.x - lv.x, lw.z - lv.z); }
   const pitchOf = (L) => Math.max(-0.5, Math.min(0.7, -L.s.p * 0.8));
   function dropLive(id) { const L = live.get(id); if (!L) return; if (L.fig) { gesturing.delete(L.fig); liveGroup.remove(L.fig); disposeTree(L.fig); } live.delete(id); }
+  // Office numbers (scene X = -plan x, Z = -plan y): a place on another table of the office moves out to its edge.
+  function offTables(v) {
+    for (const g of Object.keys(OTHER_TABLES)) {
+      if (g === game) continue;
+      const T = OTHER_TABLES[g], cx = -T.x, cz = -T.y, m = 0.45;
+      if (T.r) { const dx = v.x - cx, dz = v.z - cz, d = Math.hypot(dx, dz) || 1, min = T.r + m; if (d < min) { v.x = cx + (dx / d) * min; v.z = cz + (dz / d) * min; } continue; }
+      const hx = T.w / 2 + m, hz = T.d / 2 + m, dx = v.x - cx, dz = v.z - cz;
+      if (Math.abs(dx) >= hx || Math.abs(dz) >= hz) continue;
+      if (hx - Math.abs(dx) < hz - Math.abs(dz)) v.x = cx + Math.sign(dx || 1) * hx; else v.z = cz + Math.sign(dz || 1) * hz;
+    }
+    return v;
+  }
   function liveStep(now, dt) {
     let moved = false;
     for (const [id, L] of live) {
       if (now - L.rx > LIVE_MS) { dropLive(id); moved = true; continue; }
       if (!L.s.at) {
         if (!L.fig) { L.fig = makeFigure({ id, name: L.s.n, look: L.s.l }, true); L.fig.scale.setScalar(U); liveGroup.add(L.fig); L.pos = null; moved = true; }
-        office.localToWorld(lv.set(L.s.x, 0, L.s.z)); lv.y = 0;
+        lv.set(L.s.x, 0, L.s.z); offTables(lv);
+        office.localToWorld(lv); lv.y = 0;
+        // A person never stands on this table's felt either (an older page may still send a place over it).
+        { const dx = lv.x - CENTRE.x, dz = lv.z - CENTRE.z, d = Math.hypot(dx, dz) || 1, min = Math.max(W, H) / 2 + RAIL + 0.45 * S; if (d < min) { lv.x = CENTRE.x + (dx / d) * min; lv.z = CENTRE.z + (dz / d) * min; } }
         if (!L.pos) { L.pos = lv.clone(); L.yaw = lookYaw(L); }
         const bx = L.pos.x, bz = L.pos.z;
         L.pos.lerp(lv, 1 - Math.exp(-dt * 9));
@@ -2445,7 +2460,7 @@ export function initRoom(container, feltEl, { phone, hud = null, size = null, ga
     // Walking round, the body never stands on the felt either.
     { const dx = pP.x - CENTRE.x, dz = pP.z - CENTRE.z, d = Math.hypot(dx, dz) || 1, min = Math.max(W, H) / 2 + RAIL + 0.45 * S; if (d < min) { pP.x = CENTRE.x + (dx / d) * min; pP.z = CENTRE.z + (dz / d) * min; } }
     pQ.copy(pP).addScaledVector(pD, S);
-    office.worldToLocal(pP); office.worldToLocal(pQ);
+    office.worldToLocal(pP); office.worldToLocal(pQ); offTables(pP);
     const fx = pQ.x - pP.x, fz = pQ.z - pP.z, l = Math.hypot(fx, fz) || 1;
     return { x: pP.x, z: pP.z, fx: fx / l, fz: fz / l, p: Math.asin(Math.max(-1, Math.min(1, pD.y))), free };
   }

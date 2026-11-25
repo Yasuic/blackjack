@@ -1,19 +1,19 @@
 // The poker page: a Texas Hold'em table for up to 9 in the big meeting room. The host's browser runs
 // the table (js/poker.js); every other browser sends its moves there and is told only what it may see.
-import { startPresence } from './presence.js?v=20261124s';
-import { outerLink } from './shell.js?v=20261124s';
-import { PokerTable, POKER_SEATS, pokerDeck, cardText, mpClientMoves, mpMine, mpCheck, bestHand, bestOmaha } from './poker.js?v=20261124s';
-import { plainDeck, shufflePass, lockPass, checkDeck, keyFor } from './mental.js?v=20261124s';
-import { sha256 } from './game.js?v=20261124s';
-import { botMove, isBot, BOT_NAMES } from './pokerbot.js?v=20261124s';
-import { chipSound, cardSound, hitSound, standSound, potSound, tickSound, turnSound, punchSound } from './fx.js?v=20261124s';
-import { webglOK, initRoom } from './room3d.js?v=20261124s';
-import { statsHTML as ledgerStatsHTML } from './pstats.js?v=20261124s';
-import { betLogAdd, betLogHTML, pokerEntry } from './betlog.js?v=20261124s';
-import { topToolsHTML, initTopTools, setProfit, setRisk, cardScale, profitLineHTML, ledgerTitle } from './toptools.js?v=20261124s';
-import { COPY_BTN, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML } from './common.js?v=20261124s';
+import { startPresence } from './presence.js?v=20261124t';
+import { outerLink } from './shell.js?v=20261124t';
+import { PokerTable, POKER_SEATS, pokerDeck, cardText, mpClientMoves, mpMine, mpCheck, bestHand, bestOmaha } from './poker.js?v=20261124t';
+import { plainDeck, shufflePass, lockPass, checkDeck, keyFor } from './mental.js?v=20261124t';
+import { sha256 } from './game.js?v=20261124t';
+import { botMove, isBot, BOT_NAMES } from './pokerbot.js?v=20261124t';
+import { chipSound, cardSound, hitSound, standSound, potSound, tickSound, turnSound, punchSound } from './fx.js?v=20261124t';
+import { webglOK, initRoom } from './room3d.js?v=20261124t';
+import { statsHTML as ledgerStatsHTML } from './pstats.js?v=20261124t';
+import { betLogAdd, betLogHTML, pokerEntry } from './betlog.js?v=20261124t';
+import { topToolsHTML, initTopTools, setProfit, setRisk, cardScale, profitLineHTML, ledgerTitle } from './toptools.js?v=20261124t';
+import { COPY_BTN, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML } from './common.js?v=20261124t';
 
-import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261124s';
+import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261124t';
 const PREFIX = 'bjt-pk-';
 // A settings change by vote (js/vote.js): any player at the table may ask, every other player at the table who is online has to say yes.
 const VOTE = {
