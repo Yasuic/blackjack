@@ -1,19 +1,19 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { startPresence } from './presence.js?v=20261124o';
-import { outerLink } from './shell.js?v=20261124o';
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe, destName, stepOf, RULE_TEXT, DEFAULT_SETTINGS, CASINO_RULES } from './game.js?v=20261124o';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261124o';
-import { bestMove, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261124o';
-import { tickSound, winSound } from './fx.js?v=20261124o';
-import * as HX from './history.js?v=20261124o';
-import { webglOK, initRoom, COLLEAGUES } from './room3d.js?v=20261124o';
-import { COPY_BTN, onElsewhere, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261124o';
-import { topToolsHTML, initTopTools, setProfit, setPractice, setRisk, cardScale, profitLineHTML, ledgerTitle } from './toptools.js?v=20261124o';
-import { statsHTML } from './pstats.js?v=20261124o';
-import { betLogAdd, betLogHTML, bjEntry } from './betlog.js?v=20261124o';
-import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261124o';
+import { startPresence } from './presence.js?v=20261124p';
+import { outerLink } from './shell.js?v=20261124p';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe, destName, stepOf, RULE_TEXT, DEFAULT_SETTINGS, CASINO_RULES } from './game.js?v=20261124p';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261124p';
+import { bestMove, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261124p';
+import { tickSound, winSound } from './fx.js?v=20261124p';
+import * as HX from './history.js?v=20261124p';
+import { webglOK, initRoom, COLLEAGUES } from './room3d.js?v=20261124p';
+import { COPY_BTN, onElsewhere, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261124p';
+import { topToolsHTML, initTopTools, setProfit, setPractice, setRisk, cardScale, profitLineHTML, ledgerTitle } from './toptools.js?v=20261124p';
+import { statsHTML } from './pstats.js?v=20261124p';
+import { betLogAdd, betLogHTML, bjEntry } from './betlog.js?v=20261124p';
+import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261124p';
 
 // The dealer's edge for the rules at this table, in % of each bet, for players who use basic strategy. An estimate:
 // 0.30% for 8 decks, dealer stands on soft 17, 3 to 2, surrender, double any two and after a split, split and
@@ -2154,7 +2154,9 @@ function inFlight(keys) { return S.dealing && keys.some((k) => (S.cardAt.get(k) 
 
 function runDealQueue() {
   document.querySelectorAll('.card.pending[data-key]').forEach((el) => {
-    if (el._queued) return;
+    // The 3D room draws copies of the felt above the picture (room3d.js syncTop): their cards follow the felt's own
+    // cards and must not be dealt a second time (that played every card's flight and sound twice).
+    if (el._queued || el.closest('.felt-cards, .felt-top')) return;
     el._queued = true;
     (S.dealQ ||= []).push(el);
   });
@@ -3757,7 +3759,8 @@ document.addEventListener('keydown', (e) => {
   else if (e.key === ' ' || e.code === 'Space' || (e.key === 'Enter' && !e.target.closest('button, a, [tabindex]'))) {
     e.preventDefault();
     if (st.noDealer) toast('The cards wait for a dealer.');
-    else if (seat.bet.main >= st.settings.minBet && !seat.ready) placeBet(seat.bet, true);
+    // Every seat of mine with a bet goes in at once, as the Deal me in button does.
+    else if ((myInfo(st).me?.seats || []).some((i) => st.seats[i] && !st.seats[i].out && !st.seats[i].ready && st.seats[i].bet.main >= st.settings.minBet)) runAct({ dataset: { act: 'ready' }, disabled: false });
     else if (!seat.bet.main) toast('Place a bet first. Press R to type one, or B to rebet.');
     else if (seat.bet.main < st.settings.minBet) toast(`Table minimum is ${money(st.settings.minBet)}.`);
   }

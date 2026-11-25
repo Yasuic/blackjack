@@ -1,7 +1,7 @@
 // Blackjack table logic. Runs only in the host's browser (the "dealer").
 // Everything here is plain JavaScript with no browser APIs, so it can be tested in Node.
 
-import { runSeries } from './pstatcore.js?v=20261124o';
+import { runSeries } from './pstatcore.js?v=20261124p';
 export const SUITS = ['♠', '♥', '♦', '♣'];
 export const RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
 

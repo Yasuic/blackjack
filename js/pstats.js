@@ -2,7 +2,7 @@
 // top loss of one round, max up and max drawdown, and a running total chart with one line per player (hover a
 // point to read each player's exact total after that round). Blackjack builds the numbers from its recorded hands
 // (Table.playerStats); poker, baccarat and roulette add each settled round with pstatAdd.
-import { esc, money } from './common.js?v=20261124o';
+import { esc, money } from './common.js?v=20261124p';
 
 export const STAT_COLORS = ['#f2c14e', '#4fc3f7', '#81c784', '#e57373', '#ba68c8', '#ffb74d', '#4db6ac', '#f06292', '#aed581', '#90a4ae'];
 export function statsHTML(ps) {
