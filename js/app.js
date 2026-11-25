@@ -1,19 +1,19 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { startPresence } from './presence.js?v=20261124n';
-import { outerLink } from './shell.js?v=20261124n';
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe, destName, stepOf, RULE_TEXT, DEFAULT_SETTINGS, CASINO_RULES } from './game.js?v=20261124n';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261124n';
-import { bestMove, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261124n';
-import { tickSound, winSound } from './fx.js?v=20261124n';
-import * as HX from './history.js?v=20261124n';
-import { webglOK, initRoom, COLLEAGUES } from './room3d.js?v=20261124n';
-import { COPY_BTN, onElsewhere, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261124n';
-import { topToolsHTML, initTopTools, setProfit, setPractice, setRisk, cardScale, profitLineHTML, ledgerTitle } from './toptools.js?v=20261124n';
-import { statsHTML } from './pstats.js?v=20261124n';
-import { betLogAdd, betLogHTML, bjEntry } from './betlog.js?v=20261124n';
-import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261124n';
+import { startPresence } from './presence.js?v=20261124o';
+import { outerLink } from './shell.js?v=20261124o';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe, destName, stepOf, RULE_TEXT, DEFAULT_SETTINGS, CASINO_RULES } from './game.js?v=20261124o';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261124o';
+import { bestMove, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261124o';
+import { tickSound, winSound } from './fx.js?v=20261124o';
+import * as HX from './history.js?v=20261124o';
+import { webglOK, initRoom, COLLEAGUES } from './room3d.js?v=20261124o';
+import { COPY_BTN, onElsewhere, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261124o';
+import { topToolsHTML, initTopTools, setProfit, setPractice, setRisk, cardScale, profitLineHTML, ledgerTitle } from './toptools.js?v=20261124o';
+import { statsHTML } from './pstats.js?v=20261124o';
+import { betLogAdd, betLogHTML, bjEntry } from './betlog.js?v=20261124o';
+import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261124o';
 
 // The dealer's edge for the rules at this table, in % of each bet, for players who use basic strategy. An estimate:
 // 0.30% for 8 decks, dealer stands on soft 17, 3 to 2, surrender, double any two and after a split, split and
@@ -2970,15 +2970,15 @@ function toggleVoicePanel(on = !$('#voice-panel')) {
   drawVoice();
 }
 
-// While a round is played: "Leave after this round" for a player with a hand, "Stop dealing after this round" for the dealer.
-// A second press calls it off.
+// While a round is played: "Leave after this round" for a player with a hand. A second press calls it off.
+// The dealer has one button for this: Leave dealer seat under the dealer panel.
 function leaveLaterHTML(st) {
   if (!['insurance', 'playing', 'dealer'].includes(st.phase)) return '';
-  const me = st.players.find((p) => p.id === S.myId), isB = st.banker?.id === S.myId;
-  if (!me || (!isB && !(me.seats || []).some((i) => st.seats[i]?.hands?.length))) return '';
-  const on = isB ? !!st.bankerLeaving : !!me.leaving;
-  const text = isB ? (on ? '✋ Stopping: tap to keep dealing' : '✋ Stop dealing after this round') : (on ? '🚪 Leaving: tap to stay' : '🚪 Leave after this round');
-  return `<button class="chat-btn leave-later ${on ? 'on' : ''}" data-act="leave-later" data-on="${on ? 1 : 0}" title="${isB ? 'You stay the dealer until this round is paid, then the dealer seat is free.' : 'You play this round to the end, then your seats are free.'}">${text}</button>`;
+  const me = st.players.find((p) => p.id === S.myId);
+  if (!me || st.banker?.id === S.myId || !(me.seats || []).some((i) => st.seats[i]?.hands?.length)) return '';
+  const on = !!me.leaving;
+  const text = on ? '🚪 Leaving: tap to stay' : '🚪 Leave after this round';
+  return `<button class="chat-btn leave-later ${on ? 'on' : ''}" data-act="leave-later" data-on="${on ? 1 : 0}" title="You play this round to the end, then your seats are free.">${text}</button>`;
 }
 function drawSitOut(st) {
   let el = $('#sitout-bar');
@@ -3583,7 +3583,13 @@ function runAct(el) {
     case 'dealer-casino': S.dealerDraft = { ...(S.dealerDraft || {}), ...casinoRules() }; render(); break;
     case 'dealer-defaults': S.dealerDraft = { ...(S.dealerDraft || {}), ...dealerDefaults() }; render(); break;
     case 'dealer-open': S.dealerOpen = !dealerOpen(); safeSet('bj-dpanel', S.dealerOpen ? '1' : '0'); render(); break;
-    case 'leave-dealer': send({ t: 'leave-dealer' }); break;
+    case 'leave-dealer': { // during a round it marks the dealer to leave once the round is paid; a second tap calls it off
+      const st = S.state;
+      if (st?.bankerLeaving) send({ t: 'leave-later', on: false });
+      else if (st && ['insurance', 'playing', 'dealer'].includes(st.phase)) send({ t: 'leave-later', on: true });
+      else send({ t: 'leave-dealer' });
+      break;
+    }
     case 'leave-later': send({ t: 'leave-later', on: el.dataset.on !== '1' }); break;
     case 'd-shuffle': send({ t: 'dealer-shuffle' }); toast(st.phase === 'betting' || st.phase === 'settled' ? 'The shoe was shuffled.' : 'The shoe will be shuffled before the next hand.'); break;
     case 'dealer-save': dealerSaveNow(st); break;
@@ -4191,7 +4197,7 @@ function dealerPanelHTML(st) {
       ${rulesSecHTML(st, v, 'dk')}
     </div>
     <div class="dp-foot">${missingSeats(st) ? `<button class="btn ghost dp-missing" data-act="unseat-missing" title="Frees every seat whose player is not here. A seat with a hand in play is freed when the hand ends.">Unseat missing (${missingSeats(st)})</button>` : ''}<button class="btn ghost dp-reset" data-act="dealer-defaults" ${Object.entries(dealerDefaults()).every(([k, x]) => String(v[k]) === String(x)) ? 'disabled' : ''} title="Fills in this game's own default settings and rules. Press Save to use them.">Our defaults</button><button class="btn ghost dp-reset" data-act="dealer-casino" ${Object.entries(casinoRules()).every(([k, x]) => String(v[k]) === String(x)) ? 'disabled' : ''} title="Fills in the usual casino rules: 3 to 2, dealer hits soft 17, split up to 4 hands, split aces once, no surrender, no 5 Card Charlie. Bets stay as they are. Press Save to use them.">Casino rules</button><button class="btn dp-save${dealerDirty(st) && !(S.dealerHeld && st.settingsNext) ? ' dirty' : ''}" data-act="dealer-save">Save</button>${st.settingsNext ? '<span class="dp-next">Saved. Applies from the next hand.</span>' : ''}${st.settings.decks !== 'csm' && (st.phase === 'betting' || st.phase === 'settled') ? '<button class="btn" data-act="d-shuffle">🔀 Shuffle now</button>' : ''}</div>` : ''}
-  </div><button class="dp-bar" data-act="leave-dealer">Leave dealer seat</button>`;
+  </div><button class="dp-bar${st.bankerLeaving ? ' on' : ''}" data-act="leave-dealer" title="${st.bankerLeaving ? 'You leave the dealer seat when this round is paid. Tap to keep dealing.' : 'Between rounds you leave at once. During a round you leave when it is paid.'}">${st.bankerLeaving ? 'Leaving after this round: tap to stay' : 'Leave dealer seat'}</button>`;
 }
 // ---------- Rules of play and the dealer's edge ----------
 // The table's rules in one line, as the Info panel and the host's settings show them.

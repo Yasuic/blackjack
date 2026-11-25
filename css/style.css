@@ -1751,6 +1751,7 @@ input[type=range].at-zero::-moz-range-thumb { background: #6b7280; }
 .dp-save { min-width: 120px; opacity: .55; }
 .dp-save.dirty { opacity: 1; background: #1f9d55; border-color: #49d17d; color: #fff; box-shadow: 0 0 0 2px rgba(73,209,125,.35), 0 0 16px rgba(73,209,125,.6); }
 .dp-bar:hover { filter: brightness(1.08); }
+.dp-bar.on { background: #3a2f12; color: #f2c14e; box-shadow: inset 0 0 0 2px #f2c14e; } /* marked to leave after this round */
 .dp-bar { display: block; border: 0; cursor: pointer; width: min(760px, 100%); margin: 8px auto 0; padding: 10px 14px; border-radius: 12px; background: #f2c14e; color: #1b1300; font: 800 17px Inter, system-ui, sans-serif; text-align: center; letter-spacing: .3px; }
 @media (max-width: 700px) {
   .dp-secs { grid-template-columns: 1fr; }

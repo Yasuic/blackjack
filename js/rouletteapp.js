@@ -1,17 +1,17 @@
 // The roulette page: a European roulette table for up to 9 in Nigel's room. The host's browser runs
 // the table (js/roulette.js); every other browser sends its bets there and is told only what it may see.
-import { startPresence } from './presence.js?v=20261124n';
-import { outerLink } from './shell.js?v=20261124n';
-import { RouTable, ROU_SEATS, WHEEL, colorOf, betNumbers, betName, betPays, verifySpin } from './roulette.js?v=20261124n';
-import { showSpin, drawWheel as paintWheel, wheelState } from './wheel.js?v=20261124n';
-import { winSound } from './fx.js?v=20261124n';
-import { webglOK, initRoom } from './room3d.js?v=20261124n';
-import { statsHTML } from './pstats.js?v=20261124n';
-import { betLogAdd, betLogHTML, bankEntry } from './betlog.js?v=20261124n';
-import { topToolsHTML, initTopTools, setProfit, setPractice, setRisk, bankRisk, cardScale, ledgerTitle } from './toptools.js?v=20261124n';
-import { onElsewhere, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML } from './common.js?v=20261124n';
+import { startPresence } from './presence.js?v=20261124o';
+import { outerLink } from './shell.js?v=20261124o';
+import { RouTable, ROU_SEATS, WHEEL, colorOf, betNumbers, betName, betPays, verifySpin } from './roulette.js?v=20261124o';
+import { showSpin, drawWheel as paintWheel, wheelState } from './wheel.js?v=20261124o';
+import { winSound } from './fx.js?v=20261124o';
+import { webglOK, initRoom } from './room3d.js?v=20261124o';
+import { statsHTML } from './pstats.js?v=20261124o';
+import { betLogAdd, betLogHTML, bankEntry } from './betlog.js?v=20261124o';
+import { topToolsHTML, initTopTools, setProfit, setPractice, setRisk, bankRisk, cardScale, ledgerTitle } from './toptools.js?v=20261124o';
+import { onElsewhere, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML } from './common.js?v=20261124o';
 
-import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261124n';
+import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261124o';
 const PREFIX = 'bjt-ro-';
 // A settings change by vote (js/vote.js): any player at the table may ask, every other player at the table who is online has to say yes.
 const VOTE = {
