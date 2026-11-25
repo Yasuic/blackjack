@@ -1,19 +1,19 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { startPresence } from './presence.js?v=20261124l';
-import { outerLink } from './shell.js?v=20261124l';
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe, destName, stepOf, RULE_TEXT, DEFAULT_SETTINGS, CASINO_RULES } from './game.js?v=20261124l';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261124l';
-import { bestMove, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261124l';
-import { tickSound, winSound } from './fx.js?v=20261124l';
-import * as HX from './history.js?v=20261124l';
-import { webglOK, initRoom, COLLEAGUES } from './room3d.js?v=20261124l';
-import { COPY_BTN, onElsewhere, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261124l';
-import { topToolsHTML, initTopTools, setProfit, setPractice, setRisk, cardScale, profitLineHTML, ledgerTitle } from './toptools.js?v=20261124l';
-import { statsHTML } from './pstats.js?v=20261124l';
-import { betLogAdd, betLogHTML, bjEntry } from './betlog.js?v=20261124l';
-import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261124l';
+import { startPresence } from './presence.js?v=20261124m';
+import { outerLink } from './shell.js?v=20261124m';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe, destName, stepOf, RULE_TEXT, DEFAULT_SETTINGS, CASINO_RULES } from './game.js?v=20261124m';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261124m';
+import { bestMove, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261124m';
+import { tickSound, winSound } from './fx.js?v=20261124m';
+import * as HX from './history.js?v=20261124m';
+import { webglOK, initRoom, COLLEAGUES } from './room3d.js?v=20261124m';
+import { COPY_BTN, onElsewhere, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261124m';
+import { topToolsHTML, initTopTools, setProfit, setPractice, setRisk, cardScale, profitLineHTML, ledgerTitle } from './toptools.js?v=20261124m';
+import { statsHTML } from './pstats.js?v=20261124m';
+import { betLogAdd, betLogHTML, bjEntry } from './betlog.js?v=20261124m';
+import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261124m';
 
 // The dealer's edge for the rules at this table, in % of each bet, for players who use basic strategy. An estimate:
 // 0.30% for 8 decks, dealer stands on soft 17, 3 to 2, surrender, double any two and after a split, split and
@@ -2421,7 +2421,7 @@ function feltHTML(st) {
   const dealerH = box.phone ? (box.H < 500 ? 96 : 112) : 152;
   const zoomSeat = S.zoomSeat != null && (spots[order.indexOf(S.zoomSeat)]?.mode === 'mini' || (spots[order.indexOf(S.zoomSeat)]?.mode === 'seat' && st.seats[S.zoomSeat]?.hands.length > 2)) && st.seats[S.zoomSeat] ? S.zoomSeat : null;
   return `
-    ${me ? `<div class="seat-pm" title="Seats at this table. Anyone here can add one, or take away an empty one. A seat left empty for 2 rounds goes by itself."><button class="spm-btn" data-act="seat-minus" aria-label="Take away an empty seat" ${st.seats.some((x) => !x) && st.seats.length > 1 ? '' : 'disabled'}>−</button><span>${st.seats.length} seat${st.seats.length > 1 ? 's' : ''}</span><button class="spm-btn" data-act="seat-plus" aria-label="Add a seat">+</button></div>` : ''}
+    ${me ? `<div class="seat-pm" title="Seats at this table. Anyone here can add one, or take away an empty one. A seat left empty for 2 rounds goes by itself."><button class="spm-btn" data-act="seat-minus" aria-label="Take away an empty seat" ${st.seats.some((x) => !x) && st.seats.length > 1 ? '' : 'disabled'}>−</button><span>${st.seats.length} seat${st.seats.length > 1 ? 's' : ''}</span><button class="spm-btn" data-act="seat-plus" aria-label="Add a seat" ${st.settings.seatCap?.on && st.seats.length >= st.settings.seatCap.max ? `disabled title="The dealer set at most ${st.settings.seatCap.max} seats"` : ''}>+</button></div>` : ''}
     <div class="shoe-box"><div class="shoe" id="shoe"><div class="shoe-cards"></div><div class="shoe-fill" style="--fill:${Math.round(100 * st.shoe.left / (st.shoe.size || 1))}%"></div></div><div class="shoe-info">${shoeTxt}</div></div>
     <div class="dealer" id="dealer-zone" style="--cw:${dcw}px">
       ${dealerSeat}
@@ -3249,6 +3249,7 @@ function hostPropose(by, patch) {
   if (!changes.length) return 'none';
   // Anyone at the table sets the number of seats, with no vote. It still waits for the round to end.
   if (changes.includes('seats') && !t.players[by]) throw new Error('Join the table first.');
+  if (changes.includes('seats') && t.settings.seatCap?.on && clean.seats > t.settings.seatCap.max) throw new Error(`The dealer set this table to at most ${t.settings.seatCap.max} seats.`);
   if (changes.includes('seats')) {
     t.addLog(`${t.players[by]?.name || 'A player'} set the table to ${clean.seats} seat${clean.seats > 1 ? 's' : ''}${t.inRound() ? ' (from the next round)' : ''}.`);
     t.applySettings({ seats: clean.seats });
@@ -4163,12 +4164,12 @@ document.addEventListener('change', (e) => {
 function dealerOpen() { return S.dealerOpen ?? (safeGet('bj-dpanel') ? safeGet('bj-dpanel') === '1' : innerWidth >= 700); }
 function dealerCur(st) {
   const s = st.settings, b = s.bigBet, c = st.lossCap || { on: true, amount: 30 * s.maxBet, lost: 0 };
-  return { min: s.minBet, max: s.maxBet, side: s.maxSideBet, shuffle8: s.shuffle8 !== false, ...rulesCur(s), bigOn: !!b, bigLimit: b?.limit ?? s.maxBet * 2, bigPer: b?.per ?? 2, bigHands: b?.hands ?? 10, capOn: !!c.on, capAmt: c.amount };
+  return { min: s.minBet, max: s.maxBet, side: s.maxSideBet, shuffle8: s.shuffle8 !== false, ...rulesCur(s), bigOn: !!b, bigLimit: b?.limit ?? s.maxBet * 2, bigPer: b?.per ?? 2, bigHands: b?.hands ?? 10, capOn: !!c.on, capAmt: c.amount, seatOn: !!s.seatCap?.on, seatMax: s.seatCap?.max ?? 15 };
 }
 // Every box of the dealer panel at the game's defaults (Reset to defaults fills these in; Save sends them).
 function dealerDefaults() {
   const d = DEFAULT_SETTINGS;
-  return { min: d.minBet, max: d.maxBet, side: d.maxSideBet, shuffle8: d.shuffle8 !== false, ...rulesCur(d), bigOn: !!d.bigBet, bigLimit: d.maxBet * 2, bigPer: d.bigBet?.per ?? 2, bigHands: d.bigBet?.hands ?? 10, capOn: true, capAmt: 30 * d.maxBet };
+  return { min: d.minBet, max: d.maxBet, side: d.maxSideBet, shuffle8: d.shuffle8 !== false, ...rulesCur(d), bigOn: !!d.bigBet, bigLimit: d.maxBet * 2, bigPer: d.bigBet?.per ?? 2, bigHands: d.bigBet?.hands ?? 10, capOn: true, capAmt: 30 * d.maxBet, seatOn: !!d.seatCap?.on, seatMax: d.seatCap?.max ?? 15 };
 }
 // The rule boxes at the usual casino rules (bets and the other boxes stay as they are).
 function casinoRules() { const { charlieN, ...r } = rulesCur(CASINO_RULES); void charlieN; return r; }
@@ -4186,7 +4187,7 @@ function dealerPanelHTML(st) {
     ${open ? `<div class="dp-secs">
       <section class="dp-sec"><h4>Normal bets</h4>${num('min', 'Min bet', 1)}${num('max', 'Max bet', 1)}${num('side', 'Max side bet')}${tick('shuffle8', 'Shuffle every 8 rounds')}</section>
       <section class="dp-sec"><h4>Big bets sometimes</h4>${tick('bigOn', 'On')}${num('bigLimit', 'Up to', 1)}${num('bigPer', 'Times', 1)}${num('bigHands', 'Every (hands)', 1)}</section>
-      <section class="dp-sec"><h4>Stop at loss</h4>${tick('capOn', 'On')}${num('capAmt', 'Loss', 1)}<span class="cap-lost">Lost ${money(st.lossCap?.lost || 0)}</span></section>
+      <section class="dp-sec"><h4>Stop at loss</h4>${tick('capOn', 'On')}${num('capAmt', 'Loss', 1)}<span class="cap-lost">Lost ${money(st.lossCap?.lost || 0)}</span><h4>Max seats</h4>${tick('seatOn', 'On')}${num('seatMax', 'Seats', 1)}</section>
       ${rulesSecHTML(st, v, 'dk')}
     </div>
     <div class="dp-foot">${missingSeats(st) ? `<button class="btn ghost dp-missing" data-act="unseat-missing" title="Frees every seat whose player is not here. A seat with a hand in play is freed when the hand ends.">Unseat missing (${missingSeats(st)})</button>` : ''}<button class="btn ghost dp-reset" data-act="dealer-defaults" ${Object.entries(dealerDefaults()).every(([k, x]) => String(v[k]) === String(x)) ? 'disabled' : ''} title="Fills in this game's own default settings and rules. Press Save to use them.">Our defaults</button><button class="btn ghost dp-reset" data-act="dealer-casino" ${Object.entries(casinoRules()).every(([k, x]) => String(v[k]) === String(x)) ? 'disabled' : ''} title="Fills in the usual casino rules: 3 to 2, dealer hits soft 17, split up to 4 hands, split aces once, no surrender, no 5 Card Charlie. Bets stay as they are. Press Save to use them.">Casino rules</button><button class="btn dp-save${dealerDirty(st) && !(S.dealerHeld && st.settingsNext) ? ' dirty' : ''}" data-act="dealer-save">Save</button>${st.settingsNext ? '<span class="dp-next">Saved. Applies from the next hand.</span>' : ''}${st.settings.decks !== 'csm' && (st.phase === 'betting' || st.phase === 'settled') ? '<button class="btn" data-act="d-shuffle">🔀 Shuffle now</button>' : ''}</div>` : ''}
@@ -4230,7 +4231,7 @@ function paintEdges(box, v, decks) {
 function dealerSaveNow(st) {
   if (!dealerDirty(st)) return;
   const v = dealerVals(st), n = (x) => Math.round(Number(x));
-  send({ t: 'dealer-save', cfg: { min: n(v.min), max: n(v.max), side: n(v.side), shuffle8: !!v.shuffle8, rules: rulesOut(v), big: { on: !!v.bigOn, limit: n(v.bigLimit), per: n(v.bigPer), hands: n(v.bigHands) }, cap: { on: !!v.capOn, amount: n(v.capAmt) } } });
+  send({ t: 'dealer-save', cfg: { min: n(v.min), max: n(v.max), side: n(v.side), shuffle8: !!v.shuffle8, rules: rulesOut(v), big: { on: !!v.bigOn, limit: n(v.bigLimit), per: n(v.bigPer), hands: n(v.bigHands) }, cap: { on: !!v.capOn, amount: n(v.capAmt) }, seatCap: { on: !!v.seatOn, max: n(v.seatMax) } } });
   // Saved during a hand: the table applies it once the hand is settled, so the form keeps the new values until then.
   if (['insurance', 'playing', 'dealer'].includes(st.phase)) S.dealerHeld = true; else S.dealerDraft = null;
   document.activeElement?.blur?.();

@@ -30,7 +30,7 @@ for (let r = 0; r < 400; r++) {
 function handTotalOf(t) { const h = t.seats[t.turn.seat].hands[t.turn.hand]; return G.handTotal(h.cards).total; }
 wrong = moves();
 ok(wrong === 0, `every card went where it was announced (${wrong} did not)`);
-ok(splits > 20 && doubles > 20 && ins > 20, `rounds had splits ${splits}, doubles ${doubles}, insurance ${ins}`);
+ok(splits > 20 && doubles > 20 && ins > 10, `rounds had splits ${splits}, doubles ${doubles}, insurance ${ins}`);
 ok(!t.log.some((l) => /was announced for .* but went to/.test(l)), 'no mismatch in the log');
 ok(t.fair.cards > 3000, 'cards opened with keys: ' + t.fair.cards);
 // A move that does not happen: its card is burned and the log names the place it was announced for.

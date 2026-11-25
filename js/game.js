@@ -1,7 +1,7 @@
 // Blackjack table logic. Runs only in the host's browser (the "dealer").
 // Everything here is plain JavaScript with no browser APIs, so it can be tested in Node.
 
-import { runSeries } from './pstatcore.js?v=20261124l';
+import { runSeries } from './pstatcore.js?v=20261124m';
 export const SUITS = ['♠', '♥', '♦', '♣'];
 export const RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
 
@@ -39,6 +39,7 @@ export const CASINO_RULES = { blackjackPays: 1.5, dealerHitsSoft17: true, allowS
 
 export const DEFAULT_SETTINGS = {
   seats: 7,              // player seats at the table (any whole number from 1 up)
+  seatCap: { on: false, max: 15 }, // the dealer's limit on seats: off by default; when on, + adds no seat past max
   decks: 1000,           // 1, 2, 6, 8, 20, 100, 1000, or 'csm' (randomized: full reshuffle before every round)
   shuffleMode: 'penetration', // 'penetration' or 'rounds'
   penetration: 65,       // reshuffle once this % of the shoe has been dealt
@@ -57,7 +58,7 @@ export const DEFAULT_SETTINGS = {
   maxSplits: 0,          // splits per seat: 1, 2 or 3, or 0 for no limit
   das: true,             // double after a split
   doubleOn: 'any',       // double on 'any' first two cards, or only on totals '9-11' or '10-11'
-  charlieEvery: 6,       // Five Card Charlie on about 1 random round in this many (0 = off). Each such round is
+  charlieEvery: 8,       // Five Card Charlie on about 1 random round in this many (0 = off). Each such round is
                          // announced while bets are open. Five cards without busting win at once, paid 1 to 1;
                          // a dealer blackjack still beats it. The dealer sets it: on every round it costs the dealer.
   autoDeal: true,        // deal as soon as every seated player is ready
@@ -653,7 +654,8 @@ export class Table {
       return 'next';
     }
     if (this.phase !== 'betting' && this.phase !== 'settled') throw new Error('Change these between rounds.');
-    const { min, max, side, big, capAmt } = this.dealerCheck(c), s = this.settings;
+    const { min, max, side, big, capAmt, seatCap } = this.dealerCheck(c), s = this.settings;
+    if (seatCap && (seatCap.on !== !!s.seatCap?.on || seatCap.max !== s.seatCap?.max)) this.setSeatCap(clientId, seatCap);
     if (min !== s.minBet) { this.settings = { ...this.settings, minBet: min }; this.addLog(`${this.players[clientId].name}, the dealer, set the minimum bet to ${min}.`); }
     if (max !== s.maxBet || side !== s.maxSideBet) this.setDealerMax(clientId, max, side);
     if (c.rules) this.setRules(clientId, c.rules);
@@ -697,7 +699,13 @@ export class Table {
     const capAmt = c.cap ? num(c.cap.amount, null) : null;
     if (c.cap && capAmt !== null && (!(capAmt >= 1) || capAmt > 1e9)) throw new Error('Pick a loss of at least 1.');
     if (c.rules) cleanRules(c.rules, s);
-    return { min, max, side, big, capAmt };
+    let seatCap = null;
+    if (c.seatCap) {
+      const m = num(c.seatCap.max, s.seatCap?.max ?? 15);
+      if (!(m >= 1) || m > 99) throw new Error('Max seats has to be between 1 and 99.');
+      seatCap = { on: !!c.seatCap.on, max: m };
+    }
+    return { min, max, side, big, capAmt, seatCap };
   }
 
   setDealerMax(clientId, amount, sideAmount) {
@@ -1326,10 +1334,27 @@ export class Table {
   }
   // One more seat or one fewer, by anyone at the table, with no vote. A seat is only taken away when one is empty:
   // the last empty one goes, and nobody moves.
+  // The dealer's limit on seats. Switched on: empty seats past the limit go at once (between rounds), taken
+  // seats stay, and + adds no seat while the table is at the limit.
+  setSeatCap(clientId, cap) {
+    this.settings = { ...this.settings, seatCap: { on: !!cap.on, max: cap.max } };
+    const name = this.players[clientId]?.name || 'The dealer';
+    if (!cap.on) { this.addLog(`${name}, the dealer, took the seat limit off.`); return; }
+    let cut = 0;
+    while (this.seats.length > cap.max) {
+      const i = this.seats.lastIndexOf(null);
+      if (i < 0) break;
+      this.seats.splice(i, 1); if (Array.isArray(this.emptyFor)) this.emptyFor.splice(i, 1); cut++;
+    }
+    if (cut) { this.settings.seats = this.seats.length; for (const q of Object.values(this.players)) this.fixSeat(q); }
+    this.addLog(`${name}, the dealer, set the table to at most ${cap.max} seat${cap.max > 1 ? 's' : ''}.${cut ? ` ${cut} empty seat${cut > 1 ? 's were' : ' was'} taken away.` : ''}`);
+  }
   changeSeats(clientId, delta) {
     const p = this.players[clientId];
     if (!p || p.kicked) throw new Error('Join the table first.');
     if (delta > 0) {
+      const cap = this.settings.seatCap;
+      if (cap?.on && this.seats.length >= cap.max) throw new Error(`The dealer set this table to at most ${cap.max} seats.`);
       this.seats.push(null); (this.emptyFor ||= []).push(0);
       this.settings.seats = this.seats.length;
       this.addLog(`${p.name} added a seat. The table has ${this.seats.length} seats.`);

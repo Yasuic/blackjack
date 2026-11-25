@@ -44,4 +44,18 @@ const round = (t) => {
   ok(t.seats[1]?.playerId === 'b' && t.seats[1].leaving, 'mid hand: seat kept until the hand ends');
   ok(t.changeSeats('a', -1) === 2, 'mid hand: the last seat, empty, may go');
 }
+{ // the dealer's seat limit: off by default; on, + stops at the limit and empty seats past it go
+  const t = new G.Table({ seats: 7 }); for (const id of 'dab') t.join(id, id.toUpperCase(), 500);
+  ok(t.settings.seatCap.on === false && t.settings.seatCap.max === 15, 'seat limit off by default, 15 when switched on');
+  t.sit('a', 0); t.sit('b', 5); t.sitDealer('d');
+  for (let i = 0; i < 10; i++) t.changeSeats('a', 1);
+  ok(t.seats.length === 17, 'no limit by default: 17 seats');
+  t.dealerSave('d', { seatCap: { on: true, max: 4 } });
+  ok(t.settings.seatCap.on && t.settings.seatCap.max === 4, 'limit on at 4');
+  ok(t.seats.length === 4 && t.seatsOf('a').length === 1 && t.seatsOf('b').length === 1, 'empty seats past the limit go, both players keep a seat: ' + t.seats.length);
+  let threw = ''; try { t.changeSeats('a', 1); } catch (e) { threw = e.message; } ok(/at most 4/.test(threw), '+ refused at the limit');
+  t.dealerSave('d', { seatCap: { on: false, max: 4 } }); ok(t.changeSeats('a', 1) === 5, 'limit off: + works again');
+  threw = ''; try { t.dealerSave('d', { seatCap: { on: true, max: 0 } }); } catch (e) { threw = e.message; } ok(/between 1 and 99/.test(threw), 'bad limit refused');
+  threw = ''; try { t.dealerSave('a', { seatCap: { on: true, max: 5 } }); } catch (e) { threw = e.message; } ok(/Only the dealer/.test(threw), 'only the dealer sets it');
+}
 console.log('seat + and −: ' + n + ' checks passed');
