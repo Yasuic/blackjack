@@ -1816,3 +1816,4 @@ body.room3d .room-css-top { z-index: 2; pointer-events: none !important; }
 .seat-pm .spm-btn { width: 28px; height: 28px; border-radius: 50%; border: 1px solid rgba(232,196,106,.55); background: rgba(232,196,106,.14); color: #f2d58a; font: 800 18px/1 Inter, system-ui, sans-serif; cursor: pointer; padding: 0; }
 .seat-pm .spm-btn:disabled { opacity: .35; cursor: default; }
 @media (max-width: 700px) { .felt > .seat-pm { top: 64px; right: 10px; font-size: 11px; } .felt.flip > .seat-pm { top: auto; bottom: 60px; } .seat-pm .spm-btn { width: 24px; height: 24px; font-size: 16px; } }
+.decide-title .auto-rebet { margin-left: 10px; vertical-align: middle; font-family: inherit; letter-spacing: 0; text-transform: none; font-size: 12px; padding: 3px 9px; text-shadow: none; }

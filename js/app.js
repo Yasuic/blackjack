@@ -1,19 +1,19 @@
 // Screens and networking. The host's browser runs the Table (js/game.js) and sends
 // each player a copy of what they are allowed to see. Players send their moves back.
 // Browsers talk to each other directly with PeerJS (WebRTC), so no game server is needed.
-import { startPresence } from './presence.js?v=20261124q';
-import { outerLink } from './shell.js?v=20261124q';
-import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe, destName, stepOf, RULE_TEXT, DEFAULT_SETTINGS, CASINO_RULES } from './game.js?v=20261124q';
-import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261124q';
-import { bestMove, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261124q';
-import { tickSound, winSound } from './fx.js?v=20261124q';
-import * as HX from './history.js?v=20261124q';
-import { webglOK, initRoom, COLLEAGUES } from './room3d.js?v=20261124q';
-import { COPY_BTN, onElsewhere, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261124q';
-import { topToolsHTML, initTopTools, setProfit, setPractice, setRisk, cardScale, profitLineHTML, ledgerTitle } from './toptools.js?v=20261124q';
-import { statsHTML } from './pstats.js?v=20261124q';
-import { betLogAdd, betLogHTML, bjEntry } from './betlog.js?v=20261124q';
-import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261124q';
+import { startPresence } from './presence.js?v=20261124r';
+import { outerLink } from './shell.js?v=20261124r';
+import { Table, SIDE_BETS, SIDE_KEYS, handTotal, sha256, unpackShoe, destName, stepOf, RULE_TEXT, DEFAULT_SETTINGS, CASINO_RULES } from './game.js?v=20261124r';
+import { hostRelay, guestRelay, relayWorks } from './relay.js?v=20261124r';
+import { bestMove, describeHand, MOVE_NAMES, handOdds } from './strategy.js?v=20261124r';
+import { tickSound, winSound } from './fx.js?v=20261124r';
+import * as HX from './history.js?v=20261124r';
+import { webglOK, initRoom, COLLEAGUES } from './room3d.js?v=20261124r';
+import { COPY_BTN, onElsewhere, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, watchOffice, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, showOffice } from './common.js?v=20261124r';
+import { topToolsHTML, initTopTools, setProfit, setPractice, setRisk, cardScale, profitLineHTML, ledgerTitle } from './toptools.js?v=20261124r';
+import { statsHTML } from './pstats.js?v=20261124r';
+import { betLogAdd, betLogHTML, bjEntry } from './betlog.js?v=20261124r';
+import { chipSound, cardSound, hitSound, standSound, throwSound, shoutSound, flyChip, stackHTML, chipClass, isMuted, setMuted } from './fx.js?v=20261124r';
 
 // The dealer's edge for the rules at this table, in % of each bet, for players who use basic strategy. An estimate:
 // 0.30% for 8 decks, dealer stands on soft 17, 3 to 2, surrender, double any two and after a split, split and
@@ -656,7 +656,7 @@ function onHostMessage(conn, msg) {
     hostRounds().then((all) => { try { conn.send({ t: 'hist', n: (S.table.hist || []).length, total: all.length, rounds: all.slice(-80).map(({ events, table, backed, ...r }) => r) }); } catch {} });
     return;
   }
-  fresh(movePlanFor(msg, conn.clientId), () => runAction(conn.clientId, msg, (err) => conn.open && conn.send({ t: 'error', msg: err, bet: msg.t === 'bet' })));
+  fresh(movePlanFor(msg, conn.clientId), () => runAction(conn.clientId, msg, (err) => conn.open && conn.send({ t: 'error', msg: err, bet: msg.t === 'bet' })), msg.t === 'action' && msg.pre ? { ...msg.pre, by: conn.clientId } : null);
 }
 
 // How long a player who dropped out may stay away before the dealer stands their hand. Their own
@@ -793,7 +793,8 @@ let freshChain = Promise.resolve();
 // planFn says where each card of the step goes, in draw order (see Table.dealPlan). fn runs once the keys are
 // here. Steps run one at a time, in order. Announce first, then reveal: the places go out with the key request
 // (and to everyone else at the table), and a guest gives a key only for the next card and its announced place.
-function fresh(planFn, fn) {
+// pre: the key the player who moves sent with the move ({ by, from, to, keys }), for the card that goes to their own hand.
+function fresh(planFn, fn, pre) {
   freshChain = freshChain.then(() => new Promise((res) => {
     const t = S.table;
     let plan = [];
@@ -818,6 +819,10 @@ function fresh(planFn, fn) {
     if (!holders.length) return run(local()); // nobody else is at the table
     const rid = newNonce(), parts = {};
     S.nonceWait ||= {};
+    // The player who moves gave the key for the next card with the move: it counts only for the same card and place.
+    const from = (t.fair?.cards || 0) + S.spareKeys.length + 1, to = plan.slice(S.spareKeys.length);
+    if (pre && holders.some((c) => c.clientId === pre.by) && pre.from === from && Array.isArray(pre.to) && pre.to.join() === to.join() && Array.isArray(pre.keys) && pre.keys.length === need) parts[pre.by] = pre.keys.map(cleanNonce);
+    const ask = holders.filter((c) => !parts[c.clientId]);
     const finish = () => {
       clearTimeout(timer); delete S.nonceWait[rid];
       const ids = Object.keys(parts).sort();
@@ -832,8 +837,9 @@ function fresh(planFn, fn) {
       parts[from] = (Array.isArray(keys) ? keys : []).slice(0, need).map(cleanNonce);
       if (holders.every((c) => parts[c.clientId])) finish();
     };
-    const msg = { t: 'key-req', rid, from: (t.fair?.cards || 0) + S.spareKeys.length + 1, count: need, to: plan.slice(S.spareKeys.length) };
-    holders.forEach((c) => c.send(msg));
+    const msg = { t: 'key-req', rid, from, count: need, to };
+    if (!ask.length) { const ann = { t: 'announce', from, to }; for (const c of Object.values(S.conns)) if (c?.open && c.clientId !== pre.by) { try { c.send(ann); } catch { /* gone */ } } return finish(); }
+    ask.forEach((c) => c.send(msg));
     // Everyone else at the table hears the same announcement (they give no keys).
     const ann = { t: 'announce', from: msg.from, to: msg.to };
     for (const c of Object.values(S.conns)) if (c?.open && !holders.includes(c)) { try { c.send(ann); } catch { /* gone */ } }
@@ -3039,7 +3045,17 @@ function seatTabsHTML(st) {
   return `<div class="seat-tabs">${me.seats.map((i) => { const x = st.seats[i]; const b = x ? betTotal(x.bet) : 0; return `<button class="seat-tab ${i === me.seat ? 'on' : ''}" data-act="pick-seat" data-seat="${i}" ${free ? '' : 'disabled'}>Seat ${i + 1}${free && b ? ` · ${money(b)}${x.ready ? ' ✓' : ''}` : ''}</button>`; }).join('')}</div>`;
 }
 function trayHTML(st) { const h = trayInner(st); return h ? seatTabsHTML(st) + h : h; }
+// During a hand the Auto rebet button stays in the tray while it is on, so it can be turned off before the next round.
+// Once turned off it stays in view for the rest of that hand, so a slip can be put back.
 function trayInner(st) {
+  const core = trayCore(st), { seat, isBanker } = myInfo(st);
+  const mid = ['insurance', 'playing', 'dealer'].includes(st.phase) || (st.phase === 'settled' && S.dealing);
+  if (!mid || !seat || isBanker || !(S.autoRebet || S.autoMid === st.round)) return core;
+  // My move: a small button at the end of the decision title, so the move buttons keep their room.
+  if (core.includes('<div class="decide-title">')) return core.replace(/(<div class="decide-title">[\s\S]*?)(<\/div>)/, (m, a, b) => `${a}${autoRebetBtn().replace('btn auto-rebet', 'btn small auto-rebet')}${b}`);
+  return core + `<div class="actions auto-mid">${autoRebetBtn()}</div>`;
+}
+function trayCore(st) {
   const { me, seat, isBanker } = myInfo(st);
   if (!me) return '';
   const ph = st.phase;
@@ -3155,6 +3171,7 @@ function renderHostPanel(st) {
         <button class="btn small" data-act="h-give" data-id="${p.id}" data-sign="1">Give</button>
         <button class="btn small" data-act="h-give" data-id="${p.id}" data-sign="-1">Take</button>
         ${t.seats.map((x, i) => (x && x.playerId === p.id ? `<button class="btn small" data-act="h-sitout" data-id="${p.id}" data-seat="${i}" data-on="${x.out ? 0 : 1}" title="${x.out ? 'Deal this seat in again from the next round' : 'This seat gets no cards from the next round. The player keeps the seat.'}">${x.out ? 'Sit in' : 'Sit out'} seat ${i + 1}</button>` : '')).join('')}
+        ${p.id !== S.myId && p.connected ? `<button class="btn small" data-act="h-makehost" data-id="${p.id}" title="The table moves to their browser. During a hand it moves when the hand ends, with a new shoe.">Make host</button>` : ''}
         ${p.id === S.myId ? '' : `<button class="btn small danger" data-act="h-kick" data-id="${p.id}">Kick</button>`}
       </div>
     </div>`).join('') || '<div class="hint">Nobody yet. Send the invite link.</div>';
@@ -3526,7 +3543,7 @@ function runAct(el) {
     }
     case 'undo': if (S.undo.length) { S.mainChips.pop(); const last = S.undo.pop(); chipSound(); placeBet(last); } break;
     case 'rebet': doRebet(); break;
-    case 'auto-rebet': S.autoRebet = !S.autoRebet; safeSet('bj-autorebet', S.autoRebet ? '1' : '0'); toast(S.autoRebet ? 'Auto rebet on: each round your last bets go down and you are dealt in by yourself.' : 'Auto rebet off.'); render(); autoRebetStep(); break;
+    case 'auto-rebet': S.autoRebet = !S.autoRebet; if (S.state && !['betting', 'settled'].includes(S.state.phase)) S.autoMid = S.state.round; safeSet('bj-autorebet', S.autoRebet ? '1' : '0'); toast(S.autoRebet ? 'Auto rebet on: each round your last bets go down and you are dealt in by yourself.' : 'Auto rebet off.'); render(); autoRebetStep(); break;
     case 'history': showHistory(); break;
     case 'view-pad': safeSet('bj-view-pad', viewPadOn() ? '0' : '1'); if (!viewPadOn() && S.room?.walking?.()) S.room.walk(false); document.body.classList.toggle('view-hidden', !viewPadOn()); for (const b of document.querySelectorAll('.menu-item[data-act=view-pad]')) b.textContent = '🎥 View buttons: ' + (viewPadOn() ? 'on' : 'off'); break;
     case 'hist-panel': safeSet('bj-hist-panel', histOn() ? '0' : '1'); drawHistPanel(true); for (const b of document.querySelectorAll('.menu-item[data-act=hist-panel]')) b.hidden = histOn(); break; // the menu offers it only while it is off; the panel's x turns it off
@@ -3663,6 +3680,13 @@ function runAct(el) {
       hostDo((t) => { t.sitOut(id, seat, on); t.addLog(`The host ${on ? 'sat' : 'put'} ${t.players[id]?.name || 'a player'} ${on ? 'out on' : 'back in on'} seat ${seat + 1}.`); });
       break;
     }
+    case 'h-makehost': {
+      const c = S.conns?.[el.dataset.id], who = S.table?.players[el.dataset.id]?.name || 'They';
+      if (!c?.open) { toast('That player is not connected right now.'); break; }
+      if (S.table.inRound()) toast(`${who} becomes the host when this round ends.`);
+      handHostTo(c);
+      break;
+    }
     case 'h-kick': {
       const id = el.dataset.id;
       hostDo((t) => t.kick(id));
@@ -3724,7 +3748,14 @@ function playMove(a) {
   S.lastStep = step; S.lastStepAt = Date.now();
   if (a === 'hit') hitSound();
   else if (a === 'stand') standSound();
-  send({ t: 'action', a, step });
+  // A hit or a double takes the next card to my own hand: my key for it goes with the move, so the card comes one trip sooner.
+  let pre;
+  if (S.role !== 'host' && (a === 'hit' || a === 'double') && st?.turn && Number.isFinite(Number(st.fair?.cards))) {
+    const m = { from: Number(st.fair.cards) + 1, count: 1, to: [`s${st.turn.seat}.${st.turn.hand}`] };
+    const keys = serveKeys(m);
+    if (keys.length) pre = { from: m.from, to: m.to, keys };
+  }
+  send({ t: 'action', a, step, ...(pre ? { pre } : {}) });
 }
 
 // Keyboard play: H hit, S stand, D double, P split, U surrender, Y and N answer insurance,

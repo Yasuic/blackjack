@@ -1,16 +1,16 @@
 // The baccarat page: a punto banco table for up to 9 in the small meeting room. The host's browser runs
 // the table (js/baccarat.js); every other browser sends its bets there and is told only what it may see.
-import { startPresence } from './presence.js?v=20261124q';
-import { outerLink } from './shell.js?v=20261124q';
-import { BacTable, BAC_SEATS, BAC_SPOTS, BAC_KEYS, verifyShoe, cardText } from './baccarat.js?v=20261124q';
-import { webglOK, initRoom } from './room3d.js?v=20261124q';
-import { statsHTML } from './pstats.js?v=20261124q';
-import { betLogAdd, betLogHTML, bankEntry } from './betlog.js?v=20261124q';
-import { topToolsHTML, initTopTools, setProfit, setPractice, setRisk, bankRisk, cardScale, ledgerTitle } from './toptools.js?v=20261124q';
-import { onElsewhere, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML, breachCover } from './common.js?v=20261124q';
-import { KeyGuard, mixKeys, newNonce } from './cardkeys.js?v=20261124q';
+import { startPresence } from './presence.js?v=20261124r';
+import { outerLink } from './shell.js?v=20261124r';
+import { BacTable, BAC_SEATS, BAC_SPOTS, BAC_KEYS, verifyShoe, cardText } from './baccarat.js?v=20261124r';
+import { webglOK, initRoom } from './room3d.js?v=20261124r';
+import { statsHTML } from './pstats.js?v=20261124r';
+import { betLogAdd, betLogHTML, bankEntry } from './betlog.js?v=20261124r';
+import { topToolsHTML, initTopTools, setProfit, setPractice, setRisk, bankRisk, cardScale, ledgerTitle } from './toptools.js?v=20261124r';
+import { onElsewhere, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, params, $, safeGet, safeSet, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, bankBarHTML, bankLedgerHTML, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML, breachCover } from './common.js?v=20261124r';
+import { KeyGuard, mixKeys, newNonce } from './cardkeys.js?v=20261124r';
 
-import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261124q';
+import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261124r';
 const PREFIX = 'bjt-bc-';
 // A settings change by vote (js/vote.js): any player at the table may ask, every other player at the table who is online has to say yes.
 const VOTE = {
@@ -738,7 +738,7 @@ function unseatHTML(st) {
   return `<h3>Unseat a player</h3><div class="pk-players" id="unseat-box">${list.length ? list.map((p) => `<div class="pk-prow"><b>${esc(p.name)}</b><span>Seat ${p.seat + 1}${later.includes(p.id) ? ' · leaves after this round' : ''}</span><button class="btn small" data-act="d-unseat" data-id="${esc(p.id)}">${later.includes(p.id) ? 'Let stay' : 'Unseat'}</button></div>`).join('') : '<p class="hint">Nobody else is seated.</p>'}</div><p class="hint">They keep their chips and watch. A bet sits them down again. During a round they leave once it is over.</p>`;
 }
 function playersHTML(st) {
-  return `<h3>Players</h3><div class="pk-players">${st.players.map((p) => `<div class="pk-prow"><b>${esc(p.name)}</b><span>${p.seat >= 0 ? `Seat ${p.seat + 1}` : 'Watching'} · ${money(p.chips)}${p.connected ? '' : ' · offline'}</span>${p.id !== S.myId ? `<button class="btn small danger" data-act="h-kick" data-id="${esc(p.id)}">Remove</button>` : ''}</div>`).join('')}</div>`;
+  return `<h3>Players</h3><div class="pk-players">${st.players.map((p) => `<div class="pk-prow"><b>${esc(p.name)}</b><span>${p.seat >= 0 ? `Seat ${p.seat + 1}` : 'Watching'} · ${money(p.chips)}${p.connected ? '' : ' · offline'}</span>${p.id !== S.myId && p.connected && S.role === 'host' ? `<button class="btn small" data-act="h-makehost" data-id="${esc(p.id)}" title="The table moves to their browser. During a hand it moves when the hand ends, with a new shoe.">Make host</button>` : ''}${p.id !== S.myId ? `<button class="btn small danger" data-act="h-kick" data-id="${esc(p.id)}">Remove</button>` : ''}</div>`).join('')}</div>`;
 }
 function fairHTML(st) {
   const f = st.fair;
@@ -829,6 +829,7 @@ document.addEventListener('click', (e) => {
     case 'players': closeMenu(); modal(playersHTML(st)); break;
     case 'unseat-list': closeMenu(); modal(unseatHTML(st)); break;
     case 'd-unseat': send({ t: 'unseat', id: el.dataset.id }); setTimeout(() => { if ($('#unseat-box')) modal(unseatHTML(S.st)); }, 400); break;
+    case 'h-makehost': { const id = el.dataset.id; if (!S.table?.players[id]?.connected) { toast('That player is not connected right now.'); break; } $('#modal')?.close(); handOver(id); if (S.hostWait === id) toast(`${S.table.players[id].name} becomes the host when this hand ends.`); break; }
     case 'h-kick': t.kick(el.dataset.id); S.net.send(el.dataset.id, { t: 'kicked' }); push(); modal(playersHTML(S.st)); break;
     case 'view3d': safeSet('bj-3d', use3D() ? '0' : '1'); location.reload(); break;
     case 'walk': closeMenu(); S.room?.walk(true); break;

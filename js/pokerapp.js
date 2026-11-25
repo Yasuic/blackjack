@@ -1,19 +1,19 @@
 // The poker page: a Texas Hold'em table for up to 9 in the big meeting room. The host's browser runs
 // the table (js/poker.js); every other browser sends its moves there and is told only what it may see.
-import { startPresence } from './presence.js?v=20261124q';
-import { outerLink } from './shell.js?v=20261124q';
-import { PokerTable, POKER_SEATS, pokerDeck, cardText, mpClientMoves, mpMine, mpCheck, bestHand, bestOmaha } from './poker.js?v=20261124q';
-import { plainDeck, shufflePass, lockPass, checkDeck, keyFor } from './mental.js?v=20261124q';
-import { sha256 } from './game.js?v=20261124q';
-import { botMove, isBot, BOT_NAMES } from './pokerbot.js?v=20261124q';
-import { chipSound, cardSound, hitSound, standSound, potSound, tickSound, turnSound, punchSound } from './fx.js?v=20261124q';
-import { webglOK, initRoom } from './room3d.js?v=20261124q';
-import { statsHTML as ledgerStatsHTML } from './pstats.js?v=20261124q';
-import { betLogAdd, betLogHTML, pokerEntry } from './betlog.js?v=20261124q';
-import { topToolsHTML, initTopTools, setProfit, setRisk, cardScale, profitLineHTML, ledgerTitle } from './toptools.js?v=20261124q';
-import { COPY_BTN, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML } from './common.js?v=20261124q';
+import { startPresence } from './presence.js?v=20261124r';
+import { outerLink } from './shell.js?v=20261124r';
+import { PokerTable, POKER_SEATS, pokerDeck, cardText, mpClientMoves, mpMine, mpCheck, bestHand, bestOmaha } from './poker.js?v=20261124r';
+import { plainDeck, shufflePass, lockPass, checkDeck, keyFor } from './mental.js?v=20261124r';
+import { sha256 } from './game.js?v=20261124r';
+import { botMove, isBot, BOT_NAMES } from './pokerbot.js?v=20261124r';
+import { chipSound, cardSound, hitSound, standSound, potSound, tickSound, turnSound, punchSound } from './fx.js?v=20261124r';
+import { webglOK, initRoom } from './room3d.js?v=20261124r';
+import { statsHTML as ledgerStatsHTML } from './pstats.js?v=20261124r';
+import { betLogAdd, betLogHTML, pokerEntry } from './betlog.js?v=20261124r';
+import { topToolsHTML, initTopTools, setProfit, setRisk, cardScale, profitLineHTML, ledgerTitle } from './toptools.js?v=20261124r';
+import { COPY_BTN, autoUpdate, showDropped, markMyTurn, onOfficeBack, setSeated, officeView, params, $, safeGet, safeSet, safeDel, getClientId, getLook, esc, money, newCode, randomHex, toast, modal, cardHTML, gameSwitchHTML, wireGameSwitch, createHost, createGuest, watchOffice, goToGame, walkTo, setCashOut, carryFor, carryDone, askCashOut, gotCashed, officeSave, officeLedgerHTML } from './common.js?v=20261124r';
 
-import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261124q';
+import { votePropose, voteCast, voteTick, voteView, drawVote } from './vote.js?v=20261124r';
 const PREFIX = 'bjt-pk-';
 // A settings change by vote (js/vote.js): any player at the table may ask, every other player at the table who is online has to say yes.
 const VOTE = {
@@ -1197,7 +1197,7 @@ function settingsHTML(st) {
 }
 function playersHTML(st) {
   return `<h3>Players</h3><div class="pk-players">${st.players.map((p) => { const seat = p.seat >= 0 ? st.seats[p.seat] : null; return `<div class="pk-prow"><b>${esc(p.name)}</b><span>${seat ? `Seat ${p.seat + 1} · ${money(seat.stack)}` : 'Watching'}${p.connected ? '' : ' · offline'}</span>
-    ${seat ? `<button class="btn small" data-act="h-stack" data-id="${esc(p.id)}">Set chips</button><button class="btn small" data-act="h-up" data-id="${esc(p.id)}">Unseat</button>` : ''}${p.id !== S.myId ? `<button class="btn small danger" data-act="h-kick" data-id="${esc(p.id)}">Remove</button>` : ''}</div>`; }).join('')}</div>`;
+    ${seat ? `<button class="btn small" data-act="h-stack" data-id="${esc(p.id)}">Set chips</button><button class="btn small" data-act="h-up" data-id="${esc(p.id)}">Unseat</button>` : ''}${p.id !== S.myId && p.connected && S.role === 'host' ? `<button class="btn small" data-act="h-makehost" data-id="${esc(p.id)}" title="The table moves to their browser. During a hand it moves when the hand ends, with a new shoe.">Make host</button>` : ''}${p.id !== S.myId ? `<button class="btn small danger" data-act="h-kick" data-id="${esc(p.id)}">Remove</button>` : ''}</div>`; }).join('')}</div>`;
 }
 // Deal a past hand again from its opened seeds and compare it with what the table showed.
 function checkHand(hd) {
@@ -1347,6 +1347,7 @@ document.addEventListener('click', (e) => {
     case 'players': closeMenu(); modal(playersHTML(st)); break;
     case 'h-stack': { const id = el.dataset.id, v = prompt('Chips for this player'); if (v === null) break; try { t.setStack(id, Number(v)); } catch (er) { toast(er.message); } push(); modal(playersHTML(S.st)); break; }
     case 'h-up': t.standUp(el.dataset.id); push(); modal(playersHTML(S.st)); break;
+    case 'h-makehost': { const id = el.dataset.id; if (!S.table?.players[id]?.connected) { toast('That player is not connected right now.'); break; } $('#modal')?.close(); handOver(id); if (S.hostWait === id) toast(`${S.table.players[id].name} becomes the host when this hand ends.`); break; }
     case 'h-kick': t.kick(el.dataset.id); S.net.send(el.dataset.id, { t: 'kicked' }); push(); modal(playersHTML(S.st)); break;
     case 'view3d': safeSet('bj-3d', use3D() ? '0' : '1'); location.reload(); break;
     case 'walk': closeMenu(); S.room?.walk(true); break;
